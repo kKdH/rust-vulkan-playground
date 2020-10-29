@@ -1,0 +1,50 @@
+= Rust Vulkan Playground =
+
+A playground to exercises rust and vulkan programming
+
+== Development ==
+
+=== Prerequisites ===
+
+==== Mesa Vulkan Driver ====
+----
+sudo apt install mesa-vulkan-drivers
+----
+
+==== Vulkan SDK ====
+
+.Ubuntu 18.04 (Bionic Beaver)
+----
+wget -qO - http://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-bionic.list http://packages.lunarg.com/vulkan/lunarg-vulkan-bionic.list
+sudo apt update
+sudo apt install vulkan-sdk
+----
+
+=== Misc ===
+
+==== Vulkan Layers ====
+
+|===
+|Name |Kind |Description
+
+|VK_LAYER_LUNARG_api_dump
+|utility
+|Print API calls and their parameters and values.
+
+|VK_LAYER_LUNARG_screenshot
+|utility
+|Outputs specified frames to an image file as they are presented.
+
+|VK_LAYER_KHRONOS_validation
+|validation
+|Main Vulkan validation layer: validates parameter correctness, Vulkan object lifetimes, externally synchronized thread safety, and the core state-tracked Vulkan validation checks.
+
+|VK_LAYER_LUNARG_device_simulation
+|utility
+|Allows modification of an actual device's reported features, limits, and capabilities.
+
+|VK_LAYER_LUNARG_monitor
+|utility
+|Outputs the frames-per-second of the target application in the applications title bar.
+|===
