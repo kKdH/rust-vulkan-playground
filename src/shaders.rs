@@ -12,14 +12,15 @@ pub mod vs {
                 layout(location = 0) out vec2 tex_coords;
 
                 layout(set = 0, binding = 0) uniform Data {
-                    mat4 world;
-                    mat4 view;
-                    mat4 proj;
-                } uniforms;
+                    mat4 mvp;
+                } data;
+
+                layout(set = 0, binding = 0) uniform Model {
+                    mat4 translation;
+                } model;
 
                 void main() {
-                   mat4 worldview = uniforms.view * uniforms.world;
-                   gl_Position = uniforms.proj * worldview *  vec4(position, 1.0);
+                   gl_Position = data.mvp * vec4(position, 1.0);
                    tex_coords = tex_coord;
                 }
 			"
@@ -42,3 +43,32 @@ pub mod fs {
 			"
         }
 }
+
+/*
+pub mod tess_ctrl {
+    vulkano_shaders::shader! {
+            ty: "tess_ctrl",
+            src: "
+				#version 450
+
+                layout(vertices = 3) out;
+
+				void main() {
+
+				}
+			"
+        }
+}
+
+pub mod tess_eval {
+    vulkano_shaders::shader! {
+            ty: "tess_eval",
+            src: "
+				#version 450
+				void main() {
+
+				}
+			"
+        }
+}
+*/

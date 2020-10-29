@@ -1,7 +1,8 @@
 mod shaders;
+mod camera;
 
 use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer, CpuBufferPool};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState};
+use vulkano::command_buffer::{AutoCommandBufferBuilder, DynamicState, AutoCommandBuffer};
 use vulkano::device::{Device, DeviceExtensions};
 use vulkano::framebuffer::{Framebuffer, FramebufferAbstract, RenderPassAbstract, Subpass};
 use vulkano::image::{ImageUsage, SwapchainImage, ImmutableImage, Dimensions};
@@ -35,6 +36,7 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Config, Appender, Logger, Root};
+use std::f32::consts::FRAC_PI_2;
 
 #[derive(Default, Debug, Clone)]
 struct Vertex {
@@ -209,34 +211,27 @@ fn main() {
         .unwrap()
     };
 
+    let dimensions: [u32; 2] = surface.window().inner_size().into();
+
+    let camera = camera::builder()
+        .with_near_plane(0.01)
+        .with_far_plane(100.0)
+        .with_aspect_ratio_of(dimensions[0] as f32, dimensions[1] as f32)
+        .with_field_of_view(FRAC_PI_2)
+        .move_to(Point3::new(0.5, 0.5, 1.5))
+        .look_at(Point3::new(0.0, 0.0, 0.0))
+        .build();
+
     let uniform_buffer = CpuBufferPool::<shaders::vs::ty::Data>::new(device.clone(), BufferUsage::all());
+    let model_buffer = CpuBufferPool::<shaders::vs::ty::Model>::new(device.clone(), BufferUsage::all());
 
-    let uniform_sub_buffer = {
-        let rotation = Matrix3::from_angle_y(Rad(1.0));
-        let dimensions: [u32; 2] = surface.window().inner_size().into();
+    let world = Matrix4::from(Matrix3::from_angle_y(Rad(1.0)));
 
-        let projection_matrix = cgmath::perspective(
-            Rad(std::f32::consts::FRAC_PI_2),
-            (dimensions[0] as f32 / dimensions[1] as f32),
-            0.01,
-            100.0,
-        );
-
-        let view = Matrix4::look_at(
-            Point3::new(0.5, 0.3, 1.0),
-            Point3::new(0.0, 0.0, 0.0),
-            Vector3::new(0.0, -1.0, 0.0),
-        );
-
-        let scale = Matrix4::from_scale(1.0);
-
-        let uniform_data = shaders::vs::ty::Data {
-            world: Matrix4::from(rotation).into(),
-            view: (view * scale).into(),
-            proj: projection_matrix.into(),
+    let model_sub_buffer = {
+        let uniform_data = shaders::vs::ty::Model {
+            translation: Matrix4::from_scale(0.0).into()
         };
-
-        uniform_buffer.next(uniform_data).unwrap()
+        model_buffer.next(uniform_data).unwrap()
     };
 
     let vs = shaders::vs::Shader::load(device.clone()).unwrap();
@@ -310,17 +305,6 @@ fn main() {
             .unwrap(),
     );
 
-    let layout = pipeline.layout().descriptor_set_layout(0).unwrap();
-    let set = Arc::new(
-        PersistentDescriptorSet::start(layout.clone())
-            .add_buffer(uniform_sub_buffer)
-            .unwrap()
-            .add_sampled_image(texture.clone(), sampler.clone())
-            .unwrap()
-            .build()
-            .unwrap(),
-    );
-
     let mut dynamic_state = DynamicState {
         line_width: None,
         viewports: None,
@@ -337,6 +321,8 @@ fn main() {
     std::mem::drop(tex_future); // await image has been loaded!
 
     let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
+
+    let clear_values = vec![[0.2, 0.2, 0.2, 1.0].into()];
 
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -387,7 +373,33 @@ fn main() {
                     recreate_swapchain = true
                 }
 
-                let clear_values = vec![[0.2, 0.2, 0.2, 1.0].into()];
+                let model_rotation = Matrix4::from_scale(1.0);
+                let model1: Matrix4<f32> = Matrix4::from_translation(Vector3::new(0.0, 0.0, 0.5)) * model_rotation;
+                let model2: Matrix4<f32> = Matrix4::from_translation(Vector3::new(0.0, 0.0, -0.5)) * model_rotation;
+
+                let mut sets = Vec::new();
+                for model in [model1, model2].iter() {
+
+                    let uniform_sub_buffer = {
+                        let uniform_data = shaders::vs::ty::Data {
+                            mvp: (camera.projection * camera.view * world * model).into()
+                        };
+                        uniform_buffer.next(uniform_data).unwrap()
+                    };
+
+                    let layout = pipeline.layout().descriptor_set_layout(0).unwrap();
+                    let set = Arc::new(
+                        PersistentDescriptorSet::start(layout.clone())
+                            .add_buffer(uniform_sub_buffer)
+                            .unwrap()
+                            .add_sampled_image(texture.clone(), sampler.clone())
+                            .unwrap()
+                            .build()
+                            .unwrap(),
+                    );
+
+                    sets.push(set);
+                }
 
                 let mut builder = AutoCommandBufferBuilder::primary_one_time_submit(
                     device.clone(),
@@ -396,28 +408,39 @@ fn main() {
                 .unwrap();
 
                 builder
-                    .begin_render_pass(frame_buffers[image_num].clone(), false, clear_values)
+                    .begin_render_pass(frame_buffers[image_num].clone(), false, clear_values.clone())
                     .unwrap()
                     .draw_indexed(
                         pipeline.clone(),
                         &dynamic_state,
                         (vertex_buffer.clone(), instance_buffer.clone()),
                         index_buffer.clone(),
-                        set.clone(),
+                        sets.pop().unwrap().clone(),
+                        ()
+                    )
+                    .unwrap()
+                    .draw_indexed(
+                        pipeline.clone(),
+                        &dynamic_state,
+                        (vertex_buffer.clone(), instance_buffer.clone()),
+                        index_buffer.clone(),
+                        sets.pop().unwrap().clone(),
                         ()
                     )
                     .unwrap()
                     .end_render_pass()
                     .unwrap();
 
-                let command_buffer = builder.build().unwrap();
+                let command = builder.build().unwrap();
 
                 let future = previous_frame_end
                     .take()
                     .unwrap()
                     .join(acquire_future)
-                    .then_execute(queue.clone(), command_buffer)
+                    .then_execute(queue.clone(), command)
                     .unwrap()
+                    // .then_execute(queue.clone(), commands.pop().unwrap())
+                    // .unwrap()
                     .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
                     .then_signal_fence_and_flush();
 
