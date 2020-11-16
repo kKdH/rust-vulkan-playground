@@ -1,14 +1,14 @@
 [package]
-name = "rust-vulkan-playground"
+name = "skyshard"
 version = "0.1.0"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 edition = "2018"
 
 [dependencies]
-skyshard = { path = "lib/skyshard" }
-
 log = "0.4.11"
-log4rs = "0.13.0"
+chrono = "0.4.19"
+thiserror = "1.0.22"
+regex = "1.4.2"
 ash = "0.31.0"
 ash-window = "0.5.0"
 winit = "0.22.0"

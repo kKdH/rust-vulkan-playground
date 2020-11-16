@@ -21,6 +21,12 @@ sudo apt update
 sudo apt install vulkan-sdk
 ----
 
+=== Compiling Shaders ===
+
+----
+glslc shaders/vertext.vert -o src/vertext.sp
+----
+
 === Misc ===
 
 ==== Vulkan Layers ====
