@@ -1,4 +1,5 @@
-/target
-/.idea
-/log
-Cargo.lock
+**/target
+**/.idea
+**/log
+**/Cargo.lock
+**/*.spv
