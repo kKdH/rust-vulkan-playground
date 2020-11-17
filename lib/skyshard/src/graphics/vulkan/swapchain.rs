@@ -40,6 +40,8 @@ pub type SwapchainRef = Rc<Swapchain>;
 pub struct Swapchain {
     loader: khr::Swapchain,
     handle: vk::SwapchainKHR,
+    images: Vec<vk::Image>,
+    views: Vec<vk::ImageView>,
     device: DeviceRef,
     surface: SurfaceRef,
 }
@@ -123,9 +125,42 @@ impl Swapchain {
                 loader.create_swapchain(&swapchain_create_info, None)
             }.unwrap();
 
+            let images: Vec<vk::Image> = unsafe {
+                loader.get_swapchain_images(handle)
+            }.unwrap();
+
+            let views: Vec<vk::ImageView> = images.iter()
+                .cloned()
+                .map(|image| {
+                    let create_view_info = vk::ImageViewCreateInfo::builder()
+                        .view_type(vk::ImageViewType::TYPE_2D)
+                        .format(format.format)
+                        .components(vk::ComponentMapping {
+                            r: vk::ComponentSwizzle::R,
+                            g: vk::ComponentSwizzle::G,
+                            b: vk::ComponentSwizzle::B,
+                            a: vk::ComponentSwizzle::A,
+                        })
+                        .subresource_range(vk::ImageSubresourceRange {
+                            aspect_mask: vk::ImageAspectFlags::COLOR,
+                            base_mip_level: 0,
+                            level_count: 1,
+                            base_array_layer: 0,
+                            layer_count: 1,
+                        })
+                        .image(image);
+
+                    unsafe {
+                        _device.handle().create_image_view(&create_view_info, None)
+                    }.unwrap()
+                })
+                .collect();
+
             Rc::new(Swapchain {
                 loader,
                 handle,
+                images,
+                views,
                 device: device.clone(),
                 surface: surface.clone()
             })
@@ -148,7 +183,13 @@ impl VulkanObject for Swapchain {
 
 impl Drop for Swapchain {
     fn drop(&mut self) {
-        unsafe { self.loader.destroy_swapchain(self.handle, None); }
+        let _device = (*self.device).borrow();
+        unsafe {
+            self.views.iter().for_each(|view| {
+                _device.handle().destroy_image_view(*view, None)
+            });
+            self.loader.destroy_swapchain(self.handle, None);
+        }
         info!("Vulkan swapchain <{}> destroyed.", self.hex_id());
     }
 }
