@@ -111,8 +111,6 @@ fn main() {
                 _ => (),
             }
         });
-
-        engine.reference_counts();
     }
 
     println!("Window closed");

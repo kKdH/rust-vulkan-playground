@@ -68,25 +68,28 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         .build()
         .unwrap();
 
-    let (device, surface, swapchain) = {
+    let device;
+    let surface;
+    let swapchain;
 
+    {
         let _instance = instance.borrow();
 
         let physical_device = _instance.physical_devices().first()
             .expect("At least one physical device.");
 
-        let surface = Rc::new(RefCell::new(Surface::new(
+        surface = Rc::new(RefCell::new(Surface::new(
             Rc::clone(&instance),
             window
         )));
 
-        let device = Rc::new(RefCell::new(Device::new(
+        device = Rc::new(RefCell::new(Device::new(
             Rc::clone(physical_device),
             QueueCapabilities::GRAPHICS_OPERATIONS & QueueCapabilities::TRANSFER_OPERATIONS,
             1
         ).unwrap()));
 
-        let swapchain = {
+        swapchain = {
             let _device = (*device).borrow();
             let queue = _device.queues().first().unwrap();
             Swapchain::new(
@@ -95,9 +98,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 Rc::clone(&surface)
             ).unwrap()
         };
-
-        (device, surface, swapchain)
-    };
+    }
 
     return Ok(Engine {
         instance,
