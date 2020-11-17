@@ -9,7 +9,8 @@ use crate::graphics::vulkan::device::{DeviceRef, PhysicalDevice, PhysicalDeviceR
 use crate::graphics::vulkan::instance::Instance;
 use crate::graphics::vulkan::queue::{DeviceQueue, DeviceQueueRef};
 use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainError, SwapchainRef};
-use crate::graphics::vulkan::VulkanError;
+use crate::graphics::vulkan::{VulkanError, VulkanObject};
+use ash::vk::Handle;
 
 pub type SurfaceRef = Rc<RefCell<Surface>>;
 
@@ -36,18 +37,20 @@ impl Surface {
             handle = unsafe {
                 ash_window::create_surface(_instance.loader(), _instance.handle(), window, None)
             }.unwrap();
-
-            info!("Vulkan surface created.");
         }
 
-        Surface {
+        let surface = Surface {
             instance,
             loader,
             handle,
             swapchain: Weak::new(),
             width: window.inner_size().width,
             height: window.inner_size().height
-        }
+        };
+
+        info!("Vulkan surface <{}> created.", surface.hex_id());
+
+        surface
     }
 
     pub fn loader(&self) -> &khr::Surface {
@@ -115,11 +118,17 @@ impl Surface {
     }
 }
 
+impl VulkanObject for Surface {
+    fn hex_id(&self) -> String {
+        format!("0x{:x?}", self.handle.as_raw())
+    }
+}
+
 impl Drop for Surface {
     fn drop(&mut self) {
         unsafe {
             self.loader.destroy_surface(self.handle, None);
         }
-        info!("Vulkan surface destroyed.");
+        info!("Vulkan surface <{}> destroyed.", self.hex_id());
     }
 }

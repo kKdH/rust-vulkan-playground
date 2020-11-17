@@ -28,7 +28,7 @@ pub struct EngineError {
 pub struct Engine {
     instance: InstanceRef,
     device: DeviceRef,
-    // surface: SurfaceRef,
+    surface: SurfaceRef,
     swapchain: SwapchainRef,
 }
 
@@ -37,7 +37,7 @@ impl Engine {
     pub fn reference_counts(&self) {
         info!("instance references: {} / {}", Rc::strong_count(&self.instance), Rc::weak_count(&self.instance));
         info!("device references: {} / {}", Rc::strong_count(&self.device), Rc::weak_count(&self.device));
-        // info!("surface references: {} / {} ", Rc::strong_count(&self.surface), Rc::weak_count(&self.surface));
+        info!("surface references: {} / {} ", Rc::strong_count(&self.surface), Rc::weak_count(&self.surface));
         info!("swapchain references: {} / {}", Rc::strong_count(&self.swapchain), Rc::weak_count(&self.swapchain));
     }
 }
@@ -55,7 +55,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let instance = Instance::builder()
         .application_name(app_name)
         .application_version(&"0.1.0".try_into().unwrap())
-        .layers(&Vec::from([String::from("VK_LAYER_KHRONOS_validation")]))
+        .layers(&Vec::from([
+            String::from("VK_LAYER_KHRONOS_validation"),
+            // String::from("VK_LAYER_LUNARG_api_dump")
+        ]))
         .extensions(&ash_window::enumerate_required_extensions(window)
             .expect("Failed to enumerate required vulkan extensions to create a surface!")
             .iter()
@@ -99,7 +102,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     return Ok(Engine {
         instance,
         device,
-        // surface,
+        surface,
         swapchain,
     });
 }

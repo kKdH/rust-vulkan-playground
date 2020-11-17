@@ -38,6 +38,12 @@ impl DeviceQueue {
     }
 }
 
+impl Drop for DeviceQueue {
+    fn drop(&mut self) {
+        info!("Vulkan queue #{} dropped.", self.index)
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct QueueFamily {
     index: u32,

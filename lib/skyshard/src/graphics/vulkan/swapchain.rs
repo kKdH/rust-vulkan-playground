@@ -17,8 +17,10 @@ use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::queue::DeviceQueueRef;
 use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
-use crate::graphics::vulkan::VulkanError;
+use crate::graphics::vulkan::{VulkanError, VulkanObject};
 use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
+use ash::vk::Handle;
+use crate::graphics::vulkan::instance::InstanceRef;
 
 #[derive(Error, Debug)]
 pub enum SwapchainError {
@@ -38,7 +40,8 @@ pub type SwapchainRef = Rc<Swapchain>;
 pub struct Swapchain {
     loader: khr::Swapchain,
     handle: vk::SwapchainKHR,
-    surface: SurfaceRef
+    device: DeviceRef,
+    surface: SurfaceRef,
 }
 
 impl Swapchain {
@@ -123,23 +126,30 @@ impl Swapchain {
             Rc::new(Swapchain {
                 loader,
                 handle,
+                device: device.clone(),
                 surface: surface.clone()
             })
         };
 
         (*surface).borrow_mut().attach_swapchain(swapchain.clone());
 
-        info!("Vulkan swapchain created.");
+        info!("Vulkan swapchain <{}> created.", swapchain.hex_id());
         debug!("\n{:?}", swapchain);
 
         Ok(swapchain)
     }
 }
 
+impl VulkanObject for Swapchain {
+    fn hex_id(&self) -> String {
+        format!("0x{:x?}", self.handle.as_raw())
+    }
+}
+
 impl Drop for Swapchain {
     fn drop(&mut self) {
         unsafe { self.loader.destroy_swapchain(self.handle, None); }
-        info!("Vulkan swapchain destroyed.");
+        info!("Vulkan swapchain <{}> destroyed.", self.hex_id());
     }
 }
 

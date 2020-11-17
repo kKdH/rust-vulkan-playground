@@ -12,14 +12,15 @@ use std::time::SystemTime;
 
 use ash::LoadingError;
 use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
-use ash::vk::DebugUtilsMessageSeverityFlagsEXT;
+use ash::vk::{DebugUtilsMessageSeverityFlagsEXT, Handle};
 use chrono::prelude::*;
 use log::{debug, info, warn, error};
 use thiserror::Error;
 
 use crate::graphics::vulkan::device::PhysicalDevice;
-use crate::graphics::vulkan::{VulkanError, DebugLevel, DebugUtil};
+use crate::graphics::vulkan::{VulkanError, DebugLevel, DebugUtil, VulkanObject};
 use crate::util::{InvalidVersionStringError, Version};
+use std::any::Any;
 
 #[derive(Error, Debug)]
 pub enum  InstanceInstantiationError {
@@ -90,6 +91,12 @@ impl Instance {
     }
 }
 
+impl VulkanObject for Instance {
+    fn hex_id(&self) -> String {
+        format!("0x{:x?}", self.handle.handle().as_raw())
+    }
+}
+
 impl fmt::Debug for Instance {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut formatter = f.debug_struct("Instance");
@@ -101,8 +108,17 @@ impl fmt::Debug for Instance {
 
 impl Drop for Instance {
     fn drop(&mut self) {
-        unsafe { self.handle.destroy_instance(None) }
-        info!("Vulkan instance destroyed.");
+        unsafe {
+            match &self.debug_util {
+                Some(debug_util) => {
+                    debug_util.loader.destroy_debug_utils_messenger(debug_util.callback, None);
+                    info!("Vulkan debug messanger <{}> destroyed.", debug_util.hex_id());
+                },
+                _ => ()
+            };
+            self.handle.destroy_instance(None);
+        }
+        info!("Vulkan instance <{}> destroyed.", self.hex_id());
     }
 }
 
@@ -208,10 +224,12 @@ impl InstanceBuilder {
         }?;
 
         let debug_util = if self.debug_enabled {
+            info!("Vulkan debugging enabled, creating debug messanger with '{}' level.", self.debug_level);
             let loader = ash::extensions::ext::DebugUtils::new(&vk_loader, &vk_handle);
             Some(DebugUtil::new(loader, self.debug_level))
         }
         else {
+            info!("Vulkan debugging disabled, no debug messanger has been created.");
             None
         };
 
@@ -238,9 +256,8 @@ impl InstanceBuilder {
             .collect();
 
         instance.borrow_mut().physical_devices.append(&mut physical_devices);
-        instance.borrow_mut().debug_util = None;
 
-        info!("Vulkan instance created.");
+        info!("Vulkan instance <{}> created.", instance.borrow().hex_id());
         debug!("\n{:#?}", instance.borrow());
 
         Ok(instance)

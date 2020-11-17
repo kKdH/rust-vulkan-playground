@@ -16,7 +16,7 @@ use crate::graphics::vulkan::device::DeviceError::NoSatisfyingQueueFamilyFound;
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
 use crate::graphics::vulkan::queue::{DeviceQueue, FmtQueueCapabilities, QueueFamily, QueueCapabilities, CapabilitiesSupport, DeviceQueueRef};
 use crate::util::format_bool;
-use crate::graphics::vulkan::VulkanError;
+use crate::graphics::vulkan::{VulkanError, VulkanObject};
 
 #[derive(Error, Debug)]
 pub enum DeviceError {
@@ -107,7 +107,7 @@ impl Device {
             queues
         };
 
-        info!("Vulkan device created.");
+        info!("Vulkan device <{}> created.", device.hex_id());
         debug!("\n{:#?}", device);
 
         Ok(device)
@@ -130,10 +130,19 @@ impl Device {
     }
 }
 
+impl VulkanObject for Device {
+    fn hex_id(&self) -> String {
+        format!("0x{:x?}", self.handle.handle().as_raw())
+    }
+}
+
 impl Drop for Device {
     fn drop(&mut self) {
-        unsafe { self.handle.destroy_device(None); }
-        info!("Vulkan device destroyed.")
+        let handle = self.handle.handle().as_raw();
+        unsafe {
+            self.handle.destroy_device(None);
+        }
+        info!("Vulkan device <{}> destroyed.", self.hex_id())
     }
 }
 

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::CStr;
 
-use ash::vk::Result;
+use ash::vk::{Result, Handle};
 use thiserror::Error;
 use std::fmt;
 use log::{debug, info, warn, error, log};
@@ -12,6 +12,13 @@ pub mod device;
 pub mod surface;
 pub mod queue;
 pub mod swapchain;
+
+trait VulkanObject {
+
+    /// Returns this vulkan object's handle as hex-encoded string.
+    /// Example: `0x5654cd8dfce0`
+    fn hex_id(&self) -> String;
+}
 
 #[derive(Error, Debug)]
 pub enum VulkanError {
@@ -181,10 +188,14 @@ impl DebugUtil {
             loader.create_debug_utils_messenger(&debug_info, None)
         }.unwrap();
 
-        DebugUtil {
+        let debug_util = DebugUtil {
             loader,
             callback
-        }
+        };
+
+        info!("Vulkan debug messanger <{}> created.", debug_util.hex_id());
+
+        debug_util
     }
 
     unsafe extern "system" fn vulkan_debug_callback(
@@ -227,5 +238,11 @@ impl DebugUtil {
         );
 
         ash::vk::FALSE
+    }
+}
+
+impl VulkanObject for DebugUtil {
+    fn hex_id(&self) -> String {
+        format!("0x{:x?}", self.callback.as_raw())
     }
 }
