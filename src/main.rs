@@ -11,6 +11,7 @@ use std::iter::Copied;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
+use std::time::Duration;
 
 use ash::extensions::{
     ext::DebugUtils,
@@ -20,7 +21,7 @@ use ash::version::{DeviceV1_0, DeviceV1_2, EntryV1_0, InstanceV1_0};
 use ash::vk;
 use ash::vk::{Extent2D, PhysicalDevice, Queue, SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR};
 use cgmath::{Matrix3, Matrix4, Point3, Rad, Vector3};
-use log::{error, info, debug, LevelFilter, warn};
+use log::{debug, error, info, LevelFilter, warn};
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
@@ -28,9 +29,8 @@ use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use winit::event::{Event, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Window, WindowBuilder};
-use std::time::Duration;
 use winit::platform::desktop::EventLoopExtDesktop;
+use winit::window::{Window, WindowBuilder};
 
 mod camera;
 
@@ -53,7 +53,7 @@ fn main() {
         .build(Root::builder()
             .appender("stdout")
             .appender("fileout")
-            .build(LevelFilter::Info))
+            .build(LevelFilter::Debug))
         .unwrap();
 
     // use handle to change logger configuration at runtime

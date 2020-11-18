@@ -10,17 +10,18 @@ use std::result::Result;
 use ash::{Instance, vk};
 use ash::extensions::khr;
 use ash::version::{DeviceV1_0, DeviceV1_2, EntryV1_0, InstanceV1_0};
+use ash::vk::Handle;
+use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};
+use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
 use thiserror::Error;
 
-use crate::graphics::vulkan::device::{Device, DeviceRef};
-use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
-use crate::graphics::vulkan::queue::DeviceQueueRef;
-use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
-use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
-use ash::vk::Handle;
+use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::InstanceRef;
+use crate::graphics::vulkan::queue::DeviceQueueRef;
+use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
+use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
 
 #[derive(Error, Debug)]
 pub enum SwapchainError {
@@ -169,7 +170,7 @@ impl Swapchain {
         (*surface).borrow_mut().attach_swapchain(swapchain.clone());
 
         info!("Vulkan swapchain <{}> created.", swapchain.hex_id());
-        debug!("\n{:?}", swapchain);
+        debug!("\n{:#?}", swapchain);
 
         Ok(swapchain)
     }
@@ -197,6 +198,8 @@ impl Drop for Swapchain {
 impl fmt::Debug for Swapchain {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut formatter = f.debug_struct("Swapchain");
+        formatter.field("images", &self.images.len());
+        formatter.field("views", &self.views.len());
         formatter.finish()
     }
 }

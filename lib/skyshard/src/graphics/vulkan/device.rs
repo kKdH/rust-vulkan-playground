@@ -6,8 +6,10 @@ use std::fmt::{Formatter, Write};
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
 
+use std::mem::MaybeUninit;
+
 use ash::version::{DeviceV1_0, InstanceV1_0};
-use ash::vk::Handle;
+use ash::vk::{Handle, CommandPoolResetFlags};
 use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};
 use thiserror::Error;
@@ -17,6 +19,7 @@ use crate::graphics::vulkan::instance::{Instance, InstanceRef};
 use crate::graphics::vulkan::queue::{DeviceQueue, FmtQueueCapabilities, QueueFamily, QueueCapabilities, CapabilitiesSupport, DeviceQueueRef};
 use crate::util::format_bool;
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
+use crate::graphics::vulkan::buffer::{CommandBuffer};
 
 #[derive(Error, Debug)]
 pub enum DeviceError {
@@ -41,7 +44,8 @@ pub struct Device {
     instance: InstanceRef,
     device: PhysicalDeviceRef,
     handle: ash::Device,
-    queues: Vec<DeviceQueueRef>
+    queues: Vec<DeviceQueueRef>,
+    command_pool: Box<dyn CommandPool>,
 }
 
 impl fmt::Debug for Device {
@@ -55,7 +59,7 @@ impl fmt::Debug for Device {
 
 impl Device {
 
-    pub fn new(physical_device: Rc<PhysicalDevice>, queue_flags: QueueCapabilities, queue_count: u32) -> Result<Device, DeviceError> {
+    pub fn new(physical_device: Rc<PhysicalDevice>, queue_flags: QueueCapabilities, queue_count: u32) -> Result<DeviceRef, DeviceError> {
 
         let _instance = physical_device.instance.upgrade().expect("Valid Instance");
         let _instance = (*_instance).borrow();
@@ -82,11 +86,10 @@ impl Device {
 
         let device_create_info = ash::vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_create_infos)
-            .enabled_extension_names(&extension_names)
+            .enabled_extension_names(&extension_names);
             // .enabled_features(&features)
-            .build();
 
-        let device = match unsafe {
+        let device: ash::Device = match unsafe {
             _instance.handle().create_device(physical_device.handle, &device_create_info, None)
         } {
             Ok(device) => Ok(device),
@@ -100,15 +103,25 @@ impl Device {
             .map(|(index, handle)| Rc::new(DeviceQueue::new(handle, index, *queue_family)))
             .collect();
 
-        let device = Device {
+        let device = Rc::new(RefCell::new(Device {
             instance: physical_device.instance.upgrade().expect("Valid instance."),
             device: physical_device,
             handle: device,
-            queues
+            queues,
+            command_pool: Box::new(UninitializedCommandPool::new()),
+        }));
+
+        let command_pool = {
+            (*device).borrow().command_pool.initialize(Rc::clone(&device), queue_family)
         };
 
-        info!("Vulkan device <{}> created.", device.hex_id());
-        debug!("\n{:#?}", device);
+        {
+            let mut device = (*device).borrow_mut();
+            device.command_pool = command_pool;
+
+            info!("Vulkan device <{}> created.", device.hex_id());
+            debug!("\n{:#?}", device);
+        }
 
         Ok(device)
     }
@@ -138,8 +151,9 @@ impl VulkanObject for Device {
 
 impl Drop for Device {
     fn drop(&mut self) {
-        let handle = self.handle.handle().as_raw();
+
         unsafe {
+            self.handle.destroy_command_pool(self.command_pool.handle(), None);
             self.handle.destroy_device(None);
         }
         info!("Vulkan device <{}> destroyed.", self.hex_id())
@@ -212,5 +226,65 @@ impl fmt::Debug for PhysicalDevice {
         formatter.field("name", &self.name);
         formatter.field("queue_families", &self.queue_families);
         formatter.finish()
+    }
+}
+
+trait CommandPool {
+
+    fn initialize(&self, device: DeviceRef, queue_family: &QueueFamily) -> Box<dyn CommandPool>;
+
+    fn handle(&self) -> ash::vk::CommandPool;
+}
+
+struct UninitializedCommandPool {}
+
+impl UninitializedCommandPool {
+    fn new() -> UninitializedCommandPool {
+        UninitializedCommandPool {}
+    }
+}
+
+impl CommandPool for UninitializedCommandPool {
+
+    fn initialize(&self, device: DeviceRef, queue_family: &QueueFamily) -> Box<dyn CommandPool> {
+
+        let handle = {
+            let _device = (*device).borrow();
+
+            let command_pool_create_info = ash::vk::CommandPoolCreateInfo::builder()
+                .flags(ash::vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+                .queue_family_index(queue_family.index());
+
+            unsafe {
+                _device.handle.create_command_pool(&command_pool_create_info, None).unwrap()
+            }
+        };
+
+        Box::new(InitializedCommandPool {
+            handle,
+            device: Rc::downgrade(&device),
+            buffers: Vec::new()
+        })
+    }
+
+    fn handle(&self) -> ash::vk::CommandPool {
+        unimplemented!()
+    }
+}
+
+struct InitializedCommandPool {
+    handle: ash::vk::CommandPool,
+    device: Weak<RefCell<Device>>,
+    buffers: Vec<CommandBuffer>
+}
+
+impl CommandPool for InitializedCommandPool {
+
+    fn initialize(&self, device: DeviceRef, queue_family: &QueueFamily) -> Box<dyn CommandPool> {
+        unimplemented!()
+    }
+
+    fn handle(&self) -> ash::vk::CommandPool {
+        self.handle
     }
 }

@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 use std::ffi::CStr;
-
-use ash::vk::{Result, Handle};
-use thiserror::Error;
 use std::fmt;
-use log::{debug, info, warn, error, log};
+
+use ash::vk::{Handle, Result};
+use log::{debug, error, info, log, warn};
+use thiserror::Error;
 
 mod util;
 pub mod instance;

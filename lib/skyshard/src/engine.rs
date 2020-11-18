@@ -1,6 +1,7 @@
 use std::cell::{Cell, RefCell};
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
+use std::ops::Deref;
 use std::rc::Rc;
 
 use ash::extensions::ext::DebugUtils;
@@ -8,17 +9,16 @@ use ash::extensions::khr;
 use ash::version::{EntryV1_0, InstanceV1_0};
 use ash::vk;
 use log::info;
+use winit::window::Window;
 
 use crate::{graphics::vulkan};
+use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 use crate::util::Version;
-use winit::window::Window;
-use std::ops::Deref;
-use crate::graphics::vulkan::DebugLevel;
 
 #[derive(Debug)]
 pub struct EngineError {
@@ -83,11 +83,11 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             window
         )));
 
-        device = Rc::new(RefCell::new(Device::new(
+        device = Device::new(
             Rc::clone(physical_device),
             QueueCapabilities::GRAPHICS_OPERATIONS & QueueCapabilities::TRANSFER_OPERATIONS,
             1
-        ).unwrap()));
+        ).unwrap();
 
         swapchain = {
             let _device = (*device).borrow();
