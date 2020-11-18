@@ -182,6 +182,7 @@ pub struct PhysicalDevice {
     id: u32,
     name: String,
     queue_families: Vec<QueueFamily>,
+    memory_properties: ash::vk::PhysicalDeviceMemoryProperties,
 }
 
 impl PhysicalDevice {
@@ -212,12 +213,17 @@ impl PhysicalDevice {
             )
         }).collect();
 
+        let memory_properties = unsafe {
+            _instance.handle().get_physical_device_memory_properties(handle)
+        };
+
         PhysicalDevice {
             instance: Rc::downgrade(&instance),
             handle,
             id,
             name,
-            queue_families
+            queue_families,
+            memory_properties
         }
     }
 
@@ -239,6 +245,8 @@ impl fmt::Debug for PhysicalDevice {
         formatter.field("id", &self.id);
         formatter.field("name", &self.name);
         formatter.field("queue_families", &self.queue_families);
+        formatter.field("memory_heaps", &self.memory_properties.memory_heap_count);
+        formatter.field("memory_types", &self.memory_properties.memory_type_count);
         formatter.finish()
     }
 }
