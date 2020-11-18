@@ -98,6 +98,9 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 Rc::clone(&surface)
             ).unwrap()
         };
+
+        let command_buffer = (*device).borrow_mut().allocate_command_buffer();
+
     }
 
     return Ok(Engine {

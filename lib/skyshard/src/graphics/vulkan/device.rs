@@ -19,7 +19,7 @@ use crate::graphics::vulkan::instance::{Instance, InstanceRef};
 use crate::graphics::vulkan::queue::{DeviceQueue, FmtQueueCapabilities, QueueFamily, QueueCapabilities, CapabilitiesSupport, DeviceQueueRef};
 use crate::util::format_bool;
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
-use crate::graphics::vulkan::buffer::{CommandBuffer};
+use crate::graphics::vulkan::buffer::{CommandBuffer, InternalCommandBuffer};
 
 #[derive(Error, Debug)]
 pub enum DeviceError {
@@ -140,6 +140,20 @@ impl Device {
 
     pub fn queues(&self) -> &Vec<DeviceQueueRef> {
         &self.queues
+    }
+
+    pub fn allocate_command_buffer(&mut self) -> CommandBuffer {
+
+        let allocate_info = ash::vk::CommandBufferAllocateInfo::builder()
+            .command_buffer_count(2)
+            .command_pool(self.command_pool.handle())
+            .level(ash::vk::CommandBufferLevel::PRIMARY);
+
+        let command_buffer = unsafe {
+            self.handle.allocate_command_buffers(&allocate_info)
+        }.unwrap()[0];
+
+        InternalCommandBuffer::new(command_buffer)
     }
 }
 

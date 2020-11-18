@@ -12,6 +12,7 @@ pub mod device;
 pub mod surface;
 pub mod queue;
 pub mod swapchain;
+pub mod buffer;
 
 trait VulkanObject {
 
