@@ -45,6 +45,7 @@ pub struct Device {
     device: PhysicalDeviceRef,
     handle: ash::Device,
     queues: Vec<DeviceQueueRef>,
+    allocator: vk_mem::Allocator,
     command_pool: Box<dyn CommandPool>,
 }
 
@@ -103,11 +104,22 @@ impl Device {
             .map(|(index, handle)| Rc::new(DeviceQueue::new(handle, index, *queue_family)))
             .collect();
 
+        let allocator: vk_mem::Allocator = {
+            let create_info = vk_mem::AllocatorCreateInfo {
+                physical_device: physical_device.handle,
+                device: device.clone(),
+                instance: _instance.handle().clone(),
+                ..Default::default()
+            };
+            vk_mem::Allocator::new(&create_info).unwrap()
+        };
+
         let device = Rc::new(RefCell::new(Device {
             instance: physical_device.instance.upgrade().expect("Valid instance."),
             device: physical_device,
             handle: device,
             queues,
+            allocator,
             command_pool: Box::new(UninitializedCommandPool::new()),
         }));
 
