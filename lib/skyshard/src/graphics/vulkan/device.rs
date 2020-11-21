@@ -154,6 +154,10 @@ impl Device {
         &self.queues
     }
 
+    pub fn command_pool(&self) -> &Box<dyn CommandPool> {
+        &self.command_pool
+    }
+
     pub fn allocate_command_buffer(&mut self) -> CommandBuffer {
 
         let allocate_info = ash::vk::CommandBufferAllocateInfo::builder()
@@ -263,7 +267,7 @@ impl fmt::Debug for PhysicalDevice {
     }
 }
 
-trait CommandPool {
+pub trait CommandPool {
 
     fn initialize(&self, device: DeviceRef, queue_family: &QueueFamily) -> Box<dyn CommandPool>;
 

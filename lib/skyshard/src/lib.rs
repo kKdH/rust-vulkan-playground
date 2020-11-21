@@ -7,4 +7,5 @@ mod graphics;
 use engine::Engine;
 
 pub use engine::create;
+pub use engine::render;
 

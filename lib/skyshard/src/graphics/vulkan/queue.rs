@@ -33,6 +33,10 @@ impl DeviceQueue {
         }
     }
 
+    pub fn handle(&self) -> &ash::vk::Queue {
+        &self.handle
+    }
+
     pub fn index(&self) -> u32 {
         self.index
     }

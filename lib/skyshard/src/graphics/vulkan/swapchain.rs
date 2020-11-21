@@ -10,7 +10,7 @@ use std::result::Result;
 use ash::{Instance, vk};
 use ash::extensions::khr;
 use ash::version::{DeviceV1_0, DeviceV1_2, EntryV1_0, InstanceV1_0};
-use ash::vk::Handle;
+use ash::vk::{Handle, ImageView};
 use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};
 use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
@@ -173,6 +173,33 @@ impl Swapchain {
         debug!("\n{:#?}", swapchain);
 
         Ok(swapchain)
+    }
+
+    pub fn handle(&self) -> &ash::vk::SwapchainKHR {
+        &self.handle
+    }
+
+    pub fn views(&self) -> &Vec<ash::vk::ImageView> {
+        &self.views
+    }
+
+    /// Returns the next image's index and whether the swapchain is suboptimal for the surface.
+    ///
+    pub fn acquire_next_image(&self, semaphore: ash::vk::Semaphore) -> (u32, bool) {
+        unsafe {
+            self.loader.acquire_next_image(
+                self.handle,
+                std::u64::MAX,
+                semaphore,
+                ash::vk::Fence::null()
+            )
+        }.expect("Acquire next image")
+    }
+
+    pub fn queue_present(&self, queue: DeviceQueueRef, present_info: &ash::vk::PresentInfoKHR) {
+        unsafe {
+            self.loader.queue_present(*queue.handle(), present_info)
+        }.expect("Queue Present");
     }
 }
 
