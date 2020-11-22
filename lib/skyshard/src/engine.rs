@@ -6,7 +6,7 @@ use std::rc::Rc;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
-use ash::version::{EntryV1_0, InstanceV1_0, DeviceV1_0};
+use ash::version::{EntryV1_0, InstanceV1_0, DeviceV1_0, DeviceV1_2};
 use ash::vk;
 use log::info;
 use winit::window::Window;
@@ -21,8 +21,9 @@ use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 use crate::util::Version;
 use crate::graphics::vulkan::renderpass::create_render_pass;
 use std::io::Cursor;
-use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t};
+use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t, DrawIndirectCommand};
 use std::borrow::Borrow;
+use chrono::Duration;
 
 #[derive(Debug)]
 pub struct EngineError {
@@ -34,10 +35,18 @@ pub struct Engine {
     device: DeviceRef,
     surface: SurfaceRef,
     swapchain: SwapchainRef,
+    renderpass: ash::vk::RenderPass,
+    viewports: [ash::vk::Viewport; 1],
+    scissors: [ash::vk::Rect2D; 1],
+    pipeline: ash::vk::Pipeline,
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
+    draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     image_available_semaphore: ash::vk::Semaphore,
-    render_finished_semaphore: ash::vk::Semaphore
+    render_finished_semaphore: ash::vk::Semaphore,
+    timings_query_pool: ash::vk::QueryPool,
+    vertices_query_pool: ash::vk::QueryPool,
+    last_timing_value: [u64; 1]
 }
 
 impl Engine {
@@ -81,8 +90,15 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let swapchain;
     let frame_buffers: Vec<ash::vk::Framebuffer>;
     let command_buffers: Vec<ash::vk::CommandBuffer>;
+    let renderpass: ash::vk::RenderPass;
+    let viewports: [ash::vk::Viewport; 1];
+    let scissors: [ash::vk::Rect2D; 1];
+    let pipeline: ash::vk::Pipeline;
+    let draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
+    let timings_query_pool: ash::vk::QueryPool;
+    let vertices_query_pool: ash::vk::QueryPool;
 
     {
         let _instance = (*instance).borrow();
@@ -110,6 +126,27 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 Rc::clone(&surface)
             ).unwrap()
         };
+
+        {
+            let _device = (*device).borrow();
+
+            let create_info = ash::vk::QueryPoolCreateInfo::builder()
+                .query_type(ash::vk::QueryType::TIMESTAMP)
+                .query_count(2);
+
+            timings_query_pool = unsafe {
+                _device.handle().create_query_pool(&create_info, None)
+            }.expect("QueryPool creation failed.");
+
+            let create_info = ash::vk::QueryPoolCreateInfo::builder()
+                .query_type(ash::vk::QueryType::PIPELINE_STATISTICS)
+                .query_count(1)
+                .pipeline_statistics(ash::vk::QueryPipelineStatisticFlags::VERTEX_SHADER_INVOCATIONS);
+
+            vertices_query_pool = unsafe {
+                _device.handle().create_query_pool(&create_info, None)
+            }.expect("QueryPool creation failed.");
+        }
 
         // let command_buffer = (*device).borrow_mut().allocate_command_buffer();
 
@@ -157,7 +194,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             ..Default::default()
         };
 
-        let viewports = [vk::Viewport {
+        viewports = [vk::Viewport {
             x: 0.0,
             y: 0.0,
             width: window.inner_size().width as f32,
@@ -166,7 +203,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             max_depth: 1.0,
         }];
 
-        let scissors = [ash::vk::Rect2D {
+        scissors = [ash::vk::Rect2D {
             offset: ash::vk::Offset2D { x: 0, y: 0 },
             extent: ash::vk::Extent2D {
                 width: window.inner_size().width,
@@ -257,7 +294,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             _device.handle().create_pipeline_layout(&pipeline_layout_create_info, None)
         }.unwrap();
 
-        let renderpass = create_render_pass(device.clone(), surface.clone());
+        renderpass = create_render_pass(device.clone(), surface.clone());
 
         let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
             .stages(&shader_stage_create_infos)
@@ -281,7 +318,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 )
         }.expect("Unable to create graphics pipeline");
 
-        let pipeline = graphics_pipelines[0];
+        pipeline = graphics_pipelines[0];
 
         frame_buffers = (*swapchain).borrow().views().iter().map(|view| {
 
@@ -314,59 +351,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
         }).collect::<Vec<_>>();
 
-        command_buffers.iter().enumerate().for_each(|(index, command_buffer)| {
-
-            let begin_info = ash::vk::CommandBufferBeginInfo::builder()
-                .flags(ash::vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
-
-            unsafe { _device.handle().begin_command_buffer(*command_buffer, &begin_info) }
-                .expect("Begin command buffer");
-
-            let renderpass_begin_info = ash::vk::RenderPassBeginInfo::builder()
-                .render_pass(renderpass)
-                .framebuffer(frame_buffers[index])
-                .render_area(Rect2D {
-                    offset: ash::vk::Offset2D { x: 0, y: 0 },
-                    extent: ash::vk::Extent2D {
-                        width: window.inner_size().width,
-                        height: window.inner_size().height,
-                    }
-                })
-                .clear_values(&[
-                    ash::vk::ClearValue {
-                        color: ash::vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 0.0] }
-                    }
-                ]);
-
-            unsafe {
-                _device.handle().cmd_begin_render_pass(*command_buffer, &renderpass_begin_info, ash::vk::SubpassContents::INLINE);
-            }
-
-            unsafe {
-                _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, pipeline);
-            }
-
-            unsafe {
-                _device.handle().cmd_set_viewport(*command_buffer, 0, &viewports);
-            }
-
-            unsafe {
-                _device.handle().cmd_set_scissor(*command_buffer, 0, &scissors);
-            }
-
-            unsafe {
-                _device.handle().cmd_draw(*command_buffer, 3, 1, 0, 0);
-            }
-
-            unsafe {
-                _device.handle().cmd_end_render_pass(*command_buffer);
-            }
-
-            unsafe {
-                _device.handle().end_command_buffer(*command_buffer);
-            }
-        });
-
         let semaphore_create_info = ash::vk::SemaphoreCreateInfo::builder()
             .flags(ash::vk::SemaphoreCreateFlags::default());
 
@@ -377,6 +361,47 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         render_finished_semaphore = unsafe {
             _device.handle().create_semaphore(&semaphore_create_info, None)
         }.unwrap();
+
+        {
+            let allocation_create_info = vk_mem::AllocationCreateInfo {
+                usage: vk_mem::MemoryUsage::GpuOnly,
+                flags: vk_mem::AllocationCreateFlags::NONE,
+                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE,
+                preferred_flags: Default::default(),
+                memory_type_bits: 0,
+                pool: None,
+                user_data: None
+            };
+
+            let count = 1 as usize;
+
+            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+                .usage(ash::vk::BufferUsageFlags::INDIRECT_BUFFER)
+                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+                .size((count * std::mem::size_of::<ash::vk::DrawIndirectCommand>()) as u64);
+
+            let (buffer, allocation, ai) = _device.allocator()
+                .create_buffer(&buffer_create_info, &allocation_create_info)
+                .expect("Allocation for 'draw_indirect_command_buffer' failed");
+
+            let data =  _device.allocator()
+                .map_memory(&allocation)
+                .expect("Map memory for 'draw_indirect_command_buffer' failed") as *mut DrawIndirectCommand;
+
+            unsafe {
+                let data = std::ptr::slice_from_raw_parts_mut(data, count);
+                (*data)[0] = DrawIndirectCommand {
+                    vertex_count: 3,
+                    instance_count: 1,
+                    first_vertex: 0,
+                    first_instance: 0
+                };
+            }
+
+            _device.allocator().unmap_memory(&allocation);
+
+            draw_indirect_command_buffer = (buffer, allocation)
+        }
     }
 
     return Ok(Engine {
@@ -386,12 +411,20 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         swapchain,
         frame_buffers,
         command_buffers,
+        renderpass,
+        viewports,
+        scissors,
+        pipeline,
+        draw_indirect_command_buffer,
         image_available_semaphore,
         render_finished_semaphore,
+        timings_query_pool,
+        vertices_query_pool,
+        last_timing_value: [0]
     });
 }
 
-pub fn render(engine: &Engine) {
+pub fn render(engine: &mut Engine) {
 
     let _device = (*engine.device).borrow();
     let (index, suboptimal) = engine.swapchain.acquire_next_image(engine.image_available_semaphore);
@@ -400,7 +433,20 @@ pub fn render(engine: &Engine) {
     let swapchains = [*engine.swapchain.handle()];
     let indices = [index];
 
-    info!("index: {}", index);
+    info!("================");
+
+    record_commands(
+        engine.device.clone(),
+        &engine.command_buffers[index as usize],
+        &engine.draw_indirect_command_buffer.0,
+        &engine.frame_buffers[index as usize],
+        &engine.renderpass,
+        &engine.viewports[0],
+        &engine.scissors[0],
+        &engine.pipeline,
+        &engine.timings_query_pool,
+        &engine.vertices_query_pool,
+    );
 
     let wait_semaphores = [
         engine.image_available_semaphore
@@ -430,4 +476,102 @@ pub fn render(engine: &Engine) {
     unsafe {
         _device.handle().device_wait_idle();
     }
+
+    let mut timing_data: [u64; 2] = [0, 0];
+    let mut vertices_data: [u64; 1] = [0];
+
+    unsafe {
+        _device.handle().get_query_pool_results(engine.timings_query_pool, 0, 2, &mut timing_data, ash::vk::QueryResultFlags::WAIT);
+        _device.handle().get_query_pool_results(engine.vertices_query_pool, 0, 1, &mut vertices_data, ash::vk::QueryResultFlags::WAIT);
+    }
+
+    let diff = Duration::nanoseconds((timing_data[1] - timing_data[0]) as i64);
+
+    println!("draw time: {} ns", timing_data[1] - timing_data[0]);
+    println!("vert. invocations: {}", vertices_data[0]);
+}
+
+fn record_commands(
+    device: DeviceRef,
+    command_buffer: &ash::vk::CommandBuffer,
+    draw_indirect_command_buffer: &ash::vk::Buffer,
+    frame_buffer: &ash::vk::Framebuffer,
+    renderpass: &ash::vk::RenderPass,
+    viewport: &ash::vk::Viewport,
+    scissor: &ash::vk::Rect2D,
+    pipeline: &ash::vk::Pipeline,
+    timings_query_pool: &ash::vk::QueryPool,
+    vertices_query_pool: &ash::vk::QueryPool,
+) {
+
+    let _device = (*device).borrow();
+
+    let begin_info = ash::vk::CommandBufferBeginInfo::builder()
+        .flags(ash::vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+    unsafe { _device.handle().begin_command_buffer(*command_buffer, &begin_info) }
+        .expect("Begin command buffer");
+
+    unsafe {
+        _device.handle().cmd_reset_query_pool(*command_buffer, *timings_query_pool, 0, 2);
+        _device.handle().cmd_reset_query_pool(*command_buffer, *vertices_query_pool, 0, 1);
+    }
+
+    let renderpass_begin_info = ash::vk::RenderPassBeginInfo::builder()
+        .render_pass(*renderpass)
+        .framebuffer(*frame_buffer)
+        .render_area(*scissor)
+        .clear_values(&[
+            ash::vk::ClearValue {
+                color: ash::vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 0.0] }
+            }
+        ]);
+
+    unsafe {
+        _device.handle().cmd_write_timestamp(*command_buffer, ash::vk::PipelineStageFlags::VERTEX_SHADER, *timings_query_pool, 0)
+    }
+
+    unsafe {
+        _device.handle().cmd_begin_query(*command_buffer, *vertices_query_pool, 0, ash::vk::QueryControlFlags::empty())
+    }
+
+    unsafe {
+        _device.handle().cmd_begin_render_pass(*command_buffer, &renderpass_begin_info, ash::vk::SubpassContents::INLINE);
+    }
+
+    unsafe {
+        _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline);
+    }
+
+    let viewports = [*viewport];
+    unsafe {
+
+        _device.handle().cmd_set_viewport(*command_buffer, 0, &viewports);
+    }
+
+    let scissors = [*scissor];
+    unsafe {
+        _device.handle().cmd_set_scissor(*command_buffer, 0, &scissors);
+    }
+
+    unsafe {
+        _device.handle().cmd_draw_indirect(*command_buffer, *draw_indirect_command_buffer, 0, 1, 0);
+    }
+
+    unsafe {
+        _device.handle().cmd_end_render_pass(*command_buffer);
+    }
+
+    unsafe {
+        _device.handle().cmd_end_query(*command_buffer, *vertices_query_pool, 0)
+    }
+
+    unsafe {
+        _device.handle().cmd_write_timestamp(*command_buffer, ash::vk::PipelineStageFlags::VERTEX_SHADER, *timings_query_pool, 1)
+    }
+
+    unsafe {
+        _device.handle().end_command_buffer(*command_buffer);
+    }
+
 }

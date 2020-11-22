@@ -74,7 +74,7 @@ fn main() {
         .unwrap();
 
     {
-        let engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
+        let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
 
         let mut redraw_requested = true;
         let mut close_requested = false;
@@ -82,7 +82,7 @@ fn main() {
         info!("Starting event loop");
         engine.reference_counts();
 
-        skyshard::render(&engine);
+        skyshard::render(&mut engine);
 
         events_loop.run_return(move |event, _, control_flow| {
             match event {
@@ -103,8 +103,8 @@ fn main() {
                     match (redraw_requested, close_requested) {
                         (false, false) => {}
                         (true, false) => {
-                            skyshard::render(&engine);
-                            std::thread::sleep(Duration::from_secs(1))
+                            skyshard::render(&mut engine);
+                            std::thread::sleep(Duration::from_millis(1000))
                         }
                         (_, true) => {
                             println!("Closing");

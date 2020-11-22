@@ -146,6 +146,10 @@ impl Device {
         &self.handle
     }
 
+    pub fn allocator(&self) -> &vk_mem::Allocator {
+        &self.allocator
+    }
+
     pub fn physical_device(&self) -> Rc<PhysicalDevice> {
         Rc::clone(&self.device)
     }
