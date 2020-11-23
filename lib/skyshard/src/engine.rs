@@ -21,7 +21,7 @@ use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 use crate::util::Version;
 use crate::graphics::vulkan::renderpass::create_render_pass;
 use std::io::Cursor;
-use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t, DrawIndirectCommand};
+use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t, DrawIndirectCommand, DrawIndexedIndirectCommand};
 use std::borrow::Borrow;
 use chrono::Duration;
 use vk_mem::AllocatorPoolCreateFlags;
@@ -51,6 +51,7 @@ pub struct Engine {
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
     draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation),
+    index_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
@@ -105,6 +106,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let scissors: [ash::vk::Rect2D; 1];
     let pipeline: ash::vk::Pipeline;
     let draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation);
+    let index_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
@@ -407,7 +409,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             };
 
             let count: usize = 1;
-            let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndirectCommand>());
+            let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndexedIndirectCommand>());
 
             let buffer_create_info = ash::vk::BufferCreateInfo::builder()
                 .usage(ash::vk::BufferUsageFlags::INDIRECT_BUFFER)
@@ -420,14 +422,15 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let data =  _device.allocator()
                 .map_memory(&allocation)
-                .expect("Map memory for 'draw_indirect_command_buffer' failed") as *mut DrawIndirectCommand;
+                .expect("Map memory for 'draw_indirect_command_buffer' failed") as *mut ash::vk::DrawIndexedIndirectCommand;
 
             unsafe {
                 let data = std::ptr::slice_from_raw_parts_mut(data, count);
-                (*data)[0] = DrawIndirectCommand {
-                    vertex_count: 3,
+                (*data)[0] = ash::vk::DrawIndexedIndirectCommand {
+                    index_count: 6,
                     instance_count: 1,
-                    first_vertex: 0,
+                    first_index: 0,
+                    vertex_offset: 0,
                     first_instance: 0
                 };
             }
@@ -451,18 +454,61 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 user_data: None
             };
 
-            let vertices: [Vertex; 3] = [
+            let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
+            let size: usize = (indices.len() * std::mem::size_of::<u32>());
+
+            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+                .usage(ash::vk::BufferUsageFlags::INDEX_BUFFER)
+                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+                .size(size as ash::vk::DeviceSize);
+
+            let (buffer, allocation, _) = _device.allocator()
+                .create_buffer(&buffer_create_info, &allocation_create_info)
+                .expect("Allocation for 'index_buffer' failed");
+
+            let data_ptr = _device.allocator()
+                .map_memory(&allocation)
+                .expect("Map memory for 'index_buffer' failed") as *mut u32;
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(indices.as_ptr(), data_ptr, indices.len());
+            }
+
+            _device.allocator().unmap_memory(&allocation);
+            _device.allocator().flush_allocation(&allocation, 0, size)
+                .expect("Flush failed");
+
+            index_buffer = (buffer, allocation);
+        }
+
+        {
+            let allocation_create_info = vk_mem::AllocationCreateInfo {
+                usage: vk_mem::MemoryUsage::GpuOnly,
+                flags: vk_mem::AllocationCreateFlags::NONE,
+                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                preferred_flags: Default::default(),
+                memory_type_bits: 0,
+                pool: None,
+                user_data: None
+            };
+
+            let vertices: [Vertex; 4] = [
                 Vertex {
-                    position: [0.0, -0.5, 0.0],
+                    position: [-0.5, -0.5, 0.0],
                     color: [1.0, 0.0, 0.0]
                 },
                 Vertex {
-                    position: [0.5, 0.5, 0.0],
+                    position: [0.5, -0.5, 0.0],
                     color: [0.0, 1.0, 0.0]
                 },
                 Vertex {
-                    position: [-0.5, 0.5, 0.0],
+                    position: [0.5, 0.5, 0.0],
                     color: [0.0, 0.0, 1.0]
+                },
+                Vertex {
+                    position: [-0.5, 0.5, 0.0],
+                    color: [1.0, 1.0, 1.0]
                 },
             ];
 
@@ -475,11 +521,11 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let (buffer, allocation, _) = _device.allocator()
                 .create_buffer(&buffer_create_info, &allocation_create_info)
-                .expect("Allocation for 'draw_indirect_command_buffer' failed");
+                .expect("Allocation for 'vertex_buffer' failed");
 
             let data_ptr = _device.allocator()
                     .map_memory(&allocation)
-                    .expect("Map memory for 'draw_indirect_command_buffer' failed") as *mut Vertex;
+                    .expect("Map memory for 'vertex_buffer' failed") as *mut Vertex;
 
             unsafe {
                 std::ptr::copy_nonoverlapping(vertices.as_ptr(), data_ptr, vertices.len());
@@ -505,6 +551,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         scissors,
         pipeline,
         draw_indirect_command_buffer,
+        index_buffer,
         vertex_buffer,
         image_available_semaphore,
         render_finished_semaphore,
@@ -529,6 +576,7 @@ pub fn render(engine: &mut Engine) {
         engine.device.clone(),
         &engine.command_buffers[index as usize],
         &engine.draw_indirect_command_buffer.0,
+        &engine.index_buffer.0,
         &engine.vertex_buffer.0,
         &engine.frame_buffers[index as usize],
         &engine.renderpass,
@@ -586,6 +634,7 @@ fn record_commands(
     device: DeviceRef,
     command_buffer: &ash::vk::CommandBuffer,
     draw_indirect_command_buffer: &ash::vk::Buffer,
+    index_buffer: &ash::vk::Buffer,
     vertex_buffer: &ash::vk::Buffer,
     frame_buffer: &ash::vk::Framebuffer,
     renderpass: &ash::vk::RenderPass,
@@ -635,6 +684,10 @@ fn record_commands(
         _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline);
     }
 
+    unsafe {
+        _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer, 0, ash::vk::IndexType::UINT32)
+    }
+
     let vertex_buffers = [*vertex_buffer];
     let offsets: [u64; 1] = [0];
     unsafe {
@@ -653,7 +706,7 @@ fn record_commands(
     }
 
     unsafe {
-        _device.handle().cmd_draw_indirect(*command_buffer, *draw_indirect_command_buffer, 0, 1, 0);
+        _device.handle().cmd_draw_indexed_indirect(*command_buffer, *draw_indirect_command_buffer, 0, 1, 0);
     }
 
     unsafe {
