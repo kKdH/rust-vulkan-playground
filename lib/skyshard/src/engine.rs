@@ -24,6 +24,15 @@ use std::io::Cursor;
 use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t, DrawIndirectCommand};
 use std::borrow::Borrow;
 use chrono::Duration;
+use vk_mem::AllocatorPoolCreateFlags;
+
+
+#[repr(C)]
+#[derive(Clone, Debug, Copy)]
+struct Vertex {
+    position: [f32; 3],
+    color: [f32; 3],
+}
 
 #[derive(Debug)]
 pub struct EngineError {
@@ -42,6 +51,7 @@ pub struct Engine {
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
     draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation),
+    vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
     timings_query_pool: ash::vk::QueryPool,
@@ -95,6 +105,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let scissors: [ash::vk::Rect2D; 1];
     let pipeline: ash::vk::Pipeline;
     let draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation);
+    let vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
     let timings_query_pool: ash::vk::QueryPool;
@@ -184,15 +195,36 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .build(),
         ];
 
-        let vertex_input_state_info = ash::vk::PipelineVertexInputStateCreateInfo {
-            ..Default::default()
-        };
+        let vertex_input_binding_descriptors = [
+            ash::vk::VertexInputBindingDescription::builder()
+                .binding(0)
+                .stride(std::mem::size_of::<Vertex>() as u32)
+                .input_rate(ash::vk::VertexInputRate::VERTEX)
+                .build()
+        ];
 
-        let vertex_input_assembly_state_info = ash::vk::PipelineInputAssemblyStateCreateInfo {
-            topology: vk::PrimitiveTopology::TRIANGLE_LIST,
-            primitive_restart_enable: ash::vk::FALSE,
-            ..Default::default()
-        };
+        let vertex_input_attribute_descriptors = [
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(0)
+                .format(ash::vk::Format::R32G32B32_SFLOAT)
+                .offset(offset_of!(Vertex, position) as u32)
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(0)
+                .location(1)
+                .format(ash::vk::Format::R32G32B32_SFLOAT)
+                .offset(offset_of!(Vertex, color) as u32)
+                .build()
+        ];
+
+        let vertex_input_state_info = ash::vk::PipelineVertexInputStateCreateInfo::builder()
+            .vertex_binding_descriptions(&vertex_input_binding_descriptors)
+            .vertex_attribute_descriptions(&vertex_input_attribute_descriptors);
+
+        let vertex_input_assembly_state_info = ash::vk::PipelineInputAssemblyStateCreateInfo::builder()
+            .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+            .primitive_restart_enable(false);
 
         viewports = [vk::Viewport {
             x: 0.0,
@@ -366,21 +398,23 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             let allocation_create_info = vk_mem::AllocationCreateInfo {
                 usage: vk_mem::MemoryUsage::GpuOnly,
                 flags: vk_mem::AllocationCreateFlags::NONE,
-                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE,
+                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL,
                 preferred_flags: Default::default(),
                 memory_type_bits: 0,
                 pool: None,
                 user_data: None
             };
 
-            let count = 1 as usize;
+            let count: usize = 1;
+            let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndirectCommand>());
 
             let buffer_create_info = ash::vk::BufferCreateInfo::builder()
                 .usage(ash::vk::BufferUsageFlags::INDIRECT_BUFFER)
                 .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                .size((count * std::mem::size_of::<ash::vk::DrawIndirectCommand>()) as u64);
+                .size(size as ash::vk::DeviceSize);
 
-            let (buffer, allocation, ai) = _device.allocator()
+            let (buffer, allocation, _) = _device.allocator()
                 .create_buffer(&buffer_create_info, &allocation_create_info)
                 .expect("Allocation for 'draw_indirect_command_buffer' failed");
 
@@ -399,8 +433,63 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }
 
             _device.allocator().unmap_memory(&allocation);
+            _device.allocator().flush_allocation(&allocation, 0, size)
+                .expect("Flush failed");
 
             draw_indirect_command_buffer = (buffer, allocation)
+        }
+
+        {
+            let allocation_create_info = vk_mem::AllocationCreateInfo {
+                usage: vk_mem::MemoryUsage::GpuOnly,
+                flags: vk_mem::AllocationCreateFlags::NONE,
+                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                preferred_flags: Default::default(),
+                memory_type_bits: 0,
+                pool: None,
+                user_data: None
+            };
+
+            let vertices: [Vertex; 3] = [
+                Vertex {
+                    position: [0.0, -0.5, 0.0],
+                    color: [1.0, 0.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, 0.5, 0.0],
+                    color: [0.0, 1.0, 0.0]
+                },
+                Vertex {
+                    position: [-0.5, 0.5, 0.0],
+                    color: [0.0, 0.0, 1.0]
+                },
+            ];
+
+            let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
+
+            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+                .usage(ash::vk::BufferUsageFlags::VERTEX_BUFFER)
+                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+                .size(size as ash::vk::DeviceSize);
+
+            let (buffer, allocation, _) = _device.allocator()
+                .create_buffer(&buffer_create_info, &allocation_create_info)
+                .expect("Allocation for 'draw_indirect_command_buffer' failed");
+
+            let data_ptr = _device.allocator()
+                    .map_memory(&allocation)
+                    .expect("Map memory for 'draw_indirect_command_buffer' failed") as *mut Vertex;
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(vertices.as_ptr(), data_ptr, vertices.len());
+            }
+
+            _device.allocator().unmap_memory(&allocation);
+            _device.allocator().flush_allocation(&allocation, 0, size)
+                .expect("Flush failed");
+
+            vertex_buffer = (buffer, allocation)
         }
     }
 
@@ -416,6 +505,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         scissors,
         pipeline,
         draw_indirect_command_buffer,
+        vertex_buffer,
         image_available_semaphore,
         render_finished_semaphore,
         timings_query_pool,
@@ -439,6 +529,7 @@ pub fn render(engine: &mut Engine) {
         engine.device.clone(),
         &engine.command_buffers[index as usize],
         &engine.draw_indirect_command_buffer.0,
+        &engine.vertex_buffer.0,
         &engine.frame_buffers[index as usize],
         &engine.renderpass,
         &engine.viewports[0],
@@ -495,6 +586,7 @@ fn record_commands(
     device: DeviceRef,
     command_buffer: &ash::vk::CommandBuffer,
     draw_indirect_command_buffer: &ash::vk::Buffer,
+    vertex_buffer: &ash::vk::Buffer,
     frame_buffer: &ash::vk::Framebuffer,
     renderpass: &ash::vk::RenderPass,
     viewport: &ash::vk::Viewport,
@@ -541,6 +633,12 @@ fn record_commands(
 
     unsafe {
         _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline);
+    }
+
+    let vertex_buffers = [*vertex_buffer];
+    let offsets: [u64; 1] = [0];
+    unsafe {
+        _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets)
     }
 
     let viewports = [*viewport];
