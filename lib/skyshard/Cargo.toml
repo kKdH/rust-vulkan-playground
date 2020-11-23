@@ -6,6 +6,7 @@ edition = "2018"
 
 [dependencies]
 log = "0.4.11"
+memoffset = "0.6.1"
 chrono = "0.4.19"
 thiserror = "1.0.22"
 regex = "1.4.2"

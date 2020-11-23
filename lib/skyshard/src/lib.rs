@@ -1,5 +1,8 @@
 #[cfg(test)] #[macro_use] extern crate hamcrest2;
 
+#[macro_use]
+extern crate memoffset;
+
 mod engine;
 mod util;
 mod graphics;
