@@ -15,7 +15,7 @@ ash-window = "0.5.0"
 vk-mem = "0.2.2"
 winit = "0.22.0"
 png = "0.15.0"
-cgmath = "0.17.0"
+cgmath = { version = "0.17.0", features=["swizzle"] }
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"
