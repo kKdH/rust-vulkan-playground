@@ -85,10 +85,14 @@ impl Device {
             ash::extensions::khr::Swapchain::name().as_ptr(),
         ];
 
+        let device_features = ash::vk::PhysicalDeviceFeatures::builder()
+            .wide_lines(true)
+            .fill_mode_non_solid(true);
+
         let device_create_info = ash::vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_create_infos)
-            .enabled_extension_names(&extension_names);
-            // .enabled_features(&features)
+            .enabled_extension_names(&extension_names)
+            .enabled_features(&device_features);
 
         let device: ash::Device = match unsafe {
             _instance.handle().create_device(physical_device.handle, &device_create_info, None)
