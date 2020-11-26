@@ -68,6 +68,11 @@ pub fn format_bool(value: bool) -> String {
     }
 }
 
+pub trait HasBuilder {
+    type Builder;
+    fn builder() -> Self::Builder;
+}
+
 #[cfg(test)]
 mod tests {
     use hamcrest2::prelude::*;

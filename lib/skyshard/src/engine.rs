@@ -21,17 +21,27 @@ use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 use crate::util::Version;
 use crate::graphics::vulkan::renderpass::create_render_pass;
 use std::io::Cursor;
-use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t, DrawIndirectCommand, DrawIndexedIndirectCommand};
+use ash::vk::{Rect2D, CommandBuffer, xcb_connection_t, DrawIndirectCommand, DrawIndexedIndirectCommand, Extent2D};
 use std::borrow::Borrow;
 use chrono::Duration;
 use vk_mem::AllocatorPoolCreateFlags;
+use crate::util::HasBuilder;
+use cgmath::{Matrix4, Point3, Vector3, Rad, Deg};
+use cgmath::{One, Zero};
 
-
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
 struct Vertex {
     position: [f32; 3],
     color: [f32; 3],
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Debug, Copy)]
+struct UniformBufferObject {
+    model: cgmath::Matrix4<f32>,
+    view: cgmath::Matrix4<f32>,
+    projection: cgmath::Matrix4<f32>,
 }
 
 #[derive(Debug)]
@@ -48,9 +58,12 @@ pub struct Engine {
     viewports: [ash::vk::Viewport; 1],
     scissors: [ash::vk::Rect2D; 1],
     pipeline: ash::vk::Pipeline,
+    pipeline_layout: ash::vk::PipelineLayout,
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
+    descriptor_sets: Vec<ash::vk::DescriptorSet>,
     draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation),
+    ubo_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     index_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     image_available_semaphore: ash::vk::Semaphore,
@@ -105,7 +118,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let viewports: [ash::vk::Viewport; 1];
     let scissors: [ash::vk::Rect2D; 1];
     let pipeline: ash::vk::Pipeline;
+    let pipeline_layout: ash::vk::PipelineLayout;
+    let descriptor_sets: Vec<ash::vk::DescriptorSet>;
     let draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation);
+    let ubo_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let index_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let image_available_semaphore: ash::vk::Semaphore;
@@ -322,9 +338,59 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         let dynamic_state_info = ash::vk::PipelineDynamicStateCreateInfo::builder()
             .dynamic_states(&dynamic_state);
 
-        let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::default();
+        let ubo_layout_binding = ash::vk::DescriptorSetLayoutBinding::builder()
+            .binding(0)
+            .descriptor_count(1)
+            .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
+            .build();
 
-        let pipeline_layout = unsafe {
+        let descriptor_set_layouts = {
+            let bindings = [ubo_layout_binding];
+            let create_info = ash::vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings);
+
+            let result = unsafe {
+                _device.handle().create_descriptor_set_layout(&create_info, None)
+                    .expect("Failed to create descriptor set")
+            };
+
+            [result]
+        };
+
+        {
+            let descriptor_pool_sizes = [
+                ash::vk::DescriptorPoolSize::builder()
+                    .ty(ash::vk::DescriptorType::UNIFORM_BUFFER)
+                    .descriptor_count((*swapchain).views().len() as u32)
+                    .build()
+            ];
+
+            let create_info = ash::vk::DescriptorPoolCreateInfo::builder()
+                .max_sets((*swapchain).views().len() as u32)
+                .pool_sizes(&descriptor_pool_sizes);
+
+            let pool = unsafe {
+                _device.handle().create_descriptor_pool(&create_info, None)
+                    .expect("Failed to create descriptor pool")
+            };
+
+            descriptor_sets = swapchain.views().iter()
+                .map(|_| {
+                    let layouts = [descriptor_set_layouts[0]];
+                    let create_info = ash::vk::DescriptorSetAllocateInfo::builder()
+                        .descriptor_pool(pool)
+                        .set_layouts(&layouts);
+                    unsafe {
+                        _device.handle().allocate_descriptor_sets( & create_info)
+                            .expect("Failed to allocate descriptor set")[0]
+                    }
+                }).collect::<Vec<_>>();
+        }
+
+        let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::builder()
+            .set_layouts(&descriptor_set_layouts);
+
+        pipeline_layout = unsafe {
             _device.handle().create_pipeline_layout(&pipeline_layout_create_info, None)
         }.unwrap();
 
@@ -354,7 +420,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
         pipeline = graphics_pipelines[0];
 
-        frame_buffers = (*swapchain).borrow().views().iter().map(|view| {
+        frame_buffers = swapchain.views().iter().map(|view| {
 
             let attachments = [*view];
 
@@ -371,7 +437,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
         }).collect::<Vec<_>>();
 
-        command_buffers = (0..(*swapchain).borrow().views().len()).map(|_| {
+        command_buffers = (0..swapchain.views().len()).map(|_| {
 
             let create_info = ash::vk::CommandBufferAllocateInfo::builder()
                 .command_pool(_device.command_pool().handle())
@@ -397,19 +463,79 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         }.unwrap();
 
         {
-            let allocation_create_info = vk_mem::AllocationCreateInfo {
-                usage: vk_mem::MemoryUsage::GpuOnly,
-                flags: vk_mem::AllocationCreateFlags::NONE,
-                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                preferred_flags: Default::default(),
-                memory_type_bits: 0,
-                pool: None,
-                user_data: None
-            };
+            let count = swapchain.views().len(); // one ubo per swapchain image
+            let size: usize = count * std::mem::size_of::<UniformBufferObject>();
 
+            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+                .usage(vk_mem::MemoryUsage::CpuToGpu)
+                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE)
+                .build();
+
+            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+                .usage(ash::vk::BufferUsageFlags::UNIFORM_BUFFER)
+                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+                .size(size as ash::vk::DeviceSize);
+
+            let (buffer, allocation, _) = _device.allocator()
+                .create_buffer(&buffer_create_info, &allocation_create_info)
+                .expect("Allocation for 'ubo_buffer' failed");
+
+            let dst_ptr = _device.allocator()
+                .map_memory(&allocation)
+                .expect("Map memory for 'index_buffer' failed") as *mut UniformBufferObject;
+
+            let src = (0..count).map(|_| {
+                UniformBufferObject {
+                    model: Matrix4::one(),
+                    view: Matrix4::one(),
+                    projection: Matrix4::one()
+                }
+            }).collect::<Vec<_>>();
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(src.as_ptr(), dst_ptr, count);
+            }
+
+            _device.allocator().unmap_memory(&allocation);
+            _device.allocator().flush_allocation(&allocation, 0, size)
+                .expect("Flush failed");
+
+            ubo_buffer = (buffer, allocation);
+        }
+
+        {
+            let size: usize = std::mem::size_of::<UniformBufferObject>();
+            descriptor_sets.iter().enumerate().for_each(|(index, descriptor_set)| {
+                let buffer_info = [
+                    ash::vk::DescriptorBufferInfo::builder()
+                    .buffer(ubo_buffer.0)
+                    .offset((index * size) as u64)
+                    .range(size as u64)
+                    .build()
+                ];
+                let descriptor_writes = [
+                    ash::vk::WriteDescriptorSet::builder()
+                        .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
+                        .dst_set(*descriptor_set)
+                        .dst_binding(0)
+                        .buffer_info(&buffer_info)
+                        .build()
+                ];
+                let descriptor_copies: [ash::vk::CopyDescriptorSet; 0] = [];
+                unsafe {
+                    _device.handle().update_descriptor_sets(&descriptor_writes, &descriptor_copies)
+                }
+            });
+        }
+
+        {
             let count: usize = 1;
             let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndexedIndirectCommand>());
+
+            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+                .usage(vk_mem::MemoryUsage::GpuOnly)
+                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                .build();
 
             let buffer_create_info = ash::vk::BufferCreateInfo::builder()
                 .usage(ash::vk::BufferUsageFlags::INDIRECT_BUFFER)
@@ -443,19 +569,14 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         }
 
         {
-            let allocation_create_info = vk_mem::AllocationCreateInfo {
-                usage: vk_mem::MemoryUsage::GpuOnly,
-                flags: vk_mem::AllocationCreateFlags::NONE,
-                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                preferred_flags: Default::default(),
-                memory_type_bits: 0,
-                pool: None,
-                user_data: None
-            };
-
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
             let size: usize = (indices.len() * std::mem::size_of::<u32>());
+
+            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+                .usage(vk_mem::MemoryUsage::GpuOnly)
+                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                .build();
 
             let buffer_create_info = ash::vk::BufferCreateInfo::builder()
                 .usage(ash::vk::BufferUsageFlags::INDEX_BUFFER)
@@ -482,16 +603,11 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         }
 
         {
-            let allocation_create_info = vk_mem::AllocationCreateInfo {
-                usage: vk_mem::MemoryUsage::GpuOnly,
-                flags: vk_mem::AllocationCreateFlags::NONE,
-                required_flags: ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL,
-                preferred_flags: Default::default(),
-                memory_type_bits: 0,
-                pool: None,
-                user_data: None
-            };
+            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+                .usage(vk_mem::MemoryUsage::GpuOnly)
+                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                .build();
 
             let vertices: [Vertex; 4] = [
                 Vertex {
@@ -550,7 +666,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         viewports,
         scissors,
         pipeline,
+        pipeline_layout,
+        descriptor_sets,
         draw_indirect_command_buffer,
+        ubo_buffer,
         index_buffer,
         vertex_buffer,
         image_available_semaphore,
@@ -570,11 +689,22 @@ pub fn render(engine: &mut Engine) {
     let swapchains = [*engine.swapchain.handle()];
     let indices = [index];
 
+    update_ubo(
+        index as usize,
+        engine.device.clone(),
+        &engine.ubo_buffer.1,
+        Extent2D {
+            width: 800,
+            height: 600
+        }
+    );
+
     info!("================");
 
     record_commands(
         engine.device.clone(),
         &engine.command_buffers[index as usize],
+        &engine.descriptor_sets[index as usize],
         &engine.draw_indirect_command_buffer.0,
         &engine.index_buffer.0,
         &engine.vertex_buffer.0,
@@ -583,6 +713,7 @@ pub fn render(engine: &mut Engine) {
         &engine.viewports[0],
         &engine.scissors[0],
         &engine.pipeline,
+        &engine.pipeline_layout,
         &engine.timings_query_pool,
         &engine.vertices_query_pool,
     );
@@ -630,9 +761,46 @@ pub fn render(engine: &mut Engine) {
     println!("vert. invocations: {}", vertices_data[0]);
 }
 
+fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, extend: Extent2D) {
+
+    let _device = (*device).borrow();
+
+    let size = std::mem::size_of::<UniformBufferObject>();
+    let ubo = [
+        UniformBufferObject {
+            model: Matrix4::one(),
+            view: Matrix4::look_at(
+                Point3::new(1.0, 1.0, 1.0),
+                Point3::new(0.0, 0.0, 0.0),
+                Vector3::new(0.0, -1.0, 0.0)
+            ),
+            projection: cgmath::perspective(
+                Deg(75.0),
+                extend.width as f32 / extend.height as f32,
+                0.1,
+                10.0,
+            ),
+        }
+    ];
+
+    let dst_ptr = _device.allocator()
+        .map_memory(&allocation)
+        .expect("Map memory for 'index_buffer' failed") as *mut UniformBufferObject;
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(ubo.as_ptr(), dst_ptr.offset(index as isize), 1);
+    }
+
+    _device.allocator().unmap_memory(&allocation);
+    _device.allocator().flush_allocation(&allocation, index * size, size)
+        .expect("Flush failed");
+
+}
+
 fn record_commands(
     device: DeviceRef,
     command_buffer: &ash::vk::CommandBuffer,
+    descriptor_set: &ash::vk::DescriptorSet,
     draw_indirect_command_buffer: &ash::vk::Buffer,
     index_buffer: &ash::vk::Buffer,
     vertex_buffer: &ash::vk::Buffer,
@@ -641,6 +809,7 @@ fn record_commands(
     viewport: &ash::vk::Viewport,
     scissor: &ash::vk::Rect2D,
     pipeline: &ash::vk::Pipeline,
+    pipeline_layout: &ash::vk::PipelineLayout,
     timings_query_pool: &ash::vk::QueryPool,
     vertices_query_pool: &ash::vk::QueryPool,
 ) {
@@ -684,6 +853,12 @@ fn record_commands(
         _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline);
     }
 
+    let descriptor_sets = [*descriptor_set];
+    let offsets = [];
+    unsafe {
+        _device.handle().cmd_bind_descriptor_sets(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline_layout, 0, &descriptor_sets, &offsets)
+    }
+
     unsafe {
         _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer, 0, ash::vk::IndexType::UINT32)
     }
@@ -696,7 +871,6 @@ fn record_commands(
 
     let viewports = [*viewport];
     unsafe {
-
         _device.handle().cmd_set_viewport(*command_buffer, 0, &viewports);
     }
 
