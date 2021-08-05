@@ -1,7 +1,6 @@
 use crate::graphics::vulkan::device::DeviceRef;
 use std::rc::Rc;
 use crate::graphics::vulkan::queue::QueueFamily;
-use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk::{Handle};
 use std::cell::{RefCell, Ref};
 
@@ -26,4 +25,3 @@ impl InternalCommandBuffer {
         }
     }
 }
-

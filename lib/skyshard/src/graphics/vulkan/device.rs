@@ -8,7 +8,6 @@ use std::rc::{Rc, Weak};
 
 use std::mem::MaybeUninit;
 
-use ash::version::{DeviceV1_0, InstanceV1_0};
 use ash::vk::{Handle, CommandPoolResetFlags};
 use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};

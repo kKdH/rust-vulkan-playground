@@ -60,15 +60,6 @@ checksum = "dabe5a181f83789739c194cbe5a897dde195078fac08568d09221fd6137a7ba8"
 
 [[package]]
 name = "ash"
-version = "0.32.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06063a002a77d2734631db74e8f4ce7148b77fe522e6bca46f2ae7774fd48112"
-dependencies = [
- "libloading 0.7.0",
-]
-
-[[package]]
-name = "ash"
 version = "0.33.0+1.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2142f1fa77cc4d24ffd2f24dc84f88ce5b1e588d524f10fb473a04b93aef14f"
@@ -82,7 +73,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12f91ce4c6be1a2ba99d3d6cd57d5bae9ac6d6f903b5ae53d6b1dee2edf872af"
 dependencies = [
- "ash 0.33.0+1.2.186",
+ "ash",
  "raw-window-handle",
  "raw-window-metal",
 ]
@@ -1160,7 +1151,7 @@ checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 name = "rust-vulkan-playground"
 version = "0.1.0"
 dependencies = [
- "ash 0.32.1",
+ "ash",
  "ash-window",
  "hamcrest2",
  "log",
@@ -1265,7 +1256,7 @@ dependencies = [
 name = "skyshard"
 version = "0.1.0"
 dependencies = [
- "ash 0.32.1",
+ "ash",
  "ash-window",
  "cgmath",
  "chrono",
@@ -1416,9 +1407,8 @@ dependencies = [
 [[package]]
 name = "vk-mem"
 version = "0.2.3"
-source = "git+https://github.com/gwihlidal/vk-mem-rs#ec2772294fcded340d663487503fd356b70bc3a3"
 dependencies = [
- "ash 0.33.0+1.2.186",
+ "ash",
  "bitflags",
  "cc",
 ]

@@ -11,7 +11,6 @@ use std::rc::Rc;
 use std::time::SystemTime;
 
 use ash::LoadingError;
-use ash::version::{DeviceV1_0, EntryV1_0, InstanceV1_0};
 use ash::vk::{DebugUtilsMessageSeverityFlagsEXT, Handle};
 use chrono::prelude::*;
 use log::{debug, info, warn, error};
@@ -217,7 +216,7 @@ impl InstanceBuilder {
             .enabled_extension_names(&extension_names)
             .build();
 
-        let vk_loader = ash::Entry::new()?;
+        let vk_loader = unsafe { ash::Entry::new()? };
 
         let vk_handle = unsafe {
             vk_loader.create_instance(&vk_create_info, None)
@@ -263,4 +262,3 @@ impl InstanceBuilder {
         Ok(instance)
     }
 }
-

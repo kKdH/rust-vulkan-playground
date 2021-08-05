@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
-use ash::version::{EntryV1_0, InstanceV1_0, DeviceV1_0, DeviceV1_2};
 use ash::vk;
 use log::info;
 use winit::window::Window;
@@ -477,7 +476,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .size(size as ash::vk::DeviceSize);
 
             let (buffer, allocation, _) = _device.allocator()
-                .create_buffer(&buffer_create_info, &allocation_create_info)
+                .create_buffer(&buffer_create_info.build(), &allocation_create_info)
                 .expect("Allocation for 'ubo_buffer' failed");
 
             let dst_ptr = _device.allocator()
@@ -497,8 +496,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }
 
             _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size)
-                .expect("Flush failed");
+            _device.allocator().flush_allocation(&allocation, 0, size);
 
             ubo_buffer = (buffer, allocation);
         }
@@ -562,8 +560,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }
 
             _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size)
-                .expect("Flush failed");
+            _device.allocator().flush_allocation(&allocation, 0, size);
 
             draw_indirect_command_buffer = (buffer, allocation)
         }
@@ -596,8 +593,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }
 
             _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size)
-                .expect("Flush failed");
+            _device.allocator().flush_allocation(&allocation, 0, size);
 
             index_buffer = (buffer, allocation);
         }
@@ -648,8 +644,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }
 
             _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size)
-                .expect("Flush failed");
+            _device.allocator().flush_allocation(&allocation, 0, size);
 
             vertex_buffer = (buffer, allocation)
         }
@@ -792,8 +787,7 @@ fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, 
     }
 
     _device.allocator().unmap_memory(&allocation);
-    _device.allocator().flush_allocation(&allocation, index * size, size)
-        .expect("Flush failed");
+    _device.allocator().flush_allocation(&allocation, index * size, size);
 
 }
 

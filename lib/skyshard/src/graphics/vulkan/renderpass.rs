@@ -1,6 +1,5 @@
 use crate::graphics::vulkan::device::DeviceRef;
 use crate::graphics::vulkan::surface::SurfaceRef;
-use ash::version::DeviceV1_0;
 
 pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::RenderPass {
 

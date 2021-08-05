@@ -9,7 +9,6 @@ use std::result::Result;
 
 use ash::{Instance, vk};
 use ash::extensions::khr;
-use ash::version::{DeviceV1_0, DeviceV1_2, EntryV1_0, InstanceV1_0};
 use ash::vk::{Handle, ImageView};
 use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};

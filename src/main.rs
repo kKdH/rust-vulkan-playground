@@ -17,7 +17,7 @@ use ash::extensions::{
     ext::DebugUtils,
     khr::{Surface, Swapchain},
 };
-use ash::version::{DeviceV1_0, DeviceV1_2, EntryV1_0, InstanceV1_0};
+
 use ash::vk;
 use ash::vk::{Extent2D, PhysicalDevice, Queue, SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR};
 use log::{debug, error, info, LevelFilter, warn};
