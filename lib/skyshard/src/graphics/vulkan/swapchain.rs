@@ -10,7 +10,6 @@ use std::result::Result;
 use ash::{Instance, vk};
 use ash::extensions::khr;
 use ash::vk::{Handle, ImageView};
-use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};
 use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
 use thiserror::Error;

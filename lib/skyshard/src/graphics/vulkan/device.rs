@@ -9,7 +9,6 @@ use std::rc::{Rc, Weak};
 use std::mem::MaybeUninit;
 
 use ash::vk::{Handle, CommandPoolResetFlags};
-use cgmath::num_traits::ToPrimitive;
 use log::{debug, info};
 use thiserror::Error;
 
@@ -233,7 +232,7 @@ impl PhysicalDevice {
             _instance.handle().get_physical_device_queue_family_properties(handle)
         }.iter().enumerate().map(|(index, familiy)| {
             QueueFamily::new (
-                index.to_u32().unwrap(),
+                index as u32,
                 familiy.queue_flags.as_raw(),
                 familiy.queue_count
             )

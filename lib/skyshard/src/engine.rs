@@ -25,8 +25,7 @@ use std::borrow::Borrow;
 use chrono::Duration;
 use vk_mem::AllocatorPoolCreateFlags;
 use crate::util::HasBuilder;
-use cgmath::{Matrix4, Point3, Vector3, Rad, Deg};
-use cgmath::{One, Zero};
+use nalgebra::{Point3, Vector3, Matrix4, Perspective3, Isometry3};
 
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
@@ -38,9 +37,9 @@ struct Vertex {
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
 struct UniformBufferObject {
-    model: cgmath::Matrix4<f32>,
-    view: cgmath::Matrix4<f32>,
-    projection: cgmath::Matrix4<f32>,
+    model: Matrix4<f32>,
+    view: Matrix4<f32>,
+    projection: Matrix4<f32>,
 }
 
 #[derive(Debug)]
@@ -485,9 +484,9 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let src = (0..count).map(|_| {
                 UniformBufferObject {
-                    model: Matrix4::one(),
-                    view: Matrix4::one(),
-                    projection: Matrix4::one()
+                    model: Matrix4::identity(),
+                    view: Matrix4::identity(),
+                    projection: Matrix4::identity()
                 }
             }).collect::<Vec<_>>();
 
@@ -761,20 +760,21 @@ fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, 
     let _device = (*device).borrow();
 
     let size = std::mem::size_of::<UniformBufferObject>();
+    let eye = Point3::new(0.0, 0.0, 2.0);
+    let target = Point3::new(0.0, 0.0, 0.0);
+    let view   = Isometry3::look_at_rh(&eye, &target, &Vector3::y());
+    let projection = Perspective3::new(
+        extend.width as f32 / extend.height as f32,
+        3.14 / 4.0,
+        0.01,
+        100.0
+    );
+
     let ubo = [
         UniformBufferObject {
-            model: Matrix4::one(),
-            view: Matrix4::look_at(
-                Point3::new(1.0, 1.0, 1.0),
-                Point3::new(0.0, 0.0, 0.0),
-                Vector3::new(0.0, -1.0, 0.0)
-            ),
-            projection: cgmath::perspective(
-                Deg(75.0),
-                extend.width as f32 / extend.height as f32,
-                0.1,
-                10.0,
-            ),
+            model: Matrix4::identity(),
+            view: view.to_homogeneous(),
+            projection: *projection.as_matrix()
         }
     ];
 
