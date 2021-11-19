@@ -29,7 +29,6 @@ use log4rs::encode::pattern::PatternEncoder;
 use skyshard::Camera;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
 
 
@@ -99,7 +98,7 @@ fn main() {
 
         skyshard::render(&mut engine, &camera);
 
-        events_loop.run_return(move |event, _, control_flow| {
+        events_loop.run(move |event, _, control_flow| {
             match event {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested => {

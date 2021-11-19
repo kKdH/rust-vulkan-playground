@@ -5,16 +5,16 @@ authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 edition = "2018"
 
 [dependencies]
-log = "0.4.11"
-memoffset = "0.6.1"
+log = "0.4.14"
+memoffset = "0.6.4"
 chrono = "0.4.19"
-thiserror = "1.0.22"
-regex = "1.4.2"
+thiserror = "1.0.30"
+regex = "1.5.4"
 ash = "0.33.3+1.2.191"
 ash-window = "0.7.0"
 vk-mem = { path = "../../../vk-mem-rs", version = "0.3.0" } # "0.3.0"
-winit = "0.22.0"
-png = "0.15.0"
+winit = "0.25.0"
+png = "0.17.2"
 nalgebra = "0.29.0"
 
 [patch.crates-io]
