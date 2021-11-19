@@ -26,7 +26,8 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use winit::event::{Event, VirtualKeyCode, WindowEvent};
+use skyshard::Camera;
+use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::platform::desktop::EventLoopExtDesktop;
 use winit::window::{Window, WindowBuilder};
@@ -58,8 +59,8 @@ fn main() {
 
     let mut events_loop = EventLoop::new();
 
-    let window_width = 800;
-    let window_height = 600;
+    let window_width = 640;
+    let window_height = 480;
 
     let window = WindowBuilder::new()
         .with_title("rust vulkan example")
@@ -79,7 +80,24 @@ fn main() {
         info!("Starting event loop");
         engine.reference_counts();
 
-        skyshard::render(&mut engine);
+        let mut camera = Camera::new(
+            window_width as f32 / window_height as f32,
+            3.14 / 4.0,
+            0.01,
+            100.0
+        );
+
+        camera.eye(0f32, 0f32, 3f32);
+        camera.update();
+
+        let mut roll = 0.0;
+        let mut pitch = 0.0;
+        let mut yaw = 0.0;
+        let mut x = 0.0;
+        let mut y = 0.0;
+        let mut z = 0.0;
+
+        skyshard::render(&mut engine, &camera);
 
         events_loop.run_return(move |event, _, control_flow| {
             match event {
@@ -88,10 +106,91 @@ fn main() {
                         println!("Request close");
                         close_requested = true
                     }
-                    WindowEvent::KeyboardInput { input, .. } => {
+                    WindowEvent::KeyboardInput { input, ..} => {
                         if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
                             println!("KeyboardInput: ESCAPE");
                             close_requested = true
+                        }
+                        else {
+                            match input {
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Left),
+                                    ..
+                                } => {
+                                    yaw += 5.0;
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Right),
+                                    ..
+                                } => {
+                                    yaw -= 5.0;
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Right),
+                                    ..
+                                } => {
+                                    yaw -= 5.0;
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Up),
+                                    ..
+                                } => {
+                                    pitch -= 5.0;
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Down),
+                                    ..
+                                } => {
+                                    pitch += 5.0;
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::W),
+                                    ..
+                                } => {
+                                    camera.forward();
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::S),
+                                    ..
+                                } => {
+                                    camera.backward();
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::A),
+                                    ..
+                                } => {
+                                    camera.strafe_left();
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::D),
+                                    ..
+                                } => {
+                                    camera.strafe_right();
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Space),
+                                    ..
+                                } => {
+                                    println!("reset");
+                                    yaw = 0.0;
+                                    pitch = 0.0;
+                                    camera.reset();
+                                }
+                                _ => {}
+                            }
+                            camera.yaw(yaw);
+                            camera.pitch(pitch);
+                            camera.update()
                         }
                     }
                     _ => (),
@@ -100,8 +199,8 @@ fn main() {
                     match (redraw_requested, close_requested) {
                         (false, false) => {}
                         (true, false) => {
-                            skyshard::render(&mut engine);
-                            std::thread::sleep(Duration::from_millis(1000))
+                            skyshard::render(&mut engine, &camera);
+                            std::thread::sleep(Duration::from_millis(100))
                         }
                         (_, true) => {
                             println!("Closing");
