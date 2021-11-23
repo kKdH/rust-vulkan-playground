@@ -17,7 +17,6 @@ use ash::extensions::{
     ext::DebugUtils,
     khr::{Surface, Swapchain},
 };
-
 use ash::vk;
 use ash::vk::{Extent2D, PhysicalDevice, Queue, SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR};
 use log::{debug, error, info, LevelFilter, warn};
@@ -27,10 +26,10 @@ use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use skyshard::Camera;
+use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
-
 
 fn main() {
 
@@ -89,12 +88,12 @@ fn main() {
         camera.eye(0f32, 0f32, 3f32);
         camera.update();
 
+        let mut is_cursor_grabed = false;
+        let mut last_cursor_x = 0.0;
+        let mut last_cursor_y = 0.0;
         let mut roll = 0.0;
         let mut pitch = 0.0;
         let mut yaw = 0.0;
-        let mut x = 0.0;
-        let mut y = 0.0;
-        let mut z = 0.0;
 
         skyshard::render(&mut engine, &camera);
 
@@ -104,6 +103,20 @@ fn main() {
                     WindowEvent::CloseRequested => {
                         println!("Request close");
                         close_requested = true
+                    }
+                    WindowEvent::CursorMoved { position, .. } => {
+                        if is_cursor_grabed {
+                            let delta_x = 0.01 * (window.inner_size().width as f64 * 0.5 - position.x) as f32;
+                            let delta_y = -0.01 * (window.inner_size().height as f64 * 0.5 - position.y) as f32;
+
+                            yaw += delta_x;
+                            pitch += delta_y;
+
+                            window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
+                            camera.yaw(yaw);
+                            camera.pitch(pitch);
+                            camera.update()
+                        }
                     }
                     WindowEvent::KeyboardInput { input, ..} => {
                         if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
@@ -177,13 +190,24 @@ fn main() {
                                 }
                                 KeyboardInput {
                                     state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Space),
+                                    virtual_keycode: Some(VirtualKeyCode::R),
                                     ..
                                 } => {
-                                    println!("reset");
+                                    println!("Reset");
                                     yaw = 0.0;
                                     pitch = 0.0;
                                     camera.reset();
+                                }
+                                KeyboardInput {
+                                    state: ElementState::Pressed,
+                                    virtual_keycode: Some(VirtualKeyCode::Space),
+                                    ..
+                                } => {
+                                    is_cursor_grabed = !is_cursor_grabed;
+
+                                    window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
+                                    window.set_cursor_grab(is_cursor_grabed);
+                                    window.set_cursor_visible(!is_cursor_grabed);
                                 }
                                 _ => {}
                             }
@@ -199,7 +223,7 @@ fn main() {
                         (false, false) => {}
                         (true, false) => {
                             skyshard::render(&mut engine, &camera);
-                            std::thread::sleep(Duration::from_millis(100))
+                            std::thread::sleep(Duration::from_millis(50))
                         }
                         (_, true) => {
                             println!("Closing");
