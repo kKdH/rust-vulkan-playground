@@ -2,7 +2,7 @@
 name = "skyshard"
 version = "0.1.0"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 log = "0.4.14"
