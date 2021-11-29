@@ -1,106 +1,116 @@
-use cgmath::{Matrix4, Point3, Vector3, Rad};
+use nalgebra::{Matrix4, UnitQuaternion, Vector3};
 
+/// Camera
+///
+/// Projection:
+/// World Coordinate system
+///
+/// +y
+/// |  +z
+/// | /
+/// |/___+x
+///
+/// NDC system
+///
+///  -z
+/// /
+/// |¯¯¯+x
+/// |
+/// +y
+///
 pub struct Camera {
-    pub projection: Matrix4<f32>,
-    pub view: Matrix4<f32>,
+    projection: Matrix4<f32>,
+    view: Matrix4<f32>,
+    position: Vector3<f32>,
+    direction: Vector3<f32>,
+    pitch: UnitQuaternion<f32>,
+    roll: UnitQuaternion<f32>,
+    yaw: UnitQuaternion<f32>,
+    matrix: Matrix4<f32>,
 }
 
-#[derive(Default)]
-pub struct  CameraBuilder {
-    position: Option<Point3<f32>>,
-    center: Option<Point3<f32>>,
-    up: Option<Vector3<f32>>,
-    near: Option<f32>,
-    far: Option<f32>,
-    aspect: Option<f32>,
-    fov: Option<f32>
-}
+impl Camera {
 
-impl CameraBuilder {
+    pub fn new(aspect: f32, fov: f32, z_near: f32, z_far: f32) -> Self {
 
-    pub fn move_to(&mut self, point: Point3<f32>) -> &mut CameraBuilder {
-        self.position = Some(point);
-        self
-    }
+        let mut projection = Matrix4::<f32>::zeros();
+        let tan_half_fovy = (fov / 2.0).tan();
 
-    pub fn look_at(&mut self, point: Point3<f32>) -> &mut CameraBuilder {
-        self.center = Some(point);
-        self
-    }
+        projection[(0, 0)] = 1.0 / (aspect * tan_half_fovy);
+        projection[(1, 1)] = -1.0 / tan_half_fovy;
+        projection[(2, 2)] = z_far / (z_near - z_far);
+        projection[(2, 3)] = -(z_far * z_near) / (z_far - z_near);
+        projection[(3, 2)] = -1.0;
 
-    pub fn with_field_of_view(&mut self, value: f32) -> &mut CameraBuilder {
-        self.fov = Some(value);
-        self
-    }
-
-    pub fn with_aspect_ratio_of(&mut self, width: f32, height: f32) -> &mut CameraBuilder {
-        self.with_aspect_ratio(width / height)
-    }
-
-    pub fn with_aspect_ratio(&mut self, value: f32) -> &mut CameraBuilder {
-        self.aspect = Some(value);
-        self
-    }
-
-    pub fn with_near_plane(&mut self, value: f32) -> &mut CameraBuilder {
-        self.near = Some(value);
-        self
-    }
-
-    pub fn with_far_plane(&mut self, value: f32) -> &mut CameraBuilder {
-        self.far = Some(value);
-        self
-    }
-
-    pub fn build(&self) -> Camera {
-        Camera {
-            projection: cgmath::perspective(
-                Rad(self.fov.expect("No field of view has been specified!")),
-                self.aspect.expect("No aspect ration has been specified!"),
-                self.near.expect("No near plane has been specified!"),
-                self.far.expect("No far plane has been specified!"),
-            ),
-            view: Matrix4::look_at(
-                self.position.unwrap_or(Point3::new(0.0, 0.0, 0.0)),
-                self.center.unwrap_or(Point3::new(0.0, 0.0, 0.0)),
-                self.up.unwrap_or(Vector3::new(0.0, -1.0, 0.0))
-            ),
+        Self {
+            projection,
+            view: Matrix4::<f32>::identity(),
+            position: Vector3::zeros(),
+            direction: Vector3::zeros(),
+            pitch: UnitQuaternion::identity(),
+            roll: UnitQuaternion::identity(),
+            yaw: UnitQuaternion::identity(),
+            matrix: projection,
         }
     }
-}
 
-pub fn builder() -> CameraBuilder {
-    CameraBuilder::default()
-}
+    pub fn roll(&mut self, angle: f32) {
+        self.roll = UnitQuaternion::from_axis_angle(&Vector3::z_axis(), angle.to_radians());
+    }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use cgmath::{Vector3, Rad};
-    use hamcrest2::prelude::*;
+    pub fn pitch(&mut self, angle: f32) {
+        self.pitch = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), angle.to_radians());
+    }
 
-    #[test]
-    fn test_build() {
-        let camera = super::builder()
-            .move_to(Point3::new(1.0, 1.0, 1.0))
-            .look_at(Point3::new(0.0, 0.0, 0.0))
-            .with_field_of_view(std::f32::consts::FRAC_PI_2)
-            .with_aspect_ratio(1.0)
-            .with_near_plane(1.0)
-            .with_far_plane(2.0)
-            .build();
+    pub fn yaw(&mut self, angle: f32) {
+        self.yaw = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), angle.to_radians());
+    }
 
-        assert_that!(camera.view, equal_to(Matrix4::look_at(
-            Point3::new(1.0, 1.0, 1.0),
-            Point3::new(0.0, 0.0, 0.0),
-            Vector3::new(0.0, -1.0, 0.0),
-        )));
+    pub fn eye(&mut self, x: f32, y: f32, z: f32) {
+        self.position[0] = x;
+        self.position[1] = y;
+        self.position[2] = z;
+    }
 
-        assert_that!(camera.projection, equal_to(cgmath::perspective(
-            Rad(std::f32::consts::FRAC_PI_2),
-            1.0,
-            1.0,
-            2.0,
-        )));
+    pub fn forward(&mut self) {
+        self.position += self.direction
+    }
+
+    pub fn backward(&mut self) {
+        self.position -= self.direction
+    }
+
+    pub fn strafe_left(&mut self) {
+        self.position += self.direction.cross(&Vector3::y_axis())
+    }
+
+    pub fn strafe_right(&mut self) {
+        self.position -= self.direction.cross(&Vector3::y_axis())
+    }
+
+    pub fn update(&mut self) {
+        let orientation = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), std::f32::consts::PI) * self.roll * self.pitch * self.yaw;
+        // self.direction = (orientation * Vector3::new(0f32, 0f32, 1f32));
+        self.direction = orientation.transform_vector(&Vector3::z_axis());
+        self.direction.scale_mut(0.05);
+
+        let mut translation = Matrix4::<f32>::identity();
+        translation[(0, 3)] = self.position[0];
+        translation[(1, 3)] = self.position[1] * -1.0; // due to y-down?
+        translation[(2, 3)] = self.position[2];
+        self.view = orientation.to_rotation_matrix().to_homogeneous() * translation;
+        self.matrix = self.projection * self.view;
+    }
+
+    pub fn reset(&mut self) {
+        self.position = Vector3::new(0f32, 0f32, 3f32);
+        self.roll(0.0);
+        self.pitch(0.0);
+        self.yaw(0.0);
+    }
+
+    #[inline]
+    pub fn as_matrix(&self) -> &Matrix4<f32> {
+        &self.matrix
     }
 }
