@@ -15,8 +15,9 @@ use log::info;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
 use vk_mem::AllocatorPoolCreateFlags;
 use winit::window::Window;
+use crate::entity::{World};
 
-use crate::graphics::vulkan;
+use crate::graphics::{Geometry, Position, vulkan};
 use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
@@ -30,9 +31,9 @@ use crate::util::Version;
 
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
-struct Vertex {
-    position: [f32; 3],
-    color: [f32; 3],
+pub struct Vertex {
+    pub position: [f32; 3],
+    pub color: [f32; 3],
 }
 
 #[repr(C, align(16))]
@@ -671,7 +672,69 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     });
 }
 
-pub fn render(engine: &mut Engine, camera: &Camera) {
+pub fn create_geometry(engine: &Engine,
+                       position: Position,
+                       indices: Vec<u32>,
+                       vertices: Vec<Vertex>) -> Geometry {
+
+    let _device = (*engine.device).borrow();
+
+    let (indices_buffer, indices_allocation) = {
+
+        let size: usize = (indices.len() * std::mem::size_of::<u32>());
+
+        let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+            .usage(vk_mem::MemoryUsage::GpuOnly)
+            .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+            .build();
+
+        let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+            .usage(ash::vk::BufferUsageFlags::INDEX_BUFFER)
+            .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+            .size(size as ash::vk::DeviceSize);
+
+        let (buffer, allocation, _) = _device.allocator()
+            .create_buffer(&buffer_create_info, &allocation_create_info)
+            .expect("Allocation for 'index_buffer' failed");
+
+        (buffer, allocation)
+    };
+
+    let (vertex_buffer, vertex_allocation) = {
+
+        let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+            .usage(vk_mem::MemoryUsage::GpuOnly)
+            .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+            .build();
+
+        let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
+
+        let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+            .usage(ash::vk::BufferUsageFlags::VERTEX_BUFFER)
+            .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+            .size(size as ash::vk::DeviceSize);
+
+        let (buffer, allocation, _) = _device.allocator()
+            .create_buffer(&buffer_create_info, &allocation_create_info)
+            .expect("Allocation for 'vertex_buffer' failed");
+
+        (buffer, allocation)
+    };
+
+    Geometry {
+        position,
+        indices: indices,
+        index_buffer: indices_buffer,
+        index_allocation: indices_allocation,
+        vertices: vertices,
+        vertex_buffer: vertex_buffer,
+        vertex_allocation: vertex_allocation,
+    }
+}
+
+pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
 
     let _device = (*engine.device).borrow();
     let (index, suboptimal) = engine.swapchain.acquire_next_image(engine.image_available_semaphore);
@@ -680,31 +743,59 @@ pub fn render(engine: &mut Engine, camera: &Camera) {
     let swapchains = [*engine.swapchain.handle()];
     let indices = [index];
 
-    update_ubo(
-        index as usize,
-        engine.device.clone(),
-        &engine.ubo_buffer.1,
-        camera
-    );
+    world.geometries.iter().for_each(|geometry| {
 
-    // info!("================");
+        let mut transformation = Matrix4::identity();
+        transformation.append_translation_mut(&Vector3::new(
+            geometry.position.x,
+            geometry.position.y,
+            geometry.position.z,
+        ));
 
-    record_commands(
-        engine.device.clone(),
-        &engine.command_buffers[index as usize],
-        &engine.descriptor_sets[index as usize],
-        &engine.draw_indirect_command_buffer.0,
-        &engine.index_buffer.0,
-        &engine.vertex_buffer.0,
-        &engine.frame_buffers[index as usize],
-        &engine.renderpass,
-        &engine.viewports[0],
-        &engine.scissors[0],
-        &engine.pipeline,
-        &engine.pipeline_layout,
-        &engine.timings_query_pool,
-        &engine.vertices_query_pool,
-    );
+        update_ubo(
+            index as usize,
+            engine.device.clone(),
+            &engine.ubo_buffer.1,
+            camera,
+            &transformation
+        );
+
+        update_geometry(&engine, geometry);
+
+        record_commands(
+            engine.device.clone(),
+            &engine.command_buffers[index as usize],
+            &engine.descriptor_sets[index as usize],
+            &engine.draw_indirect_command_buffer.0,
+            &geometry.index_buffer,
+            &geometry.vertex_buffer,
+            &engine.frame_buffers[index as usize],
+            &engine.renderpass,
+            &engine.viewports[0],
+            &engine.scissors[0],
+            &engine.pipeline,
+            &engine.pipeline_layout,
+            &engine.timings_query_pool,
+            &engine.vertices_query_pool,
+        );
+    });
+
+    // record_commands(
+    //     engine.device.clone(),
+    //     &engine.command_buffers[index as usize],
+    //     &engine.descriptor_sets[index as usize],
+    //     &engine.draw_indirect_command_buffer.0,
+    //     &engine.index_buffer.0,
+    //     &engine.vertex_buffer.0,
+    //     &engine.frame_buffers[index as usize],
+    //     &engine.renderpass,
+    //     &engine.viewports[0],
+    //     &engine.scissors[0],
+    //     &engine.pipeline,
+    //     &engine.pipeline_layout,
+    //     &engine.timings_query_pool,
+    //     &engine.vertices_query_pool,
+    // );
 
     let wait_semaphores = [
         engine.image_available_semaphore
@@ -749,12 +840,12 @@ pub fn render(engine: &mut Engine, camera: &Camera) {
     // println!("vert. invocations: {}", vertices_data[0]);
 }
 
-fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, camera: &Camera) {
+fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, camera: &Camera, model: &Matrix4<f32>) {
 
     let _device = (*device).borrow();
 
     let size = std::mem::size_of::<UniformBufferObject>();
-    let model = Matrix4::identity();
+    // let model = Matrix4::identity();
     let mvp = model * camera.as_matrix();
 
     let ubo = [
@@ -774,6 +865,41 @@ fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, 
     _device.allocator().unmap_memory(&allocation);
     _device.allocator().flush_allocation(&allocation, index * size, size);
 
+}
+
+fn update_geometry(engine: &Engine, geometry: &Geometry) {
+
+    let _device = (*engine.device).borrow();
+
+    {
+        let size: usize = (geometry.indices.len() * std::mem::size_of::<u32>());
+
+        let data_ptr = _device.allocator()
+            .map_memory(&geometry.index_allocation)
+            .expect("Map memory for 'index_buffer' failed") as *mut u32;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(geometry.indices.as_ptr(), data_ptr, geometry.indices.len());
+        }
+
+        _device.allocator().unmap_memory(&geometry.index_allocation);
+        _device.allocator().flush_allocation(&geometry.index_allocation, 0, size);
+    }
+
+    {
+        let size: usize = (geometry.vertices.len() * std::mem::size_of::<Vertex>());
+
+        let data_ptr = _device.allocator()
+            .map_memory(&geometry.vertex_allocation)
+            .expect("Map memory for 'vertex_buffer' failed") as *mut Vertex;
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(geometry.vertices.as_ptr(), data_ptr, geometry.vertices.len());
+        }
+
+        _device.allocator().unmap_memory(&geometry.vertex_allocation);
+        _device.allocator().flush_allocation(&geometry.vertex_allocation, 0, size);
+    }
 }
 
 fn record_commands(

@@ -6,9 +6,12 @@ extern crate memoffset;
 mod engine;
 mod util;
 
+pub mod entity;
 pub mod graphics;
 
 use engine::Engine;
 
 pub use engine::create;
+pub use engine::create_geometry;
 pub use engine::render;
+pub use engine::Vertex;

@@ -9,9 +9,12 @@ use std::ffi::{CStr, CString};
 use std::io::Cursor;
 use std::iter::Copied;
 use std::ops::Deref;
+use std::process::exit;
 use std::rc::{Rc, Weak};
+use std::slice::Iter;
 use std::sync::Arc;
 use std::time::Duration;
+use std::vec;
 
 use ash::extensions::{
     ext::DebugUtils,
@@ -25,7 +28,9 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use skyshard::graphics::Camera;
+use skyshard::entity::{World};
+use skyshard::graphics::{Camera, Position};
+use skyshard::Vertex;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -71,6 +76,53 @@ fn main() {
 
     {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
+        let mut world = World::new();
+
+        world.geometries.push(skyshard::create_geometry(&engine,
+            Position::new(0.0, 0.0, 0.0),
+            Vec::from([0, 1, 2, 2, 3, 0]),
+            Vec::from([
+                Vertex {
+                    position: [-0.5, -0.5, 0.0], // top-left
+                    color: [1.0, 0.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, -0.5, 0.0], // top-right
+                    color: [0.0, 1.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, 0.5, 0.0], // bottom-right
+                    color: [0.0, 0.0, 1.0]
+                },
+                Vertex {
+                    position: [-0.5, 0.5, 0.0], // bottom-left
+                    color: [1.0, 1.0, 1.0]
+                },
+            ])
+        ));
+
+        world.geometries.push(skyshard::create_geometry(&engine,
+            Position::new(0.5, 0.0, 0.0),
+            Vec::from([0, 1, 2, 2, 3, 0]),
+            Vec::from([
+                Vertex {
+                    position: [-0.5, -0.5, 0.0], // top-left
+                    color: [1.0, 0.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, -0.5, 0.0], // top-right
+                    color: [0.0, 1.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, 0.5, 0.0], // bottom-right
+                    color: [0.0, 0.0, 1.0]
+                },
+                Vertex {
+                    position: [-0.5, 0.5, 0.0], // bottom-left
+                    color: [1.0, 1.0, 1.0]
+                },
+            ])
+        ));
 
         let mut redraw_requested = true;
         let mut close_requested = false;
@@ -88,14 +140,14 @@ fn main() {
         camera.eye(0f32, 0f32, 3f32);
         camera.update();
 
-        let mut is_cursor_grabed = false;
+        let mut is_cursor_grabbed = false;
         let mut last_cursor_x = 0.0;
         let mut last_cursor_y = 0.0;
         let mut roll = 0.0;
         let mut pitch = 0.0;
         let mut yaw = 0.0;
 
-        skyshard::render(&mut engine, &camera);
+        skyshard::render(&mut engine, &world, &camera);
 
         events_loop.run(move |event, _, control_flow| {
             match event {
@@ -105,7 +157,7 @@ fn main() {
                         close_requested = true
                     }
                     WindowEvent::CursorMoved { position, .. } => {
-                        if is_cursor_grabed {
+                        if is_cursor_grabbed {
                             let delta_x = 0.01 * (window.inner_size().width as f64 * 0.5 - position.x) as f32;
                             let delta_y = -0.01 * (window.inner_size().height as f64 * 0.5 - position.y) as f32;
 
@@ -203,11 +255,11 @@ fn main() {
                                     virtual_keycode: Some(VirtualKeyCode::Space),
                                     ..
                                 } => {
-                                    is_cursor_grabed = !is_cursor_grabed;
+                                    is_cursor_grabbed = !is_cursor_grabbed;
 
                                     window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
-                                    window.set_cursor_grab(is_cursor_grabed);
-                                    window.set_cursor_visible(!is_cursor_grabed);
+                                    window.set_cursor_grab(is_cursor_grabbed);
+                                    window.set_cursor_visible(!is_cursor_grabbed);
                                 }
                                 _ => {}
                             }
@@ -222,7 +274,7 @@ fn main() {
                     match (redraw_requested, close_requested) {
                         (false, false) => {}
                         (true, false) => {
-                            skyshard::render(&mut engine, &camera);
+                            skyshard::render(&mut engine, &world, &camera);
                             std::thread::sleep(Duration::from_millis(50))
                         }
                         (_, true) => {
@@ -239,4 +291,8 @@ fn main() {
 
     println!("Window closed");
     // std::thread::sleep(Duration::from_millis(500))
+}
+
+mod tests {
+
 }

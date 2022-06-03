@@ -16,6 +16,7 @@ vk-mem = { path = "../../../vk-mem-rs", version = "0.3.0" } # "0.3.0"
 winit = "0.25.0"
 png = "0.17.2"
 nalgebra = "0.29.0"
+syn = "1.0.82"
 
 [patch.crates-io]
 vk-mem = { path = "../../../vk-mem-rs" }
