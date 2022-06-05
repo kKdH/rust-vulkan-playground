@@ -38,6 +38,12 @@ pub struct Vertex {
 
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
+pub struct InstanceData {
+    pub transformation: [f32; 16],
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Debug, Copy)]
 struct UniformBufferObject {
     mvp: Matrix4<f32>,
 }
@@ -64,6 +70,7 @@ pub struct Engine {
     ubo_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     index_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation),
+    instance_data_buffer: (ash::vk::Buffer, vk_mem::Allocation),
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
     timings_query_pool: ash::vk::QueryPool,
@@ -122,6 +129,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let ubo_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let index_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation);
+    let instance_data_buffer: (ash::vk::Buffer, vk_mem::Allocation);
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
     let timings_query_pool: ash::vk::QueryPool;
@@ -216,7 +224,12 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .binding(0)
                 .stride(std::mem::size_of::<Vertex>() as u32)
                 .input_rate(ash::vk::VertexInputRate::VERTEX)
-                .build()
+                .build(),
+            ash::vk::VertexInputBindingDescription::builder()
+                .binding(1)
+                .stride(std::mem::size_of::<InstanceData>() as u32)
+                .input_rate(ash::vk::VertexInputRate::INSTANCE)
+                .build(),
         ];
 
         let vertex_input_attribute_descriptors = [
@@ -231,7 +244,31 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .location(1)
                 .format(ash::vk::Format::R32G32B32_SFLOAT)
                 .offset(offset_of!(Vertex, color) as u32)
-                .build()
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(2)
+                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
+                .offset(0 as u32)
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(3)
+                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
+                .offset(16 as u32)
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(4)
+                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
+                .offset(32 as u32)
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(5)
+                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
+                .offset(48 as u32)
+                .build(),
         ];
 
         let vertex_input_state_info = ash::vk::PipelineVertexInputStateCreateInfo::builder()
@@ -549,7 +586,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 let data = std::ptr::slice_from_raw_parts_mut(data, count);
                 (*data)[0] = ash::vk::DrawIndexedIndirectCommand {
                     index_count: 6,
-                    instance_count: 1,
+                    instance_count: 3,
                     first_index: 0,
                     vertex_offset: 0,
                     first_instance: 0
@@ -645,6 +682,69 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             vertex_buffer = (buffer, allocation)
         }
+
+        {
+            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+                .usage(vk_mem::MemoryUsage::CpuToGpu)
+                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
+                    | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                .build();
+
+
+            let transformation1 = Matrix4::<f32>::identity()
+                .append_translation(&Vector3::new(0.0, 0.0, 0.0));
+
+            let transformation2 = Matrix4::<f32>::identity()
+                .append_translation(&Vector3::new(1.5, 0.0, 0.0));
+
+            let transformation3 = Matrix4::<f32>::identity()
+                .append_translation(&Vector3::new(0.0, -1.25, 0.0));
+
+            let data: [InstanceData; 3] = [
+                InstanceData {
+                    transformation: transformation1.data
+                        .as_slice()
+                        .try_into()
+                        .expect("slice with incorect length")
+                },
+                InstanceData {
+                    transformation: transformation2.data
+                        .as_slice()
+                        .try_into()
+                        .expect("slice with incorect length")
+                },
+                InstanceData {
+                    transformation: transformation3.data
+                        .as_slice()
+                        .try_into()
+                        .expect("slice with incorect length")
+                },
+            ];
+
+            let size: usize = (data.len() * std::mem::size_of::<InstanceData>());
+
+            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
+                .usage(ash::vk::BufferUsageFlags::VERTEX_BUFFER)
+                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+                .size(size as ash::vk::DeviceSize);
+
+            let (buffer, allocation, _) = _device.allocator()
+                .create_buffer(&buffer_create_info, &allocation_create_info)
+                .expect("Allocation for 'instance_data_buffer' failed");
+
+            let data_ptr = _device.allocator()
+                .map_memory(&allocation)
+                .expect("Map memory for 'instance_data_buffer' failed") as *mut InstanceData;
+
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr, data.len());
+            }
+
+            _device.allocator().unmap_memory(&allocation);
+            _device.allocator().flush_allocation(&allocation, 0, size);
+
+            instance_data_buffer = (buffer, allocation)
+        }
     }
 
     return Ok(Engine {
@@ -664,6 +764,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         ubo_buffer,
         index_buffer,
         vertex_buffer,
+        instance_data_buffer,
         image_available_semaphore,
         render_finished_semaphore,
         timings_query_pool,
@@ -743,59 +844,32 @@ pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
     let swapchains = [*engine.swapchain.handle()];
     let indices = [index];
 
-    world.geometries.iter().for_each(|geometry| {
+    update_ubo(
+        index as usize,
+        engine.device.clone(),
+        &engine.ubo_buffer.1,
+        camera,
+    );
 
-        let mut transformation = Matrix4::identity();
-        transformation.append_translation_mut(&Vector3::new(
-            geometry.position.x,
-            geometry.position.y,
-            geometry.position.z,
-        ));
+    update_geometry(&engine, &world.geometries[0]);
 
-        update_ubo(
-            index as usize,
-            engine.device.clone(),
-            &engine.ubo_buffer.1,
-            camera,
-            &transformation
-        );
-
-        update_geometry(&engine, geometry);
-
-        record_commands(
-            engine.device.clone(),
-            &engine.command_buffers[index as usize],
-            &engine.descriptor_sets[index as usize],
-            &engine.draw_indirect_command_buffer.0,
-            &geometry.index_buffer,
-            &geometry.vertex_buffer,
-            &engine.frame_buffers[index as usize],
-            &engine.renderpass,
-            &engine.viewports[0],
-            &engine.scissors[0],
-            &engine.pipeline,
-            &engine.pipeline_layout,
-            &engine.timings_query_pool,
-            &engine.vertices_query_pool,
-        );
-    });
-
-    // record_commands(
-    //     engine.device.clone(),
-    //     &engine.command_buffers[index as usize],
-    //     &engine.descriptor_sets[index as usize],
-    //     &engine.draw_indirect_command_buffer.0,
-    //     &engine.index_buffer.0,
-    //     &engine.vertex_buffer.0,
-    //     &engine.frame_buffers[index as usize],
-    //     &engine.renderpass,
-    //     &engine.viewports[0],
-    //     &engine.scissors[0],
-    //     &engine.pipeline,
-    //     &engine.pipeline_layout,
-    //     &engine.timings_query_pool,
-    //     &engine.vertices_query_pool,
-    // );
+    record_commands(
+        engine.device.clone(),
+        &engine.command_buffers[index as usize],
+        &engine.descriptor_sets[index as usize],
+        &engine.draw_indirect_command_buffer.0,
+        &world.geometries[0].index_buffer,
+        &world.geometries[0].vertex_buffer,
+        &engine.instance_data_buffer.0,
+        &engine.frame_buffers[index as usize],
+        &engine.renderpass,
+        &engine.viewports[0],
+        &engine.scissors[0],
+        &engine.pipeline,
+        &engine.pipeline_layout,
+        &engine.timings_query_pool,
+        &engine.vertices_query_pool,
+    );
 
     let wait_semaphores = [
         engine.image_available_semaphore
@@ -840,17 +914,16 @@ pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
     // println!("vert. invocations: {}", vertices_data[0]);
 }
 
-fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, camera: &Camera, model: &Matrix4<f32>) {
+fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, camera: &Camera) {
 
     let _device = (*device).borrow();
 
     let size = std::mem::size_of::<UniformBufferObject>();
-    // let model = Matrix4::identity();
-    let mvp = model * camera.as_matrix();
+    let mvp = camera.as_matrix();
 
     let ubo = [
         UniformBufferObject {
-            mvp,
+            mvp: *mvp,
         }
     ];
 
@@ -909,6 +982,7 @@ fn record_commands(
     draw_indirect_command_buffer: &ash::vk::Buffer,
     index_buffer: &ash::vk::Buffer,
     vertex_buffer: &ash::vk::Buffer,
+    instance_data_buffer: &ash::vk::Buffer,
     frame_buffer: &ash::vk::Framebuffer,
     renderpass: &ash::vk::RenderPass,
     viewport: &ash::vk::Viewport,
@@ -951,10 +1025,11 @@ fn record_commands(
     }
 
     let vertex_buffers = [*vertex_buffer];
+    let instance_data_buffers = [*instance_data_buffer];
     let offsets: [u64; 1] = [0];
     unsafe {
         _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
-        // _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, ash::vk::)
+        _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &offsets)
     }
 
     unsafe {

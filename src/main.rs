@@ -101,29 +101,6 @@ fn main() {
             ])
         ));
 
-        world.geometries.push(skyshard::create_geometry(&engine,
-            Position::new(0.5, 0.0, 0.0),
-            Vec::from([0, 1, 2, 2, 3, 0]),
-            Vec::from([
-                Vertex {
-                    position: [-0.5, -0.5, 0.0], // top-left
-                    color: [1.0, 0.0, 0.0]
-                },
-                Vertex {
-                    position: [0.5, -0.5, 0.0], // top-right
-                    color: [0.0, 1.0, 0.0]
-                },
-                Vertex {
-                    position: [0.5, 0.5, 0.0], // bottom-right
-                    color: [0.0, 0.0, 1.0]
-                },
-                Vertex {
-                    position: [-0.5, 0.5, 0.0], // bottom-left
-                    color: [1.0, 1.0, 1.0]
-                },
-            ])
-        ));
-
         let mut redraw_requested = true;
         let mut close_requested = false;
 
