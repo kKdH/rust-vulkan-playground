@@ -950,6 +950,27 @@ fn record_commands(
         _device.handle().cmd_begin_query(*command_buffer, *vertices_query_pool, 0, ash::vk::QueryControlFlags::empty())
     }
 
+    let vertex_buffers = [*vertex_buffer];
+    let offsets: [u64; 1] = [0];
+    unsafe {
+        _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
+        // _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, ash::vk::)
+    }
+
+    unsafe {
+        _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer, 0, ash::vk::IndexType::UINT32)
+    }
+
+    let viewports = [*viewport];
+    unsafe {
+        _device.handle().cmd_set_viewport(*command_buffer, 0, &viewports);
+    }
+
+    let scissors = [*scissor];
+    unsafe {
+        _device.handle().cmd_set_scissor(*command_buffer, 0, &scissors);
+    }
+
     unsafe {
         _device.handle().cmd_begin_render_pass(*command_buffer, &renderpass_begin_info, ash::vk::SubpassContents::INLINE);
     }
@@ -962,26 +983,6 @@ fn record_commands(
     let offsets = [];
     unsafe {
         _device.handle().cmd_bind_descriptor_sets(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline_layout, 0, &descriptor_sets, &offsets)
-    }
-
-    unsafe {
-        _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer, 0, ash::vk::IndexType::UINT32)
-    }
-
-    let vertex_buffers = [*vertex_buffer];
-    let offsets: [u64; 1] = [0];
-    unsafe {
-        _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets)
-    }
-
-    let viewports = [*viewport];
-    unsafe {
-        _device.handle().cmd_set_viewport(*command_buffer, 0, &viewports);
-    }
-
-    let scissors = [*scissor];
-    unsafe {
-        _device.handle().cmd_set_scissor(*command_buffer, 0, &scissors);
     }
 
     unsafe {
