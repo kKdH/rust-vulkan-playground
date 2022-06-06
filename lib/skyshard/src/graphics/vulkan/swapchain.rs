@@ -1,15 +1,16 @@
 use core::fmt;
+use std::any::Any;
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::Cell;
 use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
+use std::ops::{BitAnd, Deref};
 use std::rc::{Rc, Weak};
 use std::result;
 use std::result::Result;
 
 use ash::{Instance, vk};
 use ash::extensions::khr;
-use ash::vk::{Handle, ImageView};
+use ash::vk::{Extent3D, Handle, ImageView, MemoryAllocateInfo};
 use log::{debug, info};
 use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
 use thiserror::Error;
@@ -20,6 +21,8 @@ use crate::graphics::vulkan::instance::InstanceRef;
 use crate::graphics::vulkan::queue::DeviceQueueRef;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
+use crate::util::HasBuilder;
+
 
 #[derive(Error, Debug)]
 pub enum SwapchainError {
@@ -41,6 +44,8 @@ pub struct Swapchain {
     handle: vk::SwapchainKHR,
     images: Vec<vk::Image>,
     views: Vec<vk::ImageView>,
+    depth_image: vk::Image,
+    depth_image_view: vk::ImageView,
     device: DeviceRef,
     surface: SurfaceRef,
 }
@@ -155,11 +160,90 @@ impl Swapchain {
                 })
                 .collect();
 
+            let depth_image: vk::Image = unsafe {
+
+                let image_create_info = vk::ImageCreateInfo::builder()
+                    .image_type(vk::ImageType::TYPE_2D)
+                    .extent(vk::Extent3D {
+                        width: resolution.width,
+                        height: resolution.height,
+                        depth: 1,
+                    })
+                    .mip_levels(1)
+                    .array_layers(1)
+                    .format(ash::vk::Format::D32_SFLOAT_S8_UINT)
+                    .tiling(ash::vk::ImageTiling::OPTIMAL)
+                    .initial_layout(ash::vk::ImageLayout::UNDEFINED)
+                    .usage(ash::vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+                    .samples(ash::vk::SampleCountFlags::TYPE_1)
+                    .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
+                    .build();
+
+                let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
+                    .usage(vk_mem::MemoryUsage::GpuOnly)
+                    .required_flags(ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
+                    .build();
+
+                let (image, _, _) = unsafe {
+                    _device.allocator().create_image(&image_create_info, &allocation_create_info)
+                        .expect("depth image")
+                };
+
+                // let memory_requirements = unsafe {
+                //     _device.handle().get_image_memory_requirements(image)
+                // };
+
+                // let memory_allocation_info = MemoryAllocateInfo::builder()
+                //     .allocation_size(memory_requirements.size)
+                //     .memory_type_index(memory_requirements.memory_type_bits)
+                //     .build();
+
+                // let device_memory = unsafe {
+                //     _device.allocator().create_image();
+                //     _device.allocator().bind_image_memory()
+                //     _device.handle().allocate_memory(&memory_allocation_info, None)
+                //         .expect("memory allocation for depth image.")
+                // };
+
+                // unsafe {
+                //     _device.handle().bind_image_memory(image, device_memory, 0)
+                //         .expect("bind memory of depth image.");
+                // }
+
+                image
+            };
+
+            let depth_image_view: vk::ImageView = {
+                let create_view_info = vk::ImageViewCreateInfo::builder()
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(ash::vk::Format::D32_SFLOAT_S8_UINT)
+                    .components(vk::ComponentMapping {
+                        r: vk::ComponentSwizzle::R,
+                        g: vk::ComponentSwizzle::G,
+                        b: vk::ComponentSwizzle::B,
+                        a: vk::ComponentSwizzle::A,
+                    })
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::DEPTH, // TODO: Maybe set stencil bit.
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    })
+                    .image(depth_image);
+
+                unsafe {
+                    _device.handle().create_image_view(&create_view_info, None)
+                }.unwrap()
+            };
+
             Rc::new(Swapchain {
                 loader,
                 handle,
                 images,
                 views,
+                depth_image,
+                depth_image_view,
                 device: device.clone(),
                 surface: surface.clone()
             })
@@ -179,6 +263,10 @@ impl Swapchain {
 
     pub fn views(&self) -> &Vec<ash::vk::ImageView> {
         &self.views
+    }
+
+    pub fn depth_image_view(&self) -> &ash::vk::ImageView {
+        &self.depth_image_view
     }
 
     /// Returns the next image's index and whether the swapchain is suboptimal for the surface.
@@ -227,12 +315,4 @@ impl fmt::Debug for Swapchain {
         formatter.field("views", &self.views.len());
         formatter.finish()
     }
-}
-
-struct SwapchainBuilder {
-
-}
-
-impl SwapchainBuilder {
-
 }

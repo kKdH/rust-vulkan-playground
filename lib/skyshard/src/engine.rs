@@ -5,7 +5,6 @@ use std::ffi::{CStr, CString};
 use std::io::Cursor;
 use std::ops::Deref;
 use std::rc::Rc;
-
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
 use ash::vk;
@@ -329,15 +328,13 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             ..Default::default()
         };
 
-        let depth_state_info = vk::PipelineDepthStencilStateCreateInfo {
-            depth_test_enable: 1,
-            depth_write_enable: 1,
-            depth_compare_op: vk::CompareOp::LESS_OR_EQUAL,
-            front: noop_stencil_state,
-            back: noop_stencil_state,
-            max_depth_bounds: 1.0,
-            ..Default::default()
-        };
+        let depth_state_info = vk::PipelineDepthStencilStateCreateInfo::builder()
+            .depth_test_enable(true)
+            .depth_write_enable(true)
+            .depth_compare_op(vk::CompareOp::LESS)
+            .depth_bounds_test_enable(false)
+            .stencil_test_enable(false)
+            .build();
 
         // per frame buffer
         let color_blend_attachment_states = [
@@ -438,7 +435,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             .viewport_state(&viewport_state_info)
             .rasterization_state(&rasterization_info)
             .multisample_state(&multisample_state_info)
-            // .depth_stencil_state(&depth_state_info)
+            .depth_stencil_state(&depth_state_info)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state_info)
             .layout(pipeline_layout)
@@ -457,7 +454,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
         frame_buffers = swapchain.views().iter().map(|view| {
 
-            let attachments = [*view];
+            let attachments = [*view, *swapchain.depth_image_view()];
 
             let create_info = ash::vk::FramebufferCreateInfo::builder()
                 .render_pass(renderpass)
@@ -698,7 +695,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .append_translation(&Vector3::new(1.5, 0.0, 0.0));
 
             let transformation3 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(0.0, -1.25, 0.0));
+                .append_translation(&Vector3::new(0.0, 0.5, 1.0));
 
             let data: [InstanceData; 3] = [
                 InstanceData {
@@ -1013,6 +1010,9 @@ fn record_commands(
         .clear_values(&[
             ash::vk::ClearValue {
                 color: ash::vk::ClearColorValue { float32: [0.1, 0.1, 0.1, 0.0] }
+            },
+            ash::vk::ClearValue {
+                depth_stencil: ash::vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 }
             }
         ]);
 
