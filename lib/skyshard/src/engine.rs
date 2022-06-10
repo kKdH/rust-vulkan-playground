@@ -163,7 +163,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             (*instance).borrow().handle(),
             (*device).borrow().handle(),
             (*physical_device).handle()
-        );
+        ).expect("Failed to create ResourceManager");
 
         swapchain = {
             let _device = (*device).borrow();

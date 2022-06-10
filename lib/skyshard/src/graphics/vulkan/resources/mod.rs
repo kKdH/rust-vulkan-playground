@@ -10,6 +10,7 @@ pub use image::{Image};
 pub use copy::{CopyDestination, CopySource};
 
 use descriptors::{BufferUsage, MemoryLocation, ImageUsage, BufferAllocationDescriptor, ImageAllocationDescriptor};
+use log::info;
 
 use thiserror::Error;
 
@@ -20,7 +21,7 @@ type Allocator = ::gpu_allocator::vulkan::Allocator;
 
 type Size = ::ash::vk::DeviceSize;
 type Offset = ::ash::vk::DeviceSize;
-type Result<T, E = MemoryManagerError> = ::std::result::Result<T, E>;
+type Result<T, E = ResourceManagerError> = ::std::result::Result<T, E>;
 type Allocation = ::gpu_allocator::vulkan::Allocation;
 
 pub struct ResourceManager {
@@ -30,8 +31,8 @@ pub struct ResourceManager {
 
 impl ResourceManager {
 
-    pub fn new(instance: &Instance, device: &Device, physical_device: &PhysicalDevice) -> ResourceManager {
-        ResourceManager {
+    pub fn new(instance: &Instance, device: &Device, physical_device: &PhysicalDevice) -> Result<ResourceManager> {
+        let result = ResourceManager {
             device: Clone::clone(device),
             allocator: Allocator::new(
                 &gpu_allocator::vulkan::AllocatorCreateDesc {
@@ -41,7 +42,9 @@ impl ResourceManager {
                     debug_settings: Default::default(),
                     buffer_device_address: true,
                 }).expect("create allocator"),
-        }
+        };
+        info!("ResourceManager created.");
+        Ok(result)
     }
 
     pub fn create_buffer<A>(&mut self, name: &'static str, descriptor: &BufferAllocationDescriptor, capacity: usize) -> Result<Buffer<A>> {
@@ -54,7 +57,7 @@ impl ResourceManager {
             let buffer_create_info = ResourceManager::buffer_descriptor_to_ash(descriptor, size)?;
 
             unsafe { self.device.create_buffer(&buffer_create_info, None) }
-                .map_err(|error| MemoryManagerError::CreateBufferError { name })
+                .map_err(|error| ResourceManagerError::CreateBufferError { name })
         }?;
 
         let requirements = {
@@ -67,13 +70,15 @@ impl ResourceManager {
                 requirements: requirements,
                 location: ResourceManager::memory_usage_to_ash(descriptor.memory_usage)?,
                 linear: true
-            }).map_err(|error| MemoryManagerError::AllocateMemoryError { cause: error })
+            }).map_err(|error| ResourceManagerError::AllocateMemoryError { cause: error })
         }?;
 
         unsafe {
             self.device.bind_buffer_memory(buffer, allocation.memory(), allocation.offset())
-                .map_err(|error| MemoryManagerError::BindBufferError { name })
+                .map_err(|error| ResourceManagerError::BindBufferError { name })
         }?;
+
+        info!("Created {:?} '{}' with a capacity for {} elements respectifely {} bytes.", descriptor.buffer_usage, name, capacity, size);
 
         Ok(Buffer::new(name, capacity, element_size, buffer, allocation))
     }
@@ -85,7 +90,7 @@ impl ResourceManager {
             let image_create_info = ResourceManager::image_descriptor_to_ash(descriptor)?;
 
             unsafe { self.device.create_image(&image_create_info, None) }
-                .map_err(|error| MemoryManagerError::CreateImageError { name })
+                .map_err(|error| ResourceManagerError::CreateImageError { name })
         }?;
 
         let requirements = {
@@ -98,13 +103,15 @@ impl ResourceManager {
                 requirements: requirements,
                 location: ResourceManager::memory_usage_to_ash(descriptor.memory_usage)?,
                 linear: true
-            }).map_err(|error| MemoryManagerError::AllocateMemoryError { cause: error })
+            }).map_err(|error| ResourceManagerError::AllocateMemoryError { cause: error })
         }?;
 
         unsafe {
             self.device.bind_image_memory(image, allocation.memory(), allocation.offset())
-                .map_err(|error| MemoryManagerError::BindBufferError { name })
+                .map_err(|error| ResourceManagerError::BindBufferError { name })
         }?;
+
+        info!("Created image '{}' as {:?} with an extend of {}x{}x{}.", name, descriptor.image_usage, descriptor.extent.width, descriptor.extent.height, descriptor.extent.depth);
 
         Ok(Image::new(name, image, allocation))
     }
@@ -132,7 +139,7 @@ impl ResourceManager {
         ];
 
         self.device.flush_mapped_memory_ranges(&ranges)
-            .map_err(|error| MemoryManagerError::FlushMemoryError { name: resource.name() } )
+            .map_err(|error| ResourceManagerError::FlushMemoryError { name: resource.name() } )
     }
 
     pub fn free<A>(&mut self, mut resource: A) -> Result<()>
@@ -140,7 +147,7 @@ impl ResourceManager {
 
         let allocation = resource.take_allocation();
         self.allocator.free(allocation)
-            .map_err(|error| MemoryManagerError::FreeMemoryError { name: resource.name() })
+            .map_err(|error| ResourceManagerError::FreeMemoryError { name: resource.name() })
     }
 
     fn buffer_descriptor_to_ash(descriptor: &BufferAllocationDescriptor, size: Size) -> Result<ash::vk::BufferCreateInfo> {
@@ -201,7 +208,7 @@ pub trait Resource {
 }
 
 #[derive(Error, Debug)]
-pub enum MemoryManagerError {
+pub enum ResourceManagerError {
 
     #[error("Failed to create buffer '{name}'!")]
     CreateBufferError {
