@@ -14,7 +14,7 @@ pub mod queue;
 pub mod swapchain;
 pub mod buffer;
 pub mod renderpass;
-pub mod mem;
+pub mod resources;
 
 pub trait VulkanObject {
 

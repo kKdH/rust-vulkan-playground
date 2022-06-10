@@ -19,7 +19,8 @@ use crate::graphics::Extent;
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::InstanceRef;
-use crate::graphics::vulkan::mem::{ImageAllocationDescriptor, ImageUsage, MemoryLocation, MemoryManager};
+use crate::graphics::vulkan::resources::descriptors::{ImageAllocationDescriptor, ImageUsage, MemoryLocation};
+use crate::graphics::vulkan::resources::ResourceManager;
 use crate::graphics::vulkan::queue::DeviceQueueRef;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
@@ -53,7 +54,7 @@ pub struct Swapchain {
 
 impl Swapchain {
 
-    pub fn new(device: DeviceRef, queue: DeviceQueueRef, surface: SurfaceRef, memory_manager: &mut MemoryManager) -> Result<SwapchainRef, SwapchainError> {
+    pub fn new(device: DeviceRef, queue: DeviceQueueRef, surface: SurfaceRef, resource_manager: &mut ResourceManager) -> Result<SwapchainRef, SwapchainError> {
 
         let _device = (*device).borrow();
         let instance = _device.instance();
@@ -163,7 +164,7 @@ impl Swapchain {
 
             let depth_image: vk::Image = unsafe {
 
-                let image = memory_manager.create_image("depth-image", &ImageAllocationDescriptor {
+                let image = resource_manager.create_image("depth-image", &ImageAllocationDescriptor {
                     image_usage: ImageUsage::DepthStencilAttachment,
                     extent: Extent::from(resolution.width, resolution.height, 1),
                     memory_usage: MemoryLocation::GpuOnly

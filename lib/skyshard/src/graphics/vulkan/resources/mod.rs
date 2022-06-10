@@ -1,36 +1,38 @@
-use std::any::Any;
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::thread::sleep;
 
-use ash::{Device, vk};
-use ash::Instance;
-use ash::prelude::VkResult;
-use ash::vk::Handle;
-use ash::vk::PhysicalDevice;
-use gpu_allocator::vulkan::Allocation;
-use syn::token::printing;
+mod buffer;
+mod image;
+mod copy;
+
+pub mod descriptors;
+
+pub use buffer::{Buffer, Element};
+pub use image::{Image};
+pub use copy::{CopyDestination, CopySource};
+
+use descriptors::{BufferUsage, MemoryLocation, ImageUsage, BufferAllocationDescriptor, ImageAllocationDescriptor};
+
 use thiserror::Error;
 
-use crate::graphics::Extent;
-use crate::graphics::vulkan::VulkanObject;
-use crate::util::HasBuilder;
-
-
+type Device = ::ash::Device;
+type Instance = ::ash::Instance;
+type PhysicalDevice = ::ash::vk::PhysicalDevice;
 type Allocator = ::gpu_allocator::vulkan::Allocator;
+
 type Size = ::ash::vk::DeviceSize;
 type Offset = ::ash::vk::DeviceSize;
 type Result<T, E = MemoryManagerError> = ::std::result::Result<T, E>;
+type Allocation = ::gpu_allocator::vulkan::Allocation;
 
-pub struct MemoryManager {
-    allocator: Allocator,
+pub struct ResourceManager {
     device: Device,
+    allocator: Allocator,
 }
 
-impl MemoryManager {
+impl ResourceManager {
 
-    pub fn new(instance: &Instance, device: &Device, physical_device: &PhysicalDevice) -> MemoryManager {
-        MemoryManager {
+    pub fn new(instance: &Instance, device: &Device, physical_device: &PhysicalDevice) -> ResourceManager {
+        ResourceManager {
+            device: Clone::clone(device),
             allocator: Allocator::new(
                 &gpu_allocator::vulkan::AllocatorCreateDesc {
                     instance: Clone::clone(instance),
@@ -39,7 +41,6 @@ impl MemoryManager {
                     debug_settings: Default::default(),
                     buffer_device_address: true,
                 }).expect("create allocator"),
-            device: Clone::clone(device)
         }
     }
 
@@ -50,7 +51,7 @@ impl MemoryManager {
 
         let buffer: ::ash::vk::Buffer = {
 
-            let buffer_create_info = MemoryManager::buffer_descriptor_to_ash(descriptor, size)?;
+            let buffer_create_info = ResourceManager::buffer_descriptor_to_ash(descriptor, size)?;
 
             unsafe { self.device.create_buffer(&buffer_create_info, None) }
                 .map_err(|error| MemoryManagerError::CreateBufferError { name })
@@ -64,9 +65,9 @@ impl MemoryManager {
             self.allocator.allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
                 name: format!("{}.allocation", name).as_str(),
                 requirements: requirements,
-                location: MemoryManager::memory_usage_to_ash(descriptor.memory_usage)?,
+                location: ResourceManager::memory_usage_to_ash(descriptor.memory_usage)?,
                 linear: true
-            }).map_err(|error| MemoryManagerError::AllocateMemoryError)
+            }).map_err(|error| MemoryManagerError::AllocateMemoryError { cause: error })
         }?;
 
         unsafe {
@@ -74,24 +75,14 @@ impl MemoryManager {
                 .map_err(|error| MemoryManagerError::BindBufferError { name })
         }?;
 
-        Ok(Buffer {
-            name,
-            capacity,
-            size,
-            element: Element {
-                size: element_size,
-                phantom: Default::default()
-            },
-            buffer,
-            allocation,
-        })
+        Ok(Buffer::new(name, capacity, element_size, buffer, allocation))
     }
 
     pub fn create_image(&mut self, name: &'static str, descriptor: &ImageAllocationDescriptor) -> Result<Image> {
 
         let image: ::ash::vk::Image = {
 
-            let image_create_info = MemoryManager::image_descriptor_to_ash(descriptor)?;
+            let image_create_info = ResourceManager::image_descriptor_to_ash(descriptor)?;
 
             unsafe { self.device.create_image(&image_create_info, None) }
                 .map_err(|error| MemoryManagerError::CreateImageError { name })
@@ -105,9 +96,9 @@ impl MemoryManager {
             self.allocator.allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
                 name: name,
                 requirements: requirements,
-                location: MemoryManager::memory_usage_to_ash(descriptor.memory_usage)?,
+                location: ResourceManager::memory_usage_to_ash(descriptor.memory_usage)?,
                 linear: true
-            }).map_err(|error| MemoryManagerError::AllocateMemoryError)
+            }).map_err(|error| MemoryManagerError::AllocateMemoryError { cause: error })
         }?;
 
         unsafe {
@@ -115,22 +106,12 @@ impl MemoryManager {
                 .map_err(|error| MemoryManagerError::BindBufferError { name })
         }?;
 
-        Ok(Image {
-            image,
-            allocation
-        })
-    }
-
-    pub fn free<A>(&mut self, resource: A) -> Result<()>
-    where A: Resource {
-        // let allocation = *resource.allocation();
-        // self.allocator.free(*resource.allocation());
-        todo!("implement freeing allocations");
+        Ok(Image::new(name, image, allocation))
     }
 
     pub unsafe fn copy<T, Src, Dst>(&mut self, source: &Src, destination: &mut Dst, offset: usize, count: usize) -> Result<()>
-    where Src: CopySource<T>,
-          Dst: CopyDestination<T> {
+        where Src: CopySource<T>,
+              Dst: CopyDestination<T> {
 
         let dst: *mut T = destination.ptr().offset(offset as isize);
 
@@ -139,20 +120,27 @@ impl MemoryManager {
         Ok(())
     }
 
-    pub unsafe fn flush<A>(&mut self, resource: A, offset: Offset, size: Size) -> Result<()>
-    where A: Resource {
+    pub unsafe fn flush<A>(&mut self, resource: A, offset: usize, count: usize) -> Result<()>
+        where A: Resource {
 
-        // let ranges = [
-        //     ::ash::vk::MappedMemoryRange::builder()
-        //         .memory(resource.allocation().memory())
-        //         .offset(resource.allocation().offset() + offset)
-        //         .size(size)
-        //         .build()
-        // ];
-        //
-        // self.device.flush_mapped_memory_ranges(&ranges);
+        let ranges = [
+            ::ash::vk::MappedMemoryRange::builder()
+                .memory(resource.allocation().memory())
+                .offset(resource.allocation().offset() + resource.byte_offset(offset))
+                .size(resource.byte_size(count))
+                .build()
+        ];
 
-        Ok(())
+        self.device.flush_mapped_memory_ranges(&ranges)
+            .map_err(|error| MemoryManagerError::FlushMemoryError { name: resource.name() } )
+    }
+
+    pub fn free<A>(&mut self, mut resource: A) -> Result<()>
+        where A: Resource {
+
+        let allocation = resource.take_allocation();
+        self.allocator.free(allocation)
+            .map_err(|error| MemoryManagerError::FreeMemoryError { name: resource.name() })
     }
 
     fn buffer_descriptor_to_ash(descriptor: &BufferAllocationDescriptor, size: Size) -> Result<ash::vk::BufferCreateInfo> {
@@ -204,166 +192,53 @@ impl MemoryManager {
     }
 }
 
+pub trait Resource {
+    fn name(&self) -> &'static str;
+    fn byte_offset(&self, offset: usize) -> Offset;
+    fn byte_size(&self, count: usize) -> Size;
+    fn allocation(&self) -> &gpu_allocator::vulkan::Allocation;
+    fn take_allocation(&mut self) -> gpu_allocator::vulkan::Allocation;
+}
+
 #[derive(Error, Debug)]
 pub enum MemoryManagerError {
 
     #[error("Failed to create buffer '{name}'!")]
-    CreateBufferError { name: &'static str },
+    CreateBufferError {
+        name: &'static str
+    },
 
     #[error("Failed to bind buffer '{name}'!")]
-    BindBufferError { name: &'static str },
+    BindBufferError {
+        name: &'static str
+    },
 
     #[error("Failed to create image '{name}'!")]
-    CreateImageError { name: &'static str },
+    CreateImageError {
+        name: &'static str
+    },
 
     #[error("Failed to bind image '{name}'!")]
-    BindImageError { name: &'static str },
+    BindImageError {
+        name: &'static str
+    },
 
     #[error("Failed to allocate memory!")]
-    AllocateMemoryError,
+    AllocateMemoryError {
+        #[source]
+        cause: ::gpu_allocator::AllocationError
+    },
+
+    #[error("Failed to flush memory of '{name}'!")]
+    FlushMemoryError {
+        name: &'static str
+    },
+
+    #[error("Failed to free memory of '{name}'!")]
+    FreeMemoryError {
+        name: &'static str
+    },
 
     #[error("Somthing went wrong!")]
     UnknownFailure,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum BufferUsage {
-    IndexBuffer,
-    IndirectBuffer,
-    UniformBuffer,
-    VertexBuffer,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum ImageUsage {
-    DepthStencilAttachment,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum MemoryLocation {
-    CpuToGpu,
-    GpuToCpu,
-    GpuOnly,
-}
-
-#[derive(Debug)]
-pub struct BufferAllocationDescriptor {
-    pub buffer_usage: BufferUsage,
-    pub memory_usage: MemoryLocation,
-}
-
-#[derive(Debug)]
-pub struct ImageAllocationDescriptor {
-    pub image_usage: ImageUsage,
-    pub extent: Extent,
-    pub memory_usage: MemoryLocation,
-}
-
-pub trait Resource {
-    fn allocation(&self) -> &gpu_allocator::vulkan::Allocation;
-}
-
-pub struct Element<A> {
-    size: usize,
-    phantom: PhantomData<A>
-}
-
-pub struct Buffer<A> {
-    name: &'static str,
-    capacity: usize,
-    size: Size,
-    element: Element<A>,
-    buffer: ::ash::vk::Buffer,
-    allocation: ::gpu_allocator::vulkan::Allocation,
-}
-
-impl <A> VulkanObject for Buffer<A> {
-
-    type A = ::ash::vk::Buffer;
-
-    fn handle(&self) -> &Self::A {
-        &self.buffer
-    }
-
-    fn hex_id(&self) -> String {
-        format!("0x{:x?}", self.buffer.as_raw())
-    }
-}
-
-impl <A> Resource for Buffer<A> {
-    fn allocation(&self) -> &Allocation {
-        &self.allocation
-    }
-}
-
-impl <A> Resource for &mut Buffer<A> {
-    fn allocation(&self) -> &Allocation {
-        &self.allocation
-    }
-}
-
-impl <A> CopyDestination<A> for Buffer<A> {
-    fn ptr(&mut self) -> *mut A {
-        self.allocation().mapped_ptr()
-            .expect("expected host visible memory")
-            .as_ptr() as *mut A
-    }
-}
-
-impl <A> CopySource<A> for Buffer<A> {
-    fn ptr(&self) -> *const A {
-        self.allocation().mapped_ptr()
-            .expect("expected host visible memory")
-            .as_ptr() as *const A
-    }
-}
-
-pub struct Image {
-    image: ::ash::vk::Image,
-    allocation: ::gpu_allocator::vulkan::Allocation,
-}
-
-impl VulkanObject for Image {
-
-    type A = ::ash::vk::Image;
-
-    fn handle(&self) -> &Self::A {
-        &self.image
-    }
-
-    fn hex_id(&self) -> String {
-        format!("0x{:x?}", self.image.as_raw())
-    }
-}
-
-impl Resource for Image {
-    fn allocation(&self) -> &Allocation {
-        &self.allocation
-    }
-}
-
-pub trait CopySource<A> {
-    fn ptr(&self) -> *const A;
-}
-
-pub trait CopyDestination<A> {
-    fn ptr(&mut self) -> *mut A;
-}
-
-impl <A> CopySource<A> for Vec<A> {
-    fn ptr(&self) -> *const A {
-        self.as_ptr()
-    }
-}
-
-impl <A, const N: usize> CopySource<A> for [A; N] {
-    fn ptr(&self) -> *const A {
-        self.as_ptr()
-    }
-}
-
-impl <A> CopyDestination<A> for Vec<A> {
-    fn ptr(&mut self) -> *mut A {
-        self.as_mut_ptr()
-    }
 }

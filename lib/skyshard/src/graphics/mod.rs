@@ -5,7 +5,7 @@ mod camera;
 use nalgebra::Matrix4;
 use crate::engine::Vertex;
 pub use crate::graphics::camera::Camera;
-use crate::graphics::vulkan::mem::Buffer;
+use crate::graphics::vulkan::resources::Buffer;
 
 pub struct Renderer {
 

@@ -21,7 +21,8 @@ use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
-use crate::graphics::vulkan::mem::{Buffer, BufferAllocationDescriptor, BufferUsage, CopyDestination, MemoryLocation, MemoryManager, Resource};
+use crate::graphics::vulkan::resources::{Buffer, CopyDestination, ResourceManager, Resource};
+use crate::graphics::vulkan::resources::descriptors::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::renderpass::create_render_pass;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
@@ -57,7 +58,7 @@ pub struct EngineError {
 pub struct Engine {
     instance: InstanceRef,
     device: DeviceRef,
-    memory_manager: MemoryManager,
+    resource_manager: ResourceManager,
     surface: SurfaceRef,
     swapchain: SwapchainRef,
     renderpass: ash::vk::RenderPass,
@@ -119,7 +120,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         .expect("Failed to create vulkan instance");
 
     let device;
-    let mut memory_manager;
+    let mut resource_manager;
     let surface;
     let swapchain;
     let frame_buffers: Vec<ash::vk::Framebuffer>;
@@ -158,38 +159,11 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             1
         ).unwrap();
 
-        memory_manager = MemoryManager::new(
+        resource_manager = ResourceManager::new(
             (*instance).borrow().handle(),
             (*device).borrow().handle(),
             (*physical_device).handle()
         );
-
-        // let buffer = memory_manager.create_buffer(
-        //     "example",
-        //     &BufferAllocationDescriptor {
-        //         buffer_usage: BufferUsage::UniformBuffer,
-        //         memory_usage: MemoryUsage::CpuToGpu,
-        //     },
-        //     16
-        // ).expect("buffer");
-        //
-        // {
-        //     let data = vec![3, 4, 5, 6];
-        //     memory_manager.write(data.as_ptr(), &buffer, 4)
-        //         .expect("write");
-        //
-        //     let mut result = vec![0, 0, 0, 0];
-        //
-        //     println!("Read/Write {:?}", result);
-        //
-        //     memory_manager.read(&buffer, result.as_mut_ptr(), 4)
-        //         .expect("read");
-        //
-        //     println!("Read/Write {:?}", result);
-        //
-        //     memory_manager.free(buffer)
-        //         .expect("free");
-        // }
 
         swapchain = {
             let _device = (*device).borrow();
@@ -198,7 +172,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 Rc::clone(&device),
                 Rc::clone(queue),
                 Rc::clone(&surface),
-                &mut memory_manager,
+                &mut resource_manager,
             ).unwrap()
         };
 
@@ -552,7 +526,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             let count = swapchain.views().len(); // one ubo per swapchain image
             let size: usize = count * std::mem::size_of::<UniformBufferObject>();
 
-            let mut buffer = memory_manager.create_buffer("uniform-buffer", &BufferAllocationDescriptor {
+            let mut buffer = resource_manager.create_buffer("uniform-buffer", &BufferAllocationDescriptor {
                 buffer_usage: BufferUsage::UniformBuffer,
                 memory_usage: MemoryLocation::CpuToGpu
             }, count).expect("Failed to create uniform buffer");
@@ -564,8 +538,8 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }).collect::<Vec<_>>();
 
             unsafe {
-                memory_manager.copy(&ubos, &mut buffer, 0, count);
-                memory_manager.flush(&mut buffer, 0, size as u64);
+                resource_manager.copy(&ubos, &mut buffer, 0, count);
+                resource_manager.flush(&mut buffer, 0, count);
             }
 
             ubo_buffer = buffer;
@@ -600,7 +574,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             let count: usize = 1;
             let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndexedIndirectCommand>());
 
-            let mut buffer = memory_manager.create_buffer("indirect-draw-command-buffer", &BufferAllocationDescriptor {
+            let mut buffer = resource_manager.create_buffer("indirect-draw-command-buffer", &BufferAllocationDescriptor {
                 buffer_usage: BufferUsage::IndirectBuffer,
                 memory_usage: MemoryLocation::CpuToGpu
             }, count).expect("indirect draw buffer");
@@ -616,8 +590,8 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             ];
 
             unsafe {
-                memory_manager.copy(&commands, &mut buffer, 0, count);
-                // memory_manager.flush(&mut buffer, 0, size as u64);
+                resource_manager.copy(&commands, &mut buffer, 0, count);
+                // resource_manager.flush(&mut buffer, 0, size as u64);
             }
 
             draw_indirect_command_buffer = *buffer.handle()
@@ -627,14 +601,14 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
             let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
-            let mut buffer = memory_manager.create_buffer("index-buffer", &BufferAllocationDescriptor {
+            let mut buffer = resource_manager.create_buffer("index-buffer", &BufferAllocationDescriptor {
                 buffer_usage: BufferUsage::IndexBuffer,
                 memory_usage: MemoryLocation::CpuToGpu
             }, indices.len()).expect("index buffer");
 
             unsafe {
-                memory_manager.copy(&indices, &mut buffer, 0, indices.len());
-                // memory_manager.flush(&mut buffer, 0, size as u64);
+                resource_manager.copy(&indices, &mut buffer, 0, indices.len());
+                resource_manager.flush(&mut buffer, 0, indices.len());
             }
 
             index_buffer = *buffer.handle();
@@ -662,14 +636,14 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
-            let mut buffer = memory_manager.create_buffer("vertex-buffer", &BufferAllocationDescriptor {
+            let mut buffer = resource_manager.create_buffer("vertex-buffer", &BufferAllocationDescriptor {
                 buffer_usage: BufferUsage::VertexBuffer,
                 memory_usage: MemoryLocation::CpuToGpu
             }, vertices.len()).expect("vertex buffer");
 
             unsafe {
-                memory_manager.copy(&vertices, &mut buffer, 0, vertices.len());
-                memory_manager.flush(&mut buffer, 0, size as u64);
+                resource_manager.copy(&vertices, &mut buffer, 0, vertices.len());
+                resource_manager.flush(&mut buffer, 0, vertices.len());
             }
 
             vertex_buffer = *buffer.handle();
@@ -708,14 +682,14 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let size: usize = (data.len() * std::mem::size_of::<InstanceData>());
 
-            let mut buffer = memory_manager.create_buffer("transformation-buffer", &BufferAllocationDescriptor {
+            let mut buffer = resource_manager.create_buffer("transformation-buffer", &BufferAllocationDescriptor {
                 buffer_usage: BufferUsage::VertexBuffer,
                 memory_usage: MemoryLocation::CpuToGpu
             }, data.len()).expect("transformation-buffer");
 
             unsafe {
-                memory_manager.copy(&data, &mut buffer, 0, data.len());
-                memory_manager.flush(&mut buffer, 0, size as u64);
+                resource_manager.copy(&data, &mut buffer, 0, data.len());
+                resource_manager.flush(&mut buffer, 0, data.len());
             }
 
             instance_data_buffer = *buffer.handle()
@@ -725,7 +699,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     return Ok(Engine {
         instance,
         device,
-        memory_manager,
+        resource_manager,
         surface,
         swapchain,
         frame_buffers,
@@ -756,13 +730,13 @@ pub fn create_geometry(engine: &mut Engine,
                        vertices: Vec<Vertex>) -> Geometry {
 
     let _device = (*engine.device).borrow();
-    let mut memory_manager = &mut engine.memory_manager;
+    let mut resource_manager = &mut engine.resource_manager;
 
     let index_buffer = {
 
         let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
-        let buffer = memory_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
+        let buffer = resource_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
             buffer_usage: BufferUsage::IndexBuffer,
             memory_usage: MemoryLocation::CpuToGpu
         }, indices.len()).expect("geometry index buffer");
@@ -774,7 +748,7 @@ pub fn create_geometry(engine: &mut Engine,
 
         let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
-        let buffer = memory_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
+        let buffer = resource_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
             buffer_usage: BufferUsage::VertexBuffer,
             memory_usage: MemoryLocation::CpuToGpu
         }, vertices.len()).expect("geometry vertex buffer");
@@ -799,7 +773,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
     let command_buffer = [engine.command_buffers[index as usize]];
     let swapchains = [*engine.swapchain.handle()];
     let indices = [index];
-    let mut memory_manager = &mut engine.memory_manager;
+    let mut resource_manager = &mut engine.resource_manager;
 
     // let command_buffer: ::ash::vk::CommandBuffer = {
     //
@@ -818,12 +792,12 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
     update_ubo(
         index as usize,
         engine.device.clone(),
-        &mut memory_manager,
+        &mut resource_manager,
         &mut engine.ubo_buffer,
         camera,
     );
 
-    update_geometry(memory_manager, &mut world.geometries[0]);
+    update_geometry(resource_manager, &mut world.geometries[0]);
 
     record_commands(
         engine.device.clone(),
@@ -900,7 +874,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
     // println!("vert. invocations: {}", vertices_data[0]);
 }
 
-fn update_ubo(index: usize, device: DeviceRef, memory_manager: &mut MemoryManager, buffer: &mut Buffer<UniformBufferObject>, camera: &Camera) {
+fn update_ubo(index: usize, device: DeviceRef, resource_manager: &mut ResourceManager, buffer: &mut Buffer<UniformBufferObject>, camera: &Camera) {
 
     let size = std::mem::size_of::<UniformBufferObject>();
     let mvp = camera.as_matrix();
@@ -912,48 +886,29 @@ fn update_ubo(index: usize, device: DeviceRef, memory_manager: &mut MemoryManage
     ];
 
     unsafe {
-        memory_manager.copy(&ubo, buffer, index, 1);
+        resource_manager.copy(&ubo, buffer, index, 1);
+        resource_manager.flush(buffer, index, 1);
     }
 }
 
-fn update_geometry(memory_manager: &mut MemoryManager, geometry: &mut Geometry) {
+fn update_geometry(resource_manager: &mut ResourceManager, geometry: &mut Geometry) {
 
     {
         let size: usize = (geometry.indices.len() * std::mem::size_of::<u32>());
 
         unsafe {
-            memory_manager.copy(&geometry.indices, &mut geometry.index_buffer, 0, geometry.indices.len());
+            resource_manager.copy(&geometry.indices, &mut geometry.index_buffer, 0, geometry.indices.len());
+            resource_manager.flush(&mut geometry.index_buffer, 0, geometry.indices.len());
         }
-
-        // let data_ptr = _device.allocator()
-        //     .map_memory(&geometry.index_allocation)
-        //     .expect("Map memory for 'index_buffer' failed") as *mut u32;
-        //
-        // unsafe {
-        //     std::ptr::copy_nonoverlapping(geometry.indices.as_ptr(), data_ptr, geometry.indices.len());
-        // }
-        //
-        // _device.allocator().unmap_memory(&geometry.index_allocation);
-        // _device.allocator().flush_allocation(&geometry.index_allocation, 0, size);
     }
 
     {
         let size: usize = (geometry.vertices.len() * std::mem::size_of::<Vertex>());
 
         unsafe {
-            memory_manager.copy(&geometry.vertices, &mut geometry.vertex_buffer, 0, geometry.vertices.len());
+            resource_manager.copy(&geometry.vertices, &mut geometry.vertex_buffer, 0, geometry.vertices.len());
+            resource_manager.flush(&mut geometry.vertex_buffer, 0, geometry.vertices.len());
         }
-
-        // let data_ptr = _device.allocator()
-        //     .map_memory(&geometry.vertex_allocation)
-        //     .expect("Map memory for 'vertex_buffer' failed") as *mut Vertex;
-        //
-        // unsafe {
-        //     std::ptr::copy_nonoverlapping(geometry.vertices.as_ptr(), data_ptr, geometry.vertices.len());
-        // }
-        //
-        // _device.allocator().unmap_memory(&geometry.vertex_allocation);
-        // _device.allocator().flush_allocation(&geometry.vertex_allocation, 0, size);
     }
 }
 
