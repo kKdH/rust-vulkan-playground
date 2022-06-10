@@ -188,7 +188,7 @@ impl DebugUtil {
 
         let debug_info = ash::vk::DebugUtilsMessengerCreateInfoEXT::builder()
             .message_severity(level.as_flags())
-            .message_type(ash::vk::DebugUtilsMessageTypeFlagsEXT::all())
+            .message_type(ash::vk::DebugUtilsMessageTypeFlagsEXT::GENERAL)
             .pfn_user_callback(Some(DebugUtil::vulkan_debug_callback));
 
         let callback = unsafe {

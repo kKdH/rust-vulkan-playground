@@ -123,10 +123,9 @@ impl MemoryManager {
 
     pub fn free<A>(&mut self, resource: A) -> Result<()>
     where A: Resource {
-
-        self.allocator.free(Clone::clone(resource.allocation())); // TODO: Remove clone.
-
-        Ok(()) // TODO: Return a serious result.
+        // let allocation = *resource.allocation();
+        // self.allocator.free(*resource.allocation());
+        todo!("implement freeing allocations");
     }
 
     pub unsafe fn copy<T, Src, Dst>(&mut self, source: &Src, destination: &mut Dst, offset: usize, count: usize) -> Result<()>

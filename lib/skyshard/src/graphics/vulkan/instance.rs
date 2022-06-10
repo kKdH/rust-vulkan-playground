@@ -10,7 +10,6 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::time::SystemTime;
 
-use ash::LoadingError;
 use ash::vk::{DebugUtilsMessageSeverityFlagsEXT, Handle};
 use chrono::prelude::*;
 use log::{debug, info, warn, error};
@@ -28,12 +27,6 @@ pub enum  InstanceInstantiationError {
     MissingParameter {
         parameter: String
     },
-
-    #[error("Failed to load instance!")]
-    InstanceLoadingFailure(#[from] ash::LoadingError),
-
-    #[error("Instantiation failed!")]
-    InstantiationError(#[from] ash::InstanceError),
 
     #[error("An Vulkan error occurs during instantiation!")]
     VulkanError(#[from] VulkanError),
@@ -223,11 +216,15 @@ impl InstanceBuilder {
             .enabled_extension_names(&extension_names)
             .build();
 
-        let vk_loader = unsafe { ash::Entry::new()? };
+        let vk_loader = unsafe {
+            ::ash::Entry::load()
+                .expect("Failed to load vulkan")
+        };
 
         let vk_handle = unsafe {
             vk_loader.create_instance(&vk_create_info, None)
-        }?;
+                .expect("Failed to create instance.")
+        };
 
         let debug_util = if self.debug_enabled {
             info!("Vulkan debugging enabled, creating debug messanger with '{}' level.", self.debug_level);
