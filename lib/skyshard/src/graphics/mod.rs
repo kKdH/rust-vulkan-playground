@@ -2,11 +2,10 @@ pub mod vulkan;
 
 mod camera;
 
-use ash::vk::Buffer;
 use nalgebra::Matrix4;
-use vk_mem::Allocation;
 use crate::engine::Vertex;
 pub use crate::graphics::camera::Camera;
+use crate::graphics::vulkan::mem::Buffer;
 
 pub struct Renderer {
 
@@ -25,12 +24,36 @@ impl Position {
     }
 }
 
+#[derive(Debug)]
+pub struct Extent {
+    width: u32,
+    height: u32,
+    depth: u32,
+}
+
+impl Extent {
+
+    pub fn new() -> Extent {
+        Extent {
+            width: 0,
+            height: 0,
+            depth: 0
+        }
+    }
+
+    pub fn from(width: u32, height: u32, depth: u32) -> Extent {
+        Extent {
+            width,
+            height,
+            depth
+        }
+    }
+}
+
 pub struct Geometry {
     pub position: Position,
     pub indices: Vec<u32>,
-    pub index_buffer: Buffer,
-    pub index_allocation: Allocation,
+    pub index_buffer: Buffer<u32>,
     pub vertices: Vec<Vertex>,
-    pub vertex_buffer: Buffer,
-    pub vertex_allocation: Allocation,
+    pub vertex_buffer: Buffer<Vertex>,
 }

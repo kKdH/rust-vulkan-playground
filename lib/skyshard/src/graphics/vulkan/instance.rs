@@ -91,6 +91,13 @@ impl Instance {
 }
 
 impl VulkanObject for Instance {
+
+    type A = ::ash::Instance;
+
+    fn handle(&self) -> &Self::A {
+        &self.handle
+    }
+
     fn hex_id(&self) -> String {
         format!("0x{:x?}", self.handle.handle().as_raw())
     }

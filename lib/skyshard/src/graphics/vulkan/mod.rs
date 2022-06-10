@@ -16,7 +16,11 @@ pub mod buffer;
 pub mod renderpass;
 pub mod mem;
 
-trait VulkanObject {
+pub trait VulkanObject {
+
+    type A;
+
+    fn handle(&self) -> &Self::A;
 
     /// Returns this vulkan object's handle as hex-encoded string.
     /// Example: `0x5654cd8dfce0`
@@ -245,6 +249,13 @@ impl DebugUtil {
 }
 
 impl VulkanObject for DebugUtil {
+
+    type A = ::ash::vk::DebugUtilsMessengerEXT;
+
+    fn handle(&self) -> &Self::A {
+        &self.callback
+    }
+
     fn hex_id(&self) -> String {
         format!("0x{:x?}", self.callback.as_raw())
     }

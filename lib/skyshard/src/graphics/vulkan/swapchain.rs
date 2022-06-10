@@ -15,14 +15,15 @@ use log::{debug, info};
 use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
 use thiserror::Error;
 
+use crate::graphics::Extent;
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::InstanceRef;
+use crate::graphics::vulkan::mem::{ImageAllocationDescriptor, ImageUsage, MemoryLocation, MemoryManager};
 use crate::graphics::vulkan::queue::DeviceQueueRef;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
 use crate::util::HasBuilder;
-
 
 #[derive(Error, Debug)]
 pub enum SwapchainError {
@@ -52,7 +53,7 @@ pub struct Swapchain {
 
 impl Swapchain {
 
-    pub fn new(device: DeviceRef, queue: DeviceQueueRef, surface: SurfaceRef) -> Result<SwapchainRef, SwapchainError> {
+    pub fn new(device: DeviceRef, queue: DeviceQueueRef, surface: SurfaceRef, memory_manager: &mut MemoryManager) -> Result<SwapchainRef, SwapchainError> {
 
         let _device = (*device).borrow();
         let instance = _device.instance();
@@ -162,55 +163,13 @@ impl Swapchain {
 
             let depth_image: vk::Image = unsafe {
 
-                let image_create_info = vk::ImageCreateInfo::builder()
-                    .image_type(vk::ImageType::TYPE_2D)
-                    .extent(vk::Extent3D {
-                        width: resolution.width,
-                        height: resolution.height,
-                        depth: 1,
-                    })
-                    .mip_levels(1)
-                    .array_layers(1)
-                    .format(ash::vk::Format::D32_SFLOAT_S8_UINT)
-                    .tiling(ash::vk::ImageTiling::OPTIMAL)
-                    .initial_layout(ash::vk::ImageLayout::UNDEFINED)
-                    .usage(ash::vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
-                    .samples(ash::vk::SampleCountFlags::TYPE_1)
-                    .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                    .build();
+                let image = memory_manager.create_image("depth-image", &ImageAllocationDescriptor {
+                    image_usage: ImageUsage::DepthStencilAttachment,
+                    extent: Extent::from(resolution.width, resolution.height, 1),
+                    memory_usage: MemoryLocation::GpuOnly
+                }).expect("depth image");
 
-                let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-                    .usage(vk_mem::MemoryUsage::GpuOnly)
-                    .required_flags(ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-                    .build();
-
-                let (image, _, _) = unsafe {
-                    _device.allocator().create_image(&image_create_info, &allocation_create_info)
-                        .expect("depth image")
-                };
-
-                // let memory_requirements = unsafe {
-                //     _device.handle().get_image_memory_requirements(image)
-                // };
-
-                // let memory_allocation_info = MemoryAllocateInfo::builder()
-                //     .allocation_size(memory_requirements.size)
-                //     .memory_type_index(memory_requirements.memory_type_bits)
-                //     .build();
-
-                // let device_memory = unsafe {
-                //     _device.allocator().create_image();
-                //     _device.allocator().bind_image_memory()
-                //     _device.handle().allocate_memory(&memory_allocation_info, None)
-                //         .expect("memory allocation for depth image.")
-                // };
-
-                // unsafe {
-                //     _device.handle().bind_image_memory(image, device_memory, 0)
-                //         .expect("bind memory of depth image.");
-                // }
-
-                image
+                *image.handle()
             };
 
             let depth_image_view: vk::ImageView = {
@@ -290,6 +249,13 @@ impl Swapchain {
 }
 
 impl VulkanObject for Swapchain {
+
+    type A = ::ash::vk::SwapchainKHR;
+
+    fn handle(&self) -> &Self::A {
+        &self.handle
+    }
+
     fn hex_id(&self) -> String {
         format!("0x{:x?}", self.handle.as_raw())
     }

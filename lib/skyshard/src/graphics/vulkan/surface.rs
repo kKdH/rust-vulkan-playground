@@ -119,6 +119,13 @@ impl Surface {
 }
 
 impl VulkanObject for Surface {
+
+    type A = ::ash::vk::SurfaceKHR;
+
+    fn handle(&self) -> &Self::A {
+        &self.handle
+    }
+
     fn hex_id(&self) -> String {
         format!("0x{:x?}", self.handle.as_raw())
     }

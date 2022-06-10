@@ -12,14 +12,11 @@ thiserror = "1.0.30"
 regex = "1.5.4"
 ash = "0.33.3+1.2.191"
 ash-window = "0.7.0"
-vk-mem = { path = "../../../vk-mem-rs", version = "0.3.0" } # "0.3.0"
+gpu-allocator = "0.10.0"
 winit = "0.25.0"
 png = "0.17.2"
 nalgebra = "0.29.0"
 syn = "1.0.82"
-
-[patch.crates-io]
-vk-mem = { path = "../../../vk-mem-rs" }
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"

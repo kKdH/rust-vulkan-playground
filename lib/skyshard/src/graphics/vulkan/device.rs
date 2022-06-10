@@ -43,7 +43,6 @@ pub struct Device {
     device: PhysicalDeviceRef,
     handle: ash::Device,
     queues: Vec<DeviceQueueRef>,
-    allocator: vk_mem::Allocator,
     command_pool: Box<dyn CommandPool>,
 }
 
@@ -83,14 +82,28 @@ impl Device {
             ash::extensions::khr::Swapchain::name().as_ptr(),
         ];
 
-        let device_features = ash::vk::PhysicalDeviceFeatures::builder()
-            .wide_lines(true)
-            .fill_mode_non_solid(true);
+        let mut additional_features = {
+
+            let device_features = ash::vk::PhysicalDeviceFeatures::builder()
+                .wide_lines(true)
+                .fill_mode_non_solid(true)
+                .pipeline_statistics_query(true)
+                .build();
+
+            let mut buffer_features = ::ash::vk::PhysicalDeviceBufferDeviceAddressFeatures::builder()
+                .buffer_device_address(true)
+                .build();
+
+            ash::vk::PhysicalDeviceFeatures2::builder()
+                .features(device_features)
+                .push_next(&mut buffer_features)
+                .build()
+        };
 
         let device_create_info = ash::vk::DeviceCreateInfo::builder()
             .queue_create_infos(&queue_create_infos)
             .enabled_extension_names(&extension_names)
-            .enabled_features(&device_features);
+            .push_next(&mut additional_features);
 
         let device: ash::Device = match unsafe {
             _instance.handle().create_device(physical_device.handle, &device_create_info, None)
@@ -106,25 +119,11 @@ impl Device {
             .map(|(index, handle)| Rc::new(DeviceQueue::new(handle, index, *queue_family)))
             .collect();
 
-        let allocator: vk_mem::Allocator = {
-            let create_info = vk_mem::AllocatorCreateInfo {
-                physical_device: physical_device.handle,
-                device: device.clone(),
-                instance: _instance.handle().clone(),
-                flags: vk_mem::AllocatorCreateFlags::NONE,
-                preferred_large_heap_block_size: 0,
-                frame_in_use_count: 0,
-                heap_size_limits: None
-            };
-            vk_mem::Allocator::new(&create_info).unwrap()
-        };
-
         let device = Rc::new(RefCell::new(Device {
             instance: physical_device.instance.upgrade().expect("Valid instance."),
             device: physical_device,
             handle: device,
             queues,
-            allocator,
             command_pool: Box::new(UninitializedCommandPool::new()),
         }));
 
@@ -149,10 +148,6 @@ impl Device {
 
     pub fn handle(&self) -> &ash::Device {
         &self.handle
-    }
-
-    pub fn allocator(&self) -> &vk_mem::Allocator {
-        &self.allocator
     }
 
     pub fn physical_device(&self) -> Rc<PhysicalDevice> {
@@ -183,6 +178,13 @@ impl Device {
 }
 
 impl VulkanObject for Device {
+
+    type A = ::ash::Device;
+
+    fn handle(&self) -> &Self::A {
+        &self.handle
+    }
+
     fn hex_id(&self) -> String {
         format!("0x{:x?}", self.handle.handle().as_raw())
     }

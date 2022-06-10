@@ -78,7 +78,7 @@ fn main() {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
         let mut world = World::new();
 
-        world.geometries.push(skyshard::create_geometry(&engine,
+        world.geometries.push(skyshard::create_geometry(&mut engine,
             Position::new(0.0, 0.0, 0.0),
             Vec::from([0, 1, 2, 2, 3, 0]),
             Vec::from([
@@ -124,7 +124,7 @@ fn main() {
         let mut pitch = 0.0;
         let mut yaw = 0.0;
 
-        skyshard::render(&mut engine, &world, &camera);
+        skyshard::render(&mut engine, &mut world, &camera);
 
         events_loop.run(move |event, _, control_flow| {
             match event {
@@ -251,7 +251,7 @@ fn main() {
                     match (redraw_requested, close_requested) {
                         (false, false) => {}
                         (true, false) => {
-                            skyshard::render(&mut engine, &world, &camera);
+                            skyshard::render(&mut engine, &mut world, &camera);
                             std::thread::sleep(Duration::from_millis(50))
                         }
                         (_, true) => {

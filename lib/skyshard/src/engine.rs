@@ -5,26 +5,28 @@ use std::ffi::{CStr, CString};
 use std::io::Cursor;
 use std::ops::Deref;
 use std::rc::Rc;
+
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
 use ash::vk;
-use ash::vk::{CommandBuffer, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Rect2D, xcb_connection_t};
+use ash::vk::{CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Rect2D, xcb_connection_t};
 use chrono::Duration;
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
-use vk_mem::AllocatorPoolCreateFlags;
 use winit::window::Window;
-use crate::entity::{World};
 
+use crate::entity::World;
 use crate::graphics::{Geometry, Position, vulkan};
 use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
+use crate::graphics::vulkan::mem::{Buffer, BufferAllocationDescriptor, BufferUsage, CopyDestination, MemoryLocation, MemoryManager, Resource};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::renderpass::create_render_pass;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
+use crate::graphics::vulkan::VulkanObject;
 use crate::util::HasBuilder;
 use crate::util::Version;
 
@@ -55,6 +57,7 @@ pub struct EngineError {
 pub struct Engine {
     instance: InstanceRef,
     device: DeviceRef,
+    memory_manager: MemoryManager,
     surface: SurfaceRef,
     swapchain: SwapchainRef,
     renderpass: ash::vk::RenderPass,
@@ -65,13 +68,14 @@ pub struct Engine {
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
     descriptor_sets: Vec<ash::vk::DescriptorSet>,
-    draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation),
-    ubo_buffer: (ash::vk::Buffer, vk_mem::Allocation),
-    index_buffer: (ash::vk::Buffer, vk_mem::Allocation),
-    vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation),
-    instance_data_buffer: (ash::vk::Buffer, vk_mem::Allocation),
+    draw_indirect_command_buffer: ash::vk::Buffer,
+    ubo_buffer: Buffer<UniformBufferObject>,
+    index_buffer: ash::vk::Buffer,
+    vertex_buffer: ash::vk::Buffer,
+    instance_data_buffer: ash::vk::Buffer,
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
+    command_buffers_completed_fence: ash::vk::Fence,
     timings_query_pool: ash::vk::QueryPool,
     vertices_query_pool: ash::vk::QueryPool,
     last_timing_value: [u64; 1]
@@ -102,6 +106,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         .application_version(&"0.1.0".try_into().unwrap())
         .layers(&Vec::from([
             String::from("VK_LAYER_KHRONOS_validation"),
+            // String::from("VK_LAYER_LUNARG_mem_tracker")
             // String::from("VK_LAYER_LUNARG_api_dump"),
         ]))
         .extensions(&ash_window::enumerate_required_extensions(window)
@@ -109,11 +114,12 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             .iter()
             .map(|ext| ext.to_string_lossy().into_owned())
             .collect::<Vec<_>>())
-        .debug(true,DebugLevel::INFO)
+        .debug(true,DebugLevel::DEBUG)
         .build()
-        .unwrap();
+        .expect("Failed to create vulkan instance");
 
     let device;
+    let mut memory_manager;
     let surface;
     let swapchain;
     let frame_buffers: Vec<ash::vk::Framebuffer>;
@@ -124,13 +130,14 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let pipeline: ash::vk::Pipeline;
     let pipeline_layout: ash::vk::PipelineLayout;
     let descriptor_sets: Vec<ash::vk::DescriptorSet>;
-    let draw_indirect_command_buffer: (ash::vk::Buffer, vk_mem::Allocation);
-    let ubo_buffer: (ash::vk::Buffer, vk_mem::Allocation);
-    let index_buffer: (ash::vk::Buffer, vk_mem::Allocation);
-    let vertex_buffer: (ash::vk::Buffer, vk_mem::Allocation);
-    let instance_data_buffer: (ash::vk::Buffer, vk_mem::Allocation);
+    let draw_indirect_command_buffer: ash::vk::Buffer;
+    let ubo_buffer: Buffer<UniformBufferObject>;
+    let index_buffer: ash::vk::Buffer;
+    let vertex_buffer: ash::vk::Buffer;
+    let instance_data_buffer: (ash::vk::Buffer);
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
+    let command_buffers_completed_fence: ash::vk::Fence;
     let timings_query_pool: ash::vk::QueryPool;
     let vertices_query_pool: ash::vk::QueryPool;
 
@@ -151,13 +158,47 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             1
         ).unwrap();
 
+        memory_manager = MemoryManager::new(
+            (*instance).borrow().handle(),
+            (*device).borrow().handle(),
+            (*physical_device).handle()
+        );
+
+        // let buffer = memory_manager.create_buffer(
+        //     "example",
+        //     &BufferAllocationDescriptor {
+        //         buffer_usage: BufferUsage::UniformBuffer,
+        //         memory_usage: MemoryUsage::CpuToGpu,
+        //     },
+        //     16
+        // ).expect("buffer");
+        //
+        // {
+        //     let data = vec![3, 4, 5, 6];
+        //     memory_manager.write(data.as_ptr(), &buffer, 4)
+        //         .expect("write");
+        //
+        //     let mut result = vec![0, 0, 0, 0];
+        //
+        //     println!("Read/Write {:?}", result);
+        //
+        //     memory_manager.read(&buffer, result.as_mut_ptr(), 4)
+        //         .expect("read");
+        //
+        //     println!("Read/Write {:?}", result);
+        //
+        //     memory_manager.free(buffer)
+        //         .expect("free");
+        // }
+
         swapchain = {
             let _device = (*device).borrow();
             let queue = _device.queues().first().unwrap();
             Swapchain::new(
                 Rc::clone(&device),
                 Rc::clone(queue),
-                Rc::clone(&surface)
+                Rc::clone(&surface),
+                &mut memory_manager,
             ).unwrap()
         };
 
@@ -373,6 +414,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         let ubo_layout_binding = ash::vk::DescriptorSetLayoutBinding::builder()
             .binding(0)
             .descriptor_count(1)
+            .stage_flags(::ash::vk::ShaderStageFlags::VERTEX)
             .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
             .build();
 
@@ -383,7 +425,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let result = unsafe {
                 _device.handle().create_descriptor_set_layout(&create_info, None)
-                    .expect("Failed to create descriptor set")
+                    .expect("Failed to create descriptor set!")
             };
 
             [result]
@@ -413,7 +455,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                         .descriptor_pool(pool)
                         .set_layouts(&layouts);
                     unsafe {
-                        _device.handle().allocate_descriptor_sets( & create_info)
+                        _device.handle().allocate_descriptor_sets(&create_info)
                             .expect("Failed to allocate descriptor set")[0]
                     }
                 }).collect::<Vec<_>>();
@@ -424,7 +466,8 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
         pipeline_layout = unsafe {
             _device.handle().create_pipeline_layout(&pipeline_layout_create_info, None)
-        }.unwrap();
+                .expect("Failed to create pipeline layout!")
+        };
 
         renderpass = create_render_pass(device.clone(), surface.clone());
 
@@ -494,42 +537,38 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             _device.handle().create_semaphore(&semaphore_create_info, None)
         }.unwrap();
 
+        command_buffers_completed_fence = {
+
+            let fence_create_info = ::ash::vk::FenceCreateInfo::builder()
+                .build();
+
+            unsafe {
+                _device.handle().create_fence(&fence_create_info, None)
+                    .expect("Expected successfull fence creation!")
+            }
+        };
+
         {
             let count = swapchain.views().len(); // one ubo per swapchain image
             let size: usize = count * std::mem::size_of::<UniformBufferObject>();
 
-            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-                .usage(vk_mem::MemoryUsage::CpuToGpu)
-                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE)
-                .build();
+            let mut buffer = memory_manager.create_buffer("uniform-buffer", &BufferAllocationDescriptor {
+                buffer_usage: BufferUsage::UniformBuffer,
+                memory_usage: MemoryLocation::CpuToGpu
+            }, count).expect("Failed to create uniform buffer");
 
-            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-                .usage(ash::vk::BufferUsageFlags::UNIFORM_BUFFER)
-                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                .size(size as ash::vk::DeviceSize);
-
-            let (buffer, allocation, _) = _device.allocator()
-                .create_buffer(&buffer_create_info.build(), &allocation_create_info)
-                .expect("Allocation for 'ubo_buffer' failed");
-
-            let dst_ptr = _device.allocator()
-                .map_memory(&allocation)
-                .expect("Map memory for 'index_buffer' failed") as *mut UniformBufferObject;
-
-            let src = (0..count).map(|_| {
+            let ubos = (0..count).map(|_| {
                 UniformBufferObject {
                     mvp: Matrix4::identity(),
                 }
             }).collect::<Vec<_>>();
 
             unsafe {
-                std::ptr::copy_nonoverlapping(src.as_ptr(), dst_ptr, count);
+                memory_manager.copy(&ubos, &mut buffer, 0, count);
+                memory_manager.flush(&mut buffer, 0, size as u64);
             }
 
-            _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size);
-
-            ubo_buffer = (buffer, allocation);
+            ubo_buffer = buffer;
         }
 
         {
@@ -537,7 +576,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             descriptor_sets.iter().enumerate().for_each(|(index, descriptor_set)| {
                 let buffer_info = [
                     ash::vk::DescriptorBufferInfo::builder()
-                    .buffer(ubo_buffer.0)
+                    .buffer(*ubo_buffer.handle())
                     .offset((index * size) as u64)
                     .range(size as u64)
                     .build()
@@ -561,82 +600,48 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             let count: usize = 1;
             let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndexedIndirectCommand>());
 
-            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-                .usage(vk_mem::MemoryUsage::GpuOnly)
-                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-                .build();
+            let mut buffer = memory_manager.create_buffer("indirect-draw-command-buffer", &BufferAllocationDescriptor {
+                buffer_usage: BufferUsage::IndirectBuffer,
+                memory_usage: MemoryLocation::CpuToGpu
+            }, count).expect("indirect draw buffer");
 
-            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-                .usage(ash::vk::BufferUsageFlags::INDIRECT_BUFFER)
-                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                .size(size as ash::vk::DeviceSize);
-
-            let (buffer, allocation, _) = _device.allocator()
-                .create_buffer(&buffer_create_info, &allocation_create_info)
-                .expect("Allocation for 'draw_indirect_command_buffer' failed");
-
-            let data =  _device.allocator()
-                .map_memory(&allocation)
-                .expect("Map memory for 'draw_indirect_command_buffer' failed") as *mut ash::vk::DrawIndexedIndirectCommand;
-
-            unsafe {
-                let data = std::ptr::slice_from_raw_parts_mut(data, count);
-                (*data)[0] = ash::vk::DrawIndexedIndirectCommand {
+            let commands = [
+                ash::vk::DrawIndexedIndirectCommand {
                     index_count: 6,
                     instance_count: 3,
                     first_index: 0,
                     vertex_offset: 0,
                     first_instance: 0
-                };
+                }
+            ];
+
+            unsafe {
+                memory_manager.copy(&commands, &mut buffer, 0, count);
+                // memory_manager.flush(&mut buffer, 0, size as u64);
             }
 
-            _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size);
-
-            draw_indirect_command_buffer = (buffer, allocation)
+            draw_indirect_command_buffer = *buffer.handle()
         }
 
         {
             let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
             let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
-            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-                .usage(vk_mem::MemoryUsage::GpuOnly)
-                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-                .build();
-
-            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-                .usage(ash::vk::BufferUsageFlags::INDEX_BUFFER)
-                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                .size(size as ash::vk::DeviceSize);
-
-            let (buffer, allocation, _) = _device.allocator()
-                .create_buffer(&buffer_create_info, &allocation_create_info)
-                .expect("Allocation for 'index_buffer' failed");
-
-            let data_ptr = _device.allocator()
-                .map_memory(&allocation)
-                .expect("Map memory for 'index_buffer' failed") as *mut u32;
+            let mut buffer = memory_manager.create_buffer("index-buffer", &BufferAllocationDescriptor {
+                buffer_usage: BufferUsage::IndexBuffer,
+                memory_usage: MemoryLocation::CpuToGpu
+            }, indices.len()).expect("index buffer");
 
             unsafe {
-                std::ptr::copy_nonoverlapping(indices.as_ptr(), data_ptr, indices.len());
+                memory_manager.copy(&indices, &mut buffer, 0, indices.len());
+                // memory_manager.flush(&mut buffer, 0, size as u64);
             }
 
-            _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size);
-
-            index_buffer = (buffer, allocation);
+            index_buffer = *buffer.handle();
         }
 
         {
-            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-                .usage(vk_mem::MemoryUsage::GpuOnly)
-                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                              | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-                .build();
-
-            let vertices: [Vertex; 4] = [
+            let vertices = vec![
                 Vertex {
                     position: [-0.5, -0.5, 0.0], // top-left
                     color: [1.0, 0.0, 0.0]
@@ -657,37 +662,20 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
-            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-                .usage(ash::vk::BufferUsageFlags::VERTEX_BUFFER)
-                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                .size(size as ash::vk::DeviceSize);
-
-            let (buffer, allocation, _) = _device.allocator()
-                .create_buffer(&buffer_create_info, &allocation_create_info)
-                .expect("Allocation for 'vertex_buffer' failed");
-
-            let data_ptr = _device.allocator()
-                    .map_memory(&allocation)
-                    .expect("Map memory for 'vertex_buffer' failed") as *mut Vertex;
+            let mut buffer = memory_manager.create_buffer("vertex-buffer", &BufferAllocationDescriptor {
+                buffer_usage: BufferUsage::VertexBuffer,
+                memory_usage: MemoryLocation::CpuToGpu
+            }, vertices.len()).expect("vertex buffer");
 
             unsafe {
-                std::ptr::copy_nonoverlapping(vertices.as_ptr(), data_ptr, vertices.len());
+                memory_manager.copy(&vertices, &mut buffer, 0, vertices.len());
+                memory_manager.flush(&mut buffer, 0, size as u64);
             }
 
-            _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size);
-
-            vertex_buffer = (buffer, allocation)
+            vertex_buffer = *buffer.handle();
         }
 
         {
-            let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-                .usage(vk_mem::MemoryUsage::CpuToGpu)
-                .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                    | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-                .build();
-
-
             let transformation1 = Matrix4::<f32>::identity()
                 .append_translation(&Vector3::new(0.0, 0.0, 0.0));
 
@@ -697,7 +685,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             let transformation3 = Matrix4::<f32>::identity()
                 .append_translation(&Vector3::new(0.0, 0.5, 1.0));
 
-            let data: [InstanceData; 3] = [
+            let data = vec![
                 InstanceData {
                     transformation: transformation1.data
                         .as_slice()
@@ -720,33 +708,24 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let size: usize = (data.len() * std::mem::size_of::<InstanceData>());
 
-            let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-                .usage(ash::vk::BufferUsageFlags::VERTEX_BUFFER)
-                .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-                .size(size as ash::vk::DeviceSize);
-
-            let (buffer, allocation, _) = _device.allocator()
-                .create_buffer(&buffer_create_info, &allocation_create_info)
-                .expect("Allocation for 'instance_data_buffer' failed");
-
-            let data_ptr = _device.allocator()
-                .map_memory(&allocation)
-                .expect("Map memory for 'instance_data_buffer' failed") as *mut InstanceData;
+            let mut buffer = memory_manager.create_buffer("transformation-buffer", &BufferAllocationDescriptor {
+                buffer_usage: BufferUsage::VertexBuffer,
+                memory_usage: MemoryLocation::CpuToGpu
+            }, data.len()).expect("transformation-buffer");
 
             unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr, data.len());
+                memory_manager.copy(&data, &mut buffer, 0, data.len());
+                memory_manager.flush(&mut buffer, 0, size as u64);
             }
 
-            _device.allocator().unmap_memory(&allocation);
-            _device.allocator().flush_allocation(&allocation, 0, size);
-
-            instance_data_buffer = (buffer, allocation)
+            instance_data_buffer = *buffer.handle()
         }
     }
 
     return Ok(Engine {
         instance,
         device,
+        memory_manager,
         surface,
         swapchain,
         frame_buffers,
@@ -764,75 +743,55 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         instance_data_buffer,
         image_available_semaphore,
         render_finished_semaphore,
+        command_buffers_completed_fence,
         timings_query_pool,
         vertices_query_pool,
         last_timing_value: [0]
     });
 }
 
-pub fn create_geometry(engine: &Engine,
+pub fn create_geometry(engine: &mut Engine,
                        position: Position,
                        indices: Vec<u32>,
                        vertices: Vec<Vertex>) -> Geometry {
 
     let _device = (*engine.device).borrow();
+    let mut memory_manager = &mut engine.memory_manager;
 
-    let (indices_buffer, indices_allocation) = {
+    let index_buffer = {
 
         let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
-        let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-            .usage(vk_mem::MemoryUsage::GpuOnly)
-            .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-            .build();
+        let buffer = memory_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
+            buffer_usage: BufferUsage::IndexBuffer,
+            memory_usage: MemoryLocation::CpuToGpu
+        }, indices.len()).expect("geometry index buffer");
 
-        let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-            .usage(ash::vk::BufferUsageFlags::INDEX_BUFFER)
-            .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-            .size(size as ash::vk::DeviceSize);
-
-        let (buffer, allocation, _) = _device.allocator()
-            .create_buffer(&buffer_create_info, &allocation_create_info)
-            .expect("Allocation for 'index_buffer' failed");
-
-        (buffer, allocation)
+        buffer
     };
 
-    let (vertex_buffer, vertex_allocation) = {
-
-        let allocation_create_info = vk_mem::AllocationCreateInfo::builder()
-            .usage(vk_mem::MemoryUsage::GpuOnly)
-            .required_flags(ash::vk::MemoryPropertyFlags::HOST_VISIBLE
-                | ash::vk::MemoryPropertyFlags::DEVICE_LOCAL)
-            .build();
+    let vertex_buffer = {
 
         let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
-        let buffer_create_info = ash::vk::BufferCreateInfo::builder()
-            .usage(ash::vk::BufferUsageFlags::VERTEX_BUFFER)
-            .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
-            .size(size as ash::vk::DeviceSize);
+        let buffer = memory_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
+            buffer_usage: BufferUsage::VertexBuffer,
+            memory_usage: MemoryLocation::CpuToGpu
+        }, vertices.len()).expect("geometry vertex buffer");
 
-        let (buffer, allocation, _) = _device.allocator()
-            .create_buffer(&buffer_create_info, &allocation_create_info)
-            .expect("Allocation for 'vertex_buffer' failed");
-
-        (buffer, allocation)
+        buffer
     };
 
     Geometry {
         position,
         indices: indices,
-        index_buffer: indices_buffer,
-        index_allocation: indices_allocation,
+        index_buffer: index_buffer,
         vertices: vertices,
         vertex_buffer: vertex_buffer,
-        vertex_allocation: vertex_allocation,
     }
 }
 
-pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
+pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
 
     let _device = (*engine.device).borrow();
     let (index, suboptimal) = engine.swapchain.acquire_next_image(engine.image_available_semaphore);
@@ -840,24 +799,40 @@ pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
     let command_buffer = [engine.command_buffers[index as usize]];
     let swapchains = [*engine.swapchain.handle()];
     let indices = [index];
+    let mut memory_manager = &mut engine.memory_manager;
+
+    // let command_buffer: ::ash::vk::CommandBuffer = {
+    //
+    //     let create_info = ash::vk::CommandBufferAllocateInfo::builder()
+    //         .command_pool(_device.command_pool().handle())
+    //         .command_buffer_count(1)
+    //         .level(ash::vk::CommandBufferLevel::PRIMARY)
+    //         .build();
+    //
+    //     unsafe {
+    //         _device.handle().allocate_command_buffers(&create_info)
+    //     }.unwrap()[0]
+    //
+    // };
 
     update_ubo(
         index as usize,
         engine.device.clone(),
-        &engine.ubo_buffer.1,
+        &mut memory_manager,
+        &mut engine.ubo_buffer,
         camera,
     );
 
-    update_geometry(&engine, &world.geometries[0]);
+    update_geometry(memory_manager, &mut world.geometries[0]);
 
     record_commands(
         engine.device.clone(),
         &engine.command_buffers[index as usize],
         &engine.descriptor_sets[index as usize],
-        &engine.draw_indirect_command_buffer.0,
+        &engine.draw_indirect_command_buffer,
         &world.geometries[0].index_buffer,
         &world.geometries[0].vertex_buffer,
-        &engine.instance_data_buffer.0,
+        &engine.instance_data_buffer,
         &engine.frame_buffers[index as usize],
         &engine.renderpass,
         &engine.viewports[0],
@@ -883,8 +858,14 @@ pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
         .signal_semaphores(&signal_semaphores);
 
     unsafe {
-        _device.handle().queue_submit(*queue.handle(), &[*submit_info], vk::Fence::null())
-    }.unwrap();
+        let fences = [engine.command_buffers_completed_fence];
+        _device.handle().reset_fences(&fences)
+            .expect("Failed to reset command buffers completed fence.");
+    }
+
+    unsafe {
+        _device.handle().queue_submit(*queue.handle(), &[*submit_info], engine.command_buffers_completed_fence)
+    }.expect("Failed to submit queue");
 
     let present_info = ash::vk::PresentInfoKHR::builder()
         .wait_semaphores(&signal_semaphores)
@@ -894,26 +875,32 @@ pub fn render(engine: &mut Engine, world: &World, camera: &Camera) {
     engine.swapchain.queue_present(queue, &present_info);
 
     unsafe {
-        _device.handle().device_wait_idle();
+        let fences = [engine.command_buffers_completed_fence];
+
+        _device.handle().wait_for_fences(&fences, true, 5_000_000_000)
+            .expect("Failed to wait for command buffers completed fence!");
+
+        _device.handle().device_wait_idle()
+            .expect("Failed to wait for idle device");
     }
 
     let mut timing_data: [u64; 2] = [0, 0];
     let mut vertices_data: [u64; 1] = [0];
 
     unsafe {
-        _device.handle().get_query_pool_results(engine.timings_query_pool, 0, 2, &mut timing_data, ash::vk::QueryResultFlags::WAIT);
-        _device.handle().get_query_pool_results(engine.vertices_query_pool, 0, 1, &mut vertices_data, ash::vk::QueryResultFlags::WAIT);
+        _device.handle().get_query_pool_results(engine.timings_query_pool, 0, 2, &mut timing_data, ash::vk::QueryResultFlags::WAIT)
+            .expect("Failed to query pool results of the timings query pool");
+        _device.handle().get_query_pool_results(engine.vertices_query_pool, 0, 1, &mut vertices_data, ash::vk::QueryResultFlags::WAIT)
+            .expect("Failed to query pool results of the vertices query pool");
     }
 
-    let diff = Duration::nanoseconds((timing_data[1] - timing_data[0]) as i64);
+    // let diff = Duration::nanoseconds((timing_data[1] - timing_data[0]) as i64);
 
     // println!("draw time: {} ns", timing_data[1] - timing_data[0]);
     // println!("vert. invocations: {}", vertices_data[0]);
 }
 
-fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, camera: &Camera) {
-
-    let _device = (*device).borrow();
+fn update_ubo(index: usize, device: DeviceRef, memory_manager: &mut MemoryManager, buffer: &mut Buffer<UniformBufferObject>, camera: &Camera) {
 
     let size = std::mem::size_of::<UniformBufferObject>();
     let mvp = camera.as_matrix();
@@ -924,51 +911,49 @@ fn update_ubo(index: usize, device: DeviceRef, allocation: &vk_mem::Allocation, 
         }
     ];
 
-    let dst_ptr = _device.allocator()
-        .map_memory(&allocation)
-        .expect("Map memory for 'index_buffer' failed") as *mut UniformBufferObject;
-
     unsafe {
-        std::ptr::copy_nonoverlapping(ubo.as_ptr(), dst_ptr.offset(index as isize), 1);
+        memory_manager.copy(&ubo, buffer, index, 1);
     }
-
-    _device.allocator().unmap_memory(&allocation);
-    _device.allocator().flush_allocation(&allocation, index * size, size);
-
 }
 
-fn update_geometry(engine: &Engine, geometry: &Geometry) {
-
-    let _device = (*engine.device).borrow();
+fn update_geometry(memory_manager: &mut MemoryManager, geometry: &mut Geometry) {
 
     {
         let size: usize = (geometry.indices.len() * std::mem::size_of::<u32>());
 
-        let data_ptr = _device.allocator()
-            .map_memory(&geometry.index_allocation)
-            .expect("Map memory for 'index_buffer' failed") as *mut u32;
-
         unsafe {
-            std::ptr::copy_nonoverlapping(geometry.indices.as_ptr(), data_ptr, geometry.indices.len());
+            memory_manager.copy(&geometry.indices, &mut geometry.index_buffer, 0, geometry.indices.len());
         }
 
-        _device.allocator().unmap_memory(&geometry.index_allocation);
-        _device.allocator().flush_allocation(&geometry.index_allocation, 0, size);
+        // let data_ptr = _device.allocator()
+        //     .map_memory(&geometry.index_allocation)
+        //     .expect("Map memory for 'index_buffer' failed") as *mut u32;
+        //
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(geometry.indices.as_ptr(), data_ptr, geometry.indices.len());
+        // }
+        //
+        // _device.allocator().unmap_memory(&geometry.index_allocation);
+        // _device.allocator().flush_allocation(&geometry.index_allocation, 0, size);
     }
 
     {
         let size: usize = (geometry.vertices.len() * std::mem::size_of::<Vertex>());
 
-        let data_ptr = _device.allocator()
-            .map_memory(&geometry.vertex_allocation)
-            .expect("Map memory for 'vertex_buffer' failed") as *mut Vertex;
-
         unsafe {
-            std::ptr::copy_nonoverlapping(geometry.vertices.as_ptr(), data_ptr, geometry.vertices.len());
+            memory_manager.copy(&geometry.vertices, &mut geometry.vertex_buffer, 0, geometry.vertices.len());
         }
 
-        _device.allocator().unmap_memory(&geometry.vertex_allocation);
-        _device.allocator().flush_allocation(&geometry.vertex_allocation, 0, size);
+        // let data_ptr = _device.allocator()
+        //     .map_memory(&geometry.vertex_allocation)
+        //     .expect("Map memory for 'vertex_buffer' failed") as *mut Vertex;
+        //
+        // unsafe {
+        //     std::ptr::copy_nonoverlapping(geometry.vertices.as_ptr(), data_ptr, geometry.vertices.len());
+        // }
+        //
+        // _device.allocator().unmap_memory(&geometry.vertex_allocation);
+        // _device.allocator().flush_allocation(&geometry.vertex_allocation, 0, size);
     }
 }
 
@@ -977,8 +962,8 @@ fn record_commands(
     command_buffer: &ash::vk::CommandBuffer,
     descriptor_set: &ash::vk::DescriptorSet,
     draw_indirect_command_buffer: &ash::vk::Buffer,
-    index_buffer: &ash::vk::Buffer,
-    vertex_buffer: &ash::vk::Buffer,
+    index_buffer: &Buffer<u32>,
+    vertex_buffer: &Buffer<Vertex>,
     instance_data_buffer: &ash::vk::Buffer,
     frame_buffer: &ash::vk::Framebuffer,
     renderpass: &ash::vk::RenderPass,
@@ -991,6 +976,10 @@ fn record_commands(
 ) {
 
     let _device = (*device).borrow();
+
+    unsafe {
+        _device.handle().reset_command_buffer(*command_buffer, CommandBufferResetFlags::RELEASE_RESOURCES);
+    }
 
     let begin_info = ash::vk::CommandBufferBeginInfo::builder()
         .flags(ash::vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
@@ -1024,7 +1013,7 @@ fn record_commands(
         _device.handle().cmd_begin_query(*command_buffer, *vertices_query_pool, 0, ash::vk::QueryControlFlags::empty())
     }
 
-    let vertex_buffers = [*vertex_buffer];
+    let vertex_buffers = [*vertex_buffer.handle()];
     let instance_data_buffers = [*instance_data_buffer];
     let offsets: [u64; 1] = [0];
     unsafe {
@@ -1033,7 +1022,7 @@ fn record_commands(
     }
 
     unsafe {
-        _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer, 0, ash::vk::IndexType::UINT32)
+        _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer.handle(), 0, ash::vk::IndexType::UINT32)
     }
 
     let viewports = [*viewport];
