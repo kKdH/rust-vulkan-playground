@@ -92,7 +92,7 @@ impl Camera {
         let orientation = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), std::f32::consts::PI) * self.roll * self.pitch * self.yaw;
         // self.direction = (orientation * Vector3::new(0f32, 0f32, 1f32));
         self.direction = orientation.transform_vector(&Vector3::z_axis());
-        self.direction.scale_mut(0.05);
+        self.direction.scale_mut(0.2);
 
         let mut translation = Matrix4::<f32>::identity();
         translation[(0, 3)] = self.position[0];

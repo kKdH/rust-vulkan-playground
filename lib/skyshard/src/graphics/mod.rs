@@ -3,7 +3,7 @@ pub mod vulkan;
 mod camera;
 
 use nalgebra::Matrix4;
-use crate::engine::Vertex;
+use crate::engine::{InstanceData, Vertex};
 pub use crate::graphics::camera::Camera;
 use crate::graphics::vulkan::resources::Buffer;
 
@@ -51,9 +51,10 @@ impl Extent {
 }
 
 pub struct Geometry {
-    pub position: Position,
     pub indices: Vec<u32>,
     pub index_buffer: Buffer<u32>,
     pub vertices: Vec<Vertex>,
     pub vertex_buffer: Buffer<Vertex>,
+    pub instances: Vec<InstanceData>,
+    pub instances_buffer: Buffer<InstanceData>,
 }

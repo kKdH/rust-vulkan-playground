@@ -28,9 +28,11 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use nalgebra::Matrix4;
+use nalgebra::Vector3;
 use skyshard::entity::{World};
 use skyshard::graphics::{Camera, Position};
-use skyshard::Vertex;
+use skyshard::{InstanceData, Vertex};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -78,25 +80,80 @@ fn main() {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
         let mut world = World::new();
 
+        let transformation1 = Matrix4::<f32>::identity()
+            .append_translation(&Vector3::new(0.0, 0.0, 0.0));
+
+        let mut transformation2 = Matrix4::<f32>::identity()
+            .append_translation(&Vector3::new(1.5, 0.0, 0.0));
+
+        transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, 0.7);
+
+        let mut  transformation3 = Matrix4::<f32>::identity()
+            .append_translation(&Vector3::new(0.0, 2.0, 1.5));
+
+        transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
+
         world.geometries.push(skyshard::create_geometry(&mut engine,
-            Position::new(0.0, 0.0, 0.0),
-            Vec::from([0, 1, 2, 2, 3, 0]),
+            Vec::from([
+                0, 1, 2, 2, 3, 0, // front
+                0, 3, 4, 5, 0, 4, // left
+                1, 7, 6, 2, 1, 6, // right
+                0, 5, 1, 1, 5, 7, // top
+                2, 4, 3, 6, 4, 2, // bottom
+                5, 4, 6, 6, 7, 5, // rear
+            ]),
             Vec::from([
                 Vertex {
-                    position: [-0.5, -0.5, 0.0], // top-left
+                    position: [-0.5, -0.5, 0.0], // front top-left
                     color: [1.0, 0.0, 0.0]
                 },
                 Vertex {
-                    position: [0.5, -0.5, 0.0], // top-right
+                    position: [0.5, -0.5, 0.0], // front top-right
                     color: [0.0, 1.0, 0.0]
                 },
                 Vertex {
-                    position: [0.5, 0.5, 0.0], // bottom-right
+                    position: [0.5, 0.5, 0.0], // front bottom-right
                     color: [0.0, 0.0, 1.0]
                 },
                 Vertex {
-                    position: [-0.5, 0.5, 0.0], // bottom-left
+                    position: [-0.5, 0.5, 0.0], // front bottom-left
                     color: [1.0, 1.0, 1.0]
+                },
+                Vertex {
+                    position: [-0.5, 0.5, 1.0], // rear bottom-left
+                    color: [1.0, 0.0, 1.0]
+                },
+                Vertex {
+                    position: [-0.5, -0.5, 1.0], // rear top-left
+                    color: [1.0, 1.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, 0.5, 1.0], // rear bottom-right
+                    color: [1.0, 0.0, 0.0]
+                },
+                Vertex {
+                    position: [0.5, -0.5, 1.0], // rear top-right
+                    color: [0.0, 0.0, 1.0]
+                },
+            ]),
+            Vec::from([
+                InstanceData {
+                    transformation: transformation1.data
+                        .as_slice()
+                        .try_into()
+                        .expect("slice with incorect length")
+                },
+                InstanceData {
+                    transformation: transformation2.data
+                        .as_slice()
+                        .try_into()
+                        .expect("slice with incorect length")
+                },
+                InstanceData {
+                    transformation: transformation3.data
+                        .as_slice()
+                        .try_into()
+                        .expect("slice with incorect length")
                 },
             ])
         ));

@@ -71,9 +71,6 @@ pub struct Engine {
     descriptor_sets: Vec<ash::vk::DescriptorSet>,
     draw_indirect_command_buffer: ash::vk::Buffer,
     ubo_buffer: Buffer<UniformBufferObject>,
-    index_buffer: ash::vk::Buffer,
-    vertex_buffer: ash::vk::Buffer,
-    instance_data_buffer: ash::vk::Buffer,
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
     command_buffers_completed_fence: ash::vk::Fence,
@@ -135,7 +132,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let ubo_buffer: Buffer<UniformBufferObject>;
     let index_buffer: ash::vk::Buffer;
     let vertex_buffer: ash::vk::Buffer;
-    let instance_data_buffer: (ash::vk::Buffer);
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
     let command_buffers_completed_fence: ash::vk::Fence;
@@ -355,10 +351,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         let color_blend_attachment_states = [
             vk::PipelineColorBlendAttachmentState::builder()
                 .color_write_mask(
-                      vk::ColorComponentFlags::R
-                    | vk::ColorComponentFlags::G
-                    | vk::ColorComponentFlags::B
-                    | vk::ColorComponentFlags::A
+                    vk::ColorComponentFlags::R
+                        | vk::ColorComponentFlags::G
+                        | vk::ColorComponentFlags::B
+                        | vk::ColorComponentFlags::A
                 )
                 .blend_enable(false)
                 .src_color_blend_factor(ash::vk::BlendFactor::ONE)
@@ -461,16 +457,15 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
         let graphics_pipelines = unsafe {
             _device.handle().create_graphics_pipelines(
-                    vk::PipelineCache::null(),
-                    &[graphic_pipeline_info.build()],
-                    None,
-                )
+                vk::PipelineCache::null(),
+                &[graphic_pipeline_info.build()],
+                None,
+            )
         }.expect("Unable to create graphics pipeline");
 
         pipeline = graphics_pipelines[0];
 
         frame_buffers = swapchain.views().iter().map(|view| {
-
             let attachments = [*view, *swapchain.depth_image_view()];
 
             let create_info = ash::vk::FramebufferCreateInfo::builder()
@@ -483,11 +478,9 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             unsafe {
                 _device.handle().create_framebuffer(&create_info, None)
             }.unwrap()
-
         }).collect::<Vec<_>>();
 
         command_buffers = (0..swapchain.views().len()).map(|_| {
-
             let create_info = ash::vk::CommandBufferAllocateInfo::builder()
                 .command_pool(_device.command_pool().handle())
                 .command_buffer_count(1)
@@ -497,7 +490,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             unsafe {
                 _device.handle().allocate_command_buffers(&create_info)
             }.unwrap()[0]
-
         }).collect::<Vec<_>>();
 
         let semaphore_create_info = ash::vk::SemaphoreCreateInfo::builder()
@@ -512,7 +504,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         }.unwrap();
 
         command_buffers_completed_fence = {
-
             let fence_create_info = ::ash::vk::FenceCreateInfo::builder()
                 .build();
 
@@ -550,10 +541,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             descriptor_sets.iter().enumerate().for_each(|(index, descriptor_set)| {
                 let buffer_info = [
                     ash::vk::DescriptorBufferInfo::builder()
-                    .buffer(*ubo_buffer.handle())
-                    .offset((index * size) as u64)
-                    .range(size as u64)
-                    .build()
+                        .buffer(*ubo_buffer.handle())
+                        .offset((index * size) as u64)
+                        .range(size as u64)
+                        .build()
                 ];
                 let descriptor_writes = [
                     ash::vk::WriteDescriptorSet::builder()
@@ -581,7 +572,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let commands = [
                 ash::vk::DrawIndexedIndirectCommand {
-                    index_count: 6,
+                    index_count: 36,
                     instance_count: 3,
                     first_index: 0,
                     vertex_offset: 0,
@@ -591,108 +582,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             unsafe {
                 resource_manager.copy(&commands, &mut buffer, 0, count);
-                // resource_manager.flush(&mut buffer, 0, size as u64);
+                resource_manager.flush(&mut buffer, 0, size);
             }
 
             draw_indirect_command_buffer = *buffer.handle()
-        }
-
-        {
-            let indices: [u32; 6] = [0, 1, 2, 2, 3, 0];
-            let size: usize = (indices.len() * std::mem::size_of::<u32>());
-
-            let mut buffer = resource_manager.create_buffer("index-buffer", &BufferAllocationDescriptor {
-                buffer_usage: BufferUsage::IndexBuffer,
-                memory_usage: MemoryLocation::CpuToGpu
-            }, indices.len()).expect("index buffer");
-
-            unsafe {
-                resource_manager.copy(&indices, &mut buffer, 0, indices.len());
-                resource_manager.flush(&mut buffer, 0, indices.len());
-            }
-
-            index_buffer = *buffer.handle();
-        }
-
-        {
-            let vertices = vec![
-                Vertex {
-                    position: [-0.5, -0.5, 0.0], // top-left
-                    color: [1.0, 0.0, 0.0]
-                },
-                Vertex {
-                    position: [0.5, -0.5, 0.0], // top-right
-                    color: [0.0, 1.0, 0.0]
-                },
-                Vertex {
-                    position: [0.5, 0.5, 0.0], // bottom-right
-                    color: [0.0, 0.0, 1.0]
-                },
-                Vertex {
-                    position: [-0.5, 0.5, 0.0], // bottom-left
-                    color: [1.0, 1.0, 1.0]
-                },
-            ];
-
-            let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
-
-            let mut buffer = resource_manager.create_buffer("vertex-buffer", &BufferAllocationDescriptor {
-                buffer_usage: BufferUsage::VertexBuffer,
-                memory_usage: MemoryLocation::CpuToGpu
-            }, vertices.len()).expect("vertex buffer");
-
-            unsafe {
-                resource_manager.copy(&vertices, &mut buffer, 0, vertices.len());
-                resource_manager.flush(&mut buffer, 0, vertices.len());
-            }
-
-            vertex_buffer = *buffer.handle();
-        }
-
-        {
-            let transformation1 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(0.0, 0.0, 0.0));
-
-            let transformation2 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(1.5, 0.0, 0.0));
-
-            let transformation3 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(0.0, 0.5, 1.0));
-
-            let data = vec![
-                InstanceData {
-                    transformation: transformation1.data
-                        .as_slice()
-                        .try_into()
-                        .expect("slice with incorect length")
-                },
-                InstanceData {
-                    transformation: transformation2.data
-                        .as_slice()
-                        .try_into()
-                        .expect("slice with incorect length")
-                },
-                InstanceData {
-                    transformation: transformation3.data
-                        .as_slice()
-                        .try_into()
-                        .expect("slice with incorect length")
-                },
-            ];
-
-            let size: usize = (data.len() * std::mem::size_of::<InstanceData>());
-
-            let mut buffer = resource_manager.create_buffer("transformation-buffer", &BufferAllocationDescriptor {
-                buffer_usage: BufferUsage::VertexBuffer,
-                memory_usage: MemoryLocation::CpuToGpu
-            }, data.len()).expect("transformation-buffer");
-
-            unsafe {
-                resource_manager.copy(&data, &mut buffer, 0, data.len());
-                resource_manager.flush(&mut buffer, 0, data.len());
-            }
-
-            instance_data_buffer = *buffer.handle()
         }
     }
 
@@ -712,9 +605,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         descriptor_sets,
         draw_indirect_command_buffer,
         ubo_buffer,
-        index_buffer,
-        vertex_buffer,
-        instance_data_buffer,
         image_available_semaphore,
         render_finished_semaphore,
         command_buffers_completed_fence,
@@ -724,22 +614,28 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     });
 }
 
-pub fn create_geometry(engine: &mut Engine,
-                       position: Position,
-                       indices: Vec<u32>,
-                       vertices: Vec<Vertex>) -> Geometry {
+pub fn create_geometry(
+    engine: &mut Engine,
+    indices: Vec<u32>,
+    vertices: Vec<Vertex>,
+    instances: Vec<InstanceData>,
+) -> Geometry {
 
-    let _device = (*engine.device).borrow();
     let mut resource_manager = &mut engine.resource_manager;
 
     let index_buffer = {
 
         let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
-        let buffer = resource_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
+        let mut buffer = resource_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
             buffer_usage: BufferUsage::IndexBuffer,
             memory_usage: MemoryLocation::CpuToGpu
         }, indices.len()).expect("geometry index buffer");
+
+        unsafe {
+            resource_manager.copy(&indices, &mut buffer, 0, indices.len());
+            resource_manager.flush(&mut buffer, 0, indices.len());
+        }
 
         buffer
     };
@@ -748,20 +644,43 @@ pub fn create_geometry(engine: &mut Engine,
 
         let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
-        let buffer = resource_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
+        let mut buffer = resource_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
             buffer_usage: BufferUsage::VertexBuffer,
             memory_usage: MemoryLocation::CpuToGpu
         }, vertices.len()).expect("geometry vertex buffer");
+
+        unsafe {
+            resource_manager.copy(&vertices, &mut buffer, 0, vertices.len());
+            resource_manager.flush(&mut buffer, 0, vertices.len());
+        }
+
+        buffer
+    };
+
+    let instances_buffer = {
+
+        let size: usize = (instances.len() * std::mem::size_of::<InstanceData>());
+
+        let mut buffer = resource_manager.create_buffer("geometry-instance-data-buffer", &BufferAllocationDescriptor {
+            buffer_usage: BufferUsage::VertexBuffer,
+            memory_usage: MemoryLocation::CpuToGpu
+        }, instances.len()).expect("geometry instance data buffer");
+
+        unsafe {
+            resource_manager.copy(&instances, &mut buffer, 0, instances.len());
+            resource_manager.flush(&mut buffer, 0, instances.len());
+        }
 
         buffer
     };
 
     Geometry {
-        position,
         indices: indices,
         index_buffer: index_buffer,
         vertices: vertices,
         vertex_buffer: vertex_buffer,
+        instances: instances,
+        instances_buffer: instances_buffer,
     }
 }
 
@@ -775,20 +694,6 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
     let indices = [index];
     let mut resource_manager = &mut engine.resource_manager;
 
-    // let command_buffer: ::ash::vk::CommandBuffer = {
-    //
-    //     let create_info = ash::vk::CommandBufferAllocateInfo::builder()
-    //         .command_pool(_device.command_pool().handle())
-    //         .command_buffer_count(1)
-    //         .level(ash::vk::CommandBufferLevel::PRIMARY)
-    //         .build();
-    //
-    //     unsafe {
-    //         _device.handle().allocate_command_buffers(&create_info)
-    //     }.unwrap()[0]
-    //
-    // };
-
     update_ubo(
         index as usize,
         engine.device.clone(),
@@ -797,8 +702,6 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
         camera,
     );
 
-    update_geometry(resource_manager, &mut world.geometries[0]);
-
     record_commands(
         engine.device.clone(),
         &engine.command_buffers[index as usize],
@@ -806,7 +709,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
         &engine.draw_indirect_command_buffer,
         &world.geometries[0].index_buffer,
         &world.geometries[0].vertex_buffer,
-        &engine.instance_data_buffer,
+        &world.geometries[0].instances_buffer,
         &engine.frame_buffers[index as usize],
         &engine.renderpass,
         &engine.viewports[0],
@@ -891,27 +794,6 @@ fn update_ubo(index: usize, device: DeviceRef, resource_manager: &mut ResourceMa
     }
 }
 
-fn update_geometry(resource_manager: &mut ResourceManager, geometry: &mut Geometry) {
-
-    {
-        let size: usize = (geometry.indices.len() * std::mem::size_of::<u32>());
-
-        unsafe {
-            resource_manager.copy(&geometry.indices, &mut geometry.index_buffer, 0, geometry.indices.len());
-            resource_manager.flush(&mut geometry.index_buffer, 0, geometry.indices.len());
-        }
-    }
-
-    {
-        let size: usize = (geometry.vertices.len() * std::mem::size_of::<Vertex>());
-
-        unsafe {
-            resource_manager.copy(&geometry.vertices, &mut geometry.vertex_buffer, 0, geometry.vertices.len());
-            resource_manager.flush(&mut geometry.vertex_buffer, 0, geometry.vertices.len());
-        }
-    }
-}
-
 fn record_commands(
     device: DeviceRef,
     command_buffer: &ash::vk::CommandBuffer,
@@ -919,7 +801,7 @@ fn record_commands(
     draw_indirect_command_buffer: &ash::vk::Buffer,
     index_buffer: &Buffer<u32>,
     vertex_buffer: &Buffer<Vertex>,
-    instance_data_buffer: &ash::vk::Buffer,
+    instance_data_buffer: &Buffer<InstanceData>,
     frame_buffer: &ash::vk::Framebuffer,
     renderpass: &ash::vk::RenderPass,
     viewport: &ash::vk::Viewport,
@@ -969,7 +851,7 @@ fn record_commands(
     }
 
     let vertex_buffers = [*vertex_buffer.handle()];
-    let instance_data_buffers = [*instance_data_buffer];
+    let instance_data_buffers = [*instance_data_buffer.handle()];
     let offsets: [u64; 1] = [0];
     unsafe {
         _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);

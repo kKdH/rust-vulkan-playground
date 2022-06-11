@@ -1063,6 +1063,7 @@ dependencies = [
  "hamcrest2",
  "log",
  "log4rs",
+ "nalgebra",
  "png",
  "skyshard",
  "winit",

@@ -15,3 +15,4 @@ pub use engine::create;
 pub use engine::create_geometry;
 pub use engine::render;
 pub use engine::Vertex;
+pub use engine::InstanceData;
