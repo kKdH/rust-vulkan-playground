@@ -69,7 +69,6 @@ pub struct Engine {
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
     descriptor_sets: Vec<ash::vk::DescriptorSet>,
-    draw_indirect_command_buffer: ash::vk::Buffer,
     ubo_buffer: Buffer<UniformBufferObject>,
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
@@ -128,7 +127,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let pipeline: ash::vk::Pipeline;
     let pipeline_layout: ash::vk::PipelineLayout;
     let descriptor_sets: Vec<ash::vk::DescriptorSet>;
-    let draw_indirect_command_buffer: ash::vk::Buffer;
     let ubo_buffer: Buffer<UniformBufferObject>;
     let index_buffer: ash::vk::Buffer;
     let vertex_buffer: ash::vk::Buffer;
@@ -560,33 +558,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 }
             });
         }
-
-        {
-            let count: usize = 1;
-            let size: usize = (count * std::mem::size_of::<ash::vk::DrawIndexedIndirectCommand>());
-
-            let mut buffer = resource_manager.create_buffer("indirect-draw-command-buffer", &BufferAllocationDescriptor {
-                buffer_usage: BufferUsage::IndirectBuffer,
-                memory_usage: MemoryLocation::CpuToGpu
-            }, count).expect("indirect draw buffer");
-
-            let commands = [
-                ash::vk::DrawIndexedIndirectCommand {
-                    index_count: 36,
-                    instance_count: 3,
-                    first_index: 0,
-                    vertex_offset: 0,
-                    first_instance: 0
-                }
-            ];
-
-            unsafe {
-                resource_manager.copy(&commands, &mut buffer, 0, count);
-                resource_manager.flush(&mut buffer, 0, size);
-            }
-
-            draw_indirect_command_buffer = *buffer.handle()
-        }
     }
 
     return Ok(Engine {
@@ -603,7 +574,6 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         pipeline,
         pipeline_layout,
         descriptor_sets,
-        draw_indirect_command_buffer,
         ubo_buffer,
         image_available_semaphore,
         render_finished_semaphore,
@@ -706,10 +676,6 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
         engine.device.clone(),
         &engine.command_buffers[index as usize],
         &engine.descriptor_sets[index as usize],
-        &engine.draw_indirect_command_buffer,
-        &world.geometries[0].index_buffer,
-        &world.geometries[0].vertex_buffer,
-        &world.geometries[0].instances_buffer,
         &engine.frame_buffers[index as usize],
         &engine.renderpass,
         &engine.viewports[0],
@@ -718,6 +684,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
         &engine.pipeline_layout,
         &engine.timings_query_pool,
         &engine.vertices_query_pool,
+        &world.geometries,
     );
 
     let wait_semaphores = [
@@ -798,10 +765,6 @@ fn record_commands(
     device: DeviceRef,
     command_buffer: &ash::vk::CommandBuffer,
     descriptor_set: &ash::vk::DescriptorSet,
-    draw_indirect_command_buffer: &ash::vk::Buffer,
-    index_buffer: &Buffer<u32>,
-    vertex_buffer: &Buffer<Vertex>,
-    instance_data_buffer: &Buffer<InstanceData>,
     frame_buffer: &ash::vk::Framebuffer,
     renderpass: &ash::vk::RenderPass,
     viewport: &ash::vk::Viewport,
@@ -810,6 +773,7 @@ fn record_commands(
     pipeline_layout: &ash::vk::PipelineLayout,
     timings_query_pool: &ash::vk::QueryPool,
     vertices_query_pool: &ash::vk::QueryPool,
+    geometries: &Vec<Geometry>,
 ) {
 
     let _device = (*device).borrow();
@@ -850,18 +814,6 @@ fn record_commands(
         _device.handle().cmd_begin_query(*command_buffer, *vertices_query_pool, 0, ash::vk::QueryControlFlags::empty())
     }
 
-    let vertex_buffers = [*vertex_buffer.handle()];
-    let instance_data_buffers = [*instance_data_buffer.handle()];
-    let offsets: [u64; 1] = [0];
-    unsafe {
-        _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
-        _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &offsets)
-    }
-
-    unsafe {
-        _device.handle().cmd_bind_index_buffer(*command_buffer, *index_buffer.handle(), 0, ash::vk::IndexType::UINT32)
-    }
-
     let viewports = [*viewport];
     unsafe {
         _device.handle().cmd_set_viewport(*command_buffer, 0, &viewports);
@@ -886,9 +838,29 @@ fn record_commands(
         _device.handle().cmd_bind_descriptor_sets(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline_layout, 0, &descriptor_sets, &offsets)
     }
 
-    unsafe {
-        _device.handle().cmd_draw_indexed_indirect(*command_buffer, *draw_indirect_command_buffer, 0, 1, 0);
-    }
+    geometries.iter().for_each(|geometry| {
+
+        let vertex_buffers = [*geometry.vertex_buffer.handle()];
+        let instance_data_buffers = [*geometry.instances_buffer.handle()];
+        let offsets: [u64; 1] = [0];
+
+        unsafe {
+            _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
+            _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &offsets);
+            _device.handle().cmd_bind_index_buffer(*command_buffer, *geometry.index_buffer.handle(), 0, ::ash::vk::IndexType::UINT32);
+        }
+
+        unsafe {
+            _device.handle().cmd_draw_indexed(
+                *command_buffer,
+                geometry.indices.len() as u32,
+                geometry.instances.len() as u32,
+                0,
+                0,
+                0,
+            );
+        }
+    });
 
     unsafe {
         _device.handle().cmd_end_render_pass(*command_buffer);
