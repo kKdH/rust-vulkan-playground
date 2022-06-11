@@ -64,7 +64,7 @@ pub struct Engine {
     renderpass: ash::vk::RenderPass,
     viewports: [ash::vk::Viewport; 1],
     scissors: [ash::vk::Rect2D; 1],
-    pipeline: ash::vk::Pipeline,
+    pipelines: Vec<ash::vk::Pipeline>,
     pipeline_layout: ash::vk::PipelineLayout,
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
@@ -124,7 +124,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let renderpass: ash::vk::RenderPass;
     let viewports: [ash::vk::Viewport; 1];
     let scissors: [ash::vk::Rect2D; 1];
-    let pipeline: ash::vk::Pipeline;
+    let pipelines: Vec<ash::vk::Pipeline>;
     let pipeline_layout: ash::vk::PipelineLayout;
     let descriptor_sets: Vec<ash::vk::DescriptorSet>;
     let ubo_buffer: Buffer<UniformBufferObject>;
@@ -308,11 +308,24 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             .scissors(&scissors)
             .viewports(&viewports);
 
-        let rasterization_info = ash::vk::PipelineRasterizationStateCreateInfo::builder()
+        let rasterization_info_fill_mode = ash::vk::PipelineRasterizationStateCreateInfo::builder()
             .depth_clamp_enable(false)
             .rasterizer_discard_enable(false)
             .polygon_mode(ash::vk::PolygonMode::FILL)
             .line_width(1.0)
+            .cull_mode(ash::vk::CullModeFlags::BACK)
+            .front_face(ash::vk::FrontFace::CLOCKWISE)
+            .depth_bias_enable(false)
+            .depth_bias_constant_factor(0.0)
+            .depth_bias_clamp(0.0)
+            .depth_bias_slope_factor(0.0)
+            .build();
+
+        let rasterization_info_line_mode = ash::vk::PipelineRasterizationStateCreateInfo::builder()
+            .depth_clamp_enable(false)
+            .rasterizer_discard_enable(false)
+            .polygon_mode(ash::vk::PolygonMode::LINE)
+            .line_width(3.0)
             .cull_mode(ash::vk::CullModeFlags::BACK)
             .front_face(ash::vk::FrontFace::CLOCKWISE)
             .depth_bias_enable(false)
@@ -429,39 +442,63 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 }).collect::<Vec<_>>();
         }
 
-        let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::builder()
-            .set_layouts(&descriptor_set_layouts);
+        pipeline_layout = {
 
-        pipeline_layout = unsafe {
-            _device.handle().create_pipeline_layout(&pipeline_layout_create_info, None)
-                .expect("Failed to create pipeline layout!")
+            let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::builder()
+                .set_layouts(&descriptor_set_layouts)
+                .build();
+
+            unsafe {
+                _device.handle().create_pipeline_layout(&pipeline_layout_create_info, None)
+                    .expect("Failed to create pipeline layout!")
+            }
         };
 
         renderpass = create_render_pass(device.clone(), surface.clone());
 
-        let graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+        let default_graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+            .flags(::ash::vk::PipelineCreateFlags::ALLOW_DERIVATIVES)
             .stages(&shader_stage_create_infos)
             .vertex_input_state(&vertex_input_state_info)
             .input_assembly_state(&vertex_input_assembly_state_info)
             .viewport_state(&viewport_state_info)
-            .rasterization_state(&rasterization_info)
+            .rasterization_state(&rasterization_info_fill_mode)
             .multisample_state(&multisample_state_info)
             .depth_stencil_state(&depth_state_info)
             .color_blend_state(&color_blend_state)
             .dynamic_state(&dynamic_state_info)
             .layout(pipeline_layout)
             .render_pass(renderpass)
-            .subpass(0);
+            .subpass(0)
+            .build();
 
-        let graphics_pipelines = unsafe {
+        let line_mode_graphic_pipeline_info = ::ash::vk::GraphicsPipelineCreateInfo::builder()
+            .flags(::ash::vk::PipelineCreateFlags::DERIVATIVE)
+            .base_pipeline_index(0)
+            .stages(&shader_stage_create_infos)
+            .vertex_input_state(&vertex_input_state_info)
+            .input_assembly_state(&vertex_input_assembly_state_info)
+            .viewport_state(&viewport_state_info)
+            .rasterization_state(&rasterization_info_line_mode)
+            .multisample_state(&multisample_state_info)
+            .depth_stencil_state(&depth_state_info)
+            .color_blend_state(&color_blend_state)
+            .dynamic_state(&dynamic_state_info)
+            .layout(pipeline_layout)
+            .render_pass(renderpass)
+            .subpass(0)
+            .build();
+
+        pipelines = unsafe {
             _device.handle().create_graphics_pipelines(
-                vk::PipelineCache::null(),
-                &[graphic_pipeline_info.build()],
+                ::ash::vk::PipelineCache::null(),
+                &[
+                    default_graphic_pipeline_info,
+                    line_mode_graphic_pipeline_info,
+                ],
                 None,
             )
-        }.expect("Unable to create graphics pipeline");
-
-        pipeline = graphics_pipelines[0];
+        }.expect("Failed to create graphic pipelines");
 
         frame_buffers = swapchain.views().iter().map(|view| {
             let attachments = [*view, *swapchain.depth_image_view()];
@@ -571,7 +608,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         renderpass,
         viewports,
         scissors,
-        pipeline,
+        pipelines,
         pipeline_layout,
         descriptor_sets,
         ubo_buffer,
@@ -680,7 +717,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
         &engine.renderpass,
         &engine.viewports[0],
         &engine.scissors[0],
-        &engine.pipeline,
+        &engine.pipelines,
         &engine.pipeline_layout,
         &engine.timings_query_pool,
         &engine.vertices_query_pool,
@@ -769,7 +806,7 @@ fn record_commands(
     renderpass: &ash::vk::RenderPass,
     viewport: &ash::vk::Viewport,
     scissor: &ash::vk::Rect2D,
-    pipeline: &ash::vk::Pipeline,
+    pipelines: &Vec<ash::vk::Pipeline>,
     pipeline_layout: &ash::vk::PipelineLayout,
     timings_query_pool: &ash::vk::QueryPool,
     vertices_query_pool: &ash::vk::QueryPool,
@@ -828,40 +865,42 @@ fn record_commands(
         _device.handle().cmd_begin_render_pass(*command_buffer, &renderpass_begin_info, ash::vk::SubpassContents::INLINE);
     }
 
-    unsafe {
-        _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline);
-    }
-
     let descriptor_sets = [*descriptor_set];
     let offsets = [];
     unsafe {
         _device.handle().cmd_bind_descriptor_sets(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline_layout, 0, &descriptor_sets, &offsets)
     }
 
-    geometries.iter().for_each(|geometry| {
-
-        let vertex_buffers = [*geometry.vertex_buffer.handle()];
-        let instance_data_buffers = [*geometry.instances_buffer.handle()];
-        let offsets: [u64; 1] = [0];
+    pipelines.iter().for_each(| pipeline | {
 
         unsafe {
-            _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
-            _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &offsets);
-            _device.handle().cmd_bind_index_buffer(*command_buffer, *geometry.index_buffer.handle(), 0, ::ash::vk::IndexType::UINT32);
+            _device.handle().cmd_bind_pipeline(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline);
         }
 
-        unsafe {
-            _device.handle().cmd_draw_indexed(
-                *command_buffer,
-                geometry.indices.len() as u32,
-                geometry.instances.len() as u32,
-                0,
-                0,
-                0,
-            );
-        }
+        geometries.iter().for_each(|geometry| {
+
+            let vertex_buffers = [*geometry.vertex_buffer.handle()];
+            let instance_data_buffers = [*geometry.instances_buffer.handle()];
+            let offsets: [u64; 1] = [0];
+
+            unsafe {
+                _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
+                _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &offsets);
+                _device.handle().cmd_bind_index_buffer(*command_buffer, *geometry.index_buffer.handle(), 0, ::ash::vk::IndexType::UINT32);
+            }
+
+            unsafe {
+                _device.handle().cmd_draw_indexed(
+                    *command_buffer,
+                    geometry.indices.len() as u32,
+                    geometry.instances.len() as u32,
+                    0,
+                    0,
+                    0,
+                );
+            }
+        });
     });
-
     unsafe {
         _device.handle().cmd_end_render_pass(*command_buffer);
     }
