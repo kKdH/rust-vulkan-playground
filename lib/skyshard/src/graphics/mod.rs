@@ -5,7 +5,7 @@ mod camera;
 use nalgebra::Matrix4;
 use crate::engine::{InstanceData, Vertex};
 pub use crate::graphics::camera::Camera;
-use crate::graphics::vulkan::resources::Buffer;
+use crate::graphics::vulkan::resources::{Buffer, Image};
 
 pub struct Renderer {
 
@@ -24,7 +24,7 @@ impl Position {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Extent {
     width: u32,
     height: u32,
@@ -51,10 +51,9 @@ impl Extent {
 }
 
 pub struct Geometry {
-    pub indices: Vec<u32>,
     pub index_buffer: Buffer<u32>,
-    pub vertices: Vec<Vertex>,
     pub vertex_buffer: Buffer<Vertex>,
-    pub instances: Vec<InstanceData>,
     pub instances_buffer: Buffer<InstanceData>,
+    pub texture_buffer: Buffer<u8>,
+    pub texture_image: Image
 }

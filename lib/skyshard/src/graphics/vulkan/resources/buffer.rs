@@ -62,6 +62,10 @@ impl <A> Resource for Buffer<A> {
         self.name
     }
 
+    fn capacity(&self) -> usize {
+        self.capacity
+    }
+
     fn byte_offset(&self, offset: usize) -> Offset {
         (offset * self.element.size) as Offset
     }
@@ -83,6 +87,10 @@ impl <A> Resource for &mut Buffer<A> {
 
     fn name(&self) -> &'static str {
         self.name
+    }
+
+    fn capacity(&self) -> usize {
+        self.capacity
     }
 
     fn byte_offset(&self, offset: usize) -> Offset {

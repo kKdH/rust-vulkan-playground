@@ -4,6 +4,7 @@ extern crate winit;
 
 use std::borrow::{Borrow, BorrowMut};
 use std::cell::{Cell, RefCell};
+use std::error::Error;
 use std::f32::consts::FRAC_PI_2;
 use std::ffi::{CStr, CString};
 use std::io::Cursor;
@@ -31,7 +32,7 @@ use log4rs::encode::pattern::PatternEncoder;
 use nalgebra::Matrix4;
 use nalgebra::Vector3;
 use skyshard::entity::{World};
-use skyshard::graphics::{Camera, Position};
+use skyshard::graphics::{Camera, Extent, Position};
 use skyshard::{InstanceData, Vertex};
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
@@ -80,6 +81,8 @@ fn main() {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
         let mut world = World::new();
 
+        let (texture_extent, texture_data) = load_image("src/texture-small.png");
+
         {
             let transformation1 = Matrix4::<f32>::identity()
                 .append_translation(&Vector3::new(0.0, 0.0, 0.0));
@@ -95,15 +98,15 @@ fn main() {
             transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
 
             world.geometries.push(skyshard::create_geometry(&mut engine,
-                Vec::from([
+                &vec![
                     0, 1, 2, 2, 3, 0, // front
                     0, 3, 4, 5, 0, 4, // left
                     1, 7, 6, 2, 1, 6, // right
                     0, 5, 1, 1, 5, 7, // top
                     2, 4, 3, 6, 4, 2, // bottom
                     5, 4, 6, 6, 7, 5, // rear
-                ]),
-                Vec::from([
+                ],
+                &vec![
                     Vertex {
                         position: [-0.5, -0.5, 0.0], // front top-left
                         color: [1.0, 0.0, 0.0]
@@ -136,8 +139,10 @@ fn main() {
                         position: [0.5, -0.5, 1.0], // rear top-right
                         color: [0.0, 0.0, 1.0]
                     },
-                ]),
-                Vec::from([
+                ],
+                &texture_data,
+                texture_extent,
+                &vec![
                     InstanceData {
                         transformation: transformation1.data
                             .as_slice()
@@ -157,7 +162,7 @@ fn main() {
                             .expect("slice with incorect length")
                     },
                 ])
-            ));
+            );
         }
 
         {
@@ -167,14 +172,14 @@ fn main() {
             transformation1 = transformation1 * Matrix4::<f32>::from_euler_angles(0.25, -0.75, -0.0);
 
             world.geometries.push(skyshard::create_geometry(&mut engine,
-                vec![
+                &vec![
                     1, 0, 2, // front
                     5, 3, 4, // back
                     0, 3, 2, 2, 3, 5, // right
                     3, 0, 1, 1, 4, 3, // left
                     1, 2, 4, 4, 2, 5, // bottom
                 ],
-                vec![
+                &vec![
                     Vertex {
                         position: [0.0, -0.5, 0.0], // front top
                         color: [1.0, 0.0, 0.0]
@@ -200,7 +205,9 @@ fn main() {
                         color: [0.0, 0.0, 1.0]
                     },
                 ],
-                vec![
+                &texture_data,
+                texture_extent,
+                &vec![
                     InstanceData {
                         transformation: transformation1.data
                             .as_slice()
@@ -233,6 +240,8 @@ fn main() {
         let mut roll = 0.0;
         let mut pitch = 0.0;
         let mut yaw = 0.0;
+
+        skyshard::prepare(&mut engine, &mut world);
 
         skyshard::render(&mut engine, &mut world, &camera);
 
@@ -378,6 +387,19 @@ fn main() {
 
     println!("Window closed");
     // std::thread::sleep(Duration::from_millis(500))
+}
+
+fn load_image(filepath: &'static str) -> (Extent, Vec<u8>) {
+
+    use std::fs::File;
+
+    let decoder = png::Decoder::new(File::open(filepath).unwrap());
+    let mut reader = decoder.read_info().unwrap();
+    let mut buf = vec![0; reader.output_buffer_size()];
+    let info = reader.next_frame(&mut buf).unwrap();
+    let bytes = &buf[..info.buffer_size()];
+
+    (Extent::from(info.width, info.width, 1), Vec::from(bytes))
 }
 
 mod tests {

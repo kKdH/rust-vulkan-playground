@@ -1,4 +1,5 @@
 use ash::vk::Handle;
+use crate::graphics::Extent;
 
 use crate::graphics::vulkan::resources::{Allocation, Offset, Resource, Size};
 use crate::graphics::vulkan::VulkanObject;
@@ -6,6 +7,7 @@ use crate::graphics::vulkan::VulkanObject;
 
 pub struct Image {
     name: &'static str,
+    extent: Extent,
     image: ::ash::vk::Image,
     allocation: Allocation,
 }
@@ -14,15 +16,23 @@ impl Image {
 
     pub fn new(
         name: &'static str,
+        extent: Extent,
         image: ::ash::vk::Image,
         allocation: Allocation
     ) -> Image {
-
         Image {
             name,
+            extent,
             image,
             allocation
         }
+    }
+}
+
+impl Image {
+
+    pub fn extent(&self) -> &Extent {
+        &self.extent
     }
 }
 
@@ -43,6 +53,10 @@ impl Resource for Image {
 
     fn name(&self) -> &'static str {
         self.name
+    }
+
+    fn capacity(&self) -> usize {
+        unimplemented!()
     }
 
     fn byte_offset(&self, offset: usize) -> Offset {

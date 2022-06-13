@@ -9,20 +9,20 @@ use std::rc::Rc;
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
 use ash::vk;
-use ash::vk::{CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Rect2D, xcb_connection_t};
+use ash::vk::{CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Offset3D, Rect2D, xcb_connection_t};
 use chrono::Duration;
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
 use winit::window::Window;
 
 use crate::entity::World;
-use crate::graphics::{Geometry, Position, vulkan};
+use crate::graphics::{Extent, Geometry, Position, vulkan};
 use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
-use crate::graphics::vulkan::resources::{Buffer, CopyDestination, ResourceManager, Resource};
-use crate::graphics::vulkan::resources::descriptors::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
+use crate::graphics::vulkan::resources::{Buffer, CopyDestination, ResourceManager, Resource, ImageAllocationDescriptor, ImageUsage};
+use crate::graphics::vulkan::resources::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::renderpass::create_render_pass;
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
@@ -399,18 +399,20 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
             .build();
 
-        let descriptor_set_layouts = {
-            let bindings = [ubo_layout_binding];
-            let create_info = ash::vk::DescriptorSetLayoutCreateInfo::builder()
-                .bindings(&bindings);
+        let descriptor_set_layouts = [
+            {
+                let bindings = [ubo_layout_binding];
 
-            let result = unsafe {
-                _device.handle().create_descriptor_set_layout(&create_info, None)
-                    .expect("Failed to create descriptor set!")
-            };
+                let create_info = ash::vk::DescriptorSetLayoutCreateInfo::builder()
+                    .bindings(&bindings)
+                    .build();
 
-            [result]
-        };
+                unsafe {
+                    _device.handle().create_descriptor_set_layout(&create_info, None)
+                        .expect("Failed to create descriptor set!")
+                }
+            }
+        ];
 
         {
             let descriptor_pool_sizes = [
@@ -422,7 +424,8 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             let create_info = ash::vk::DescriptorPoolCreateInfo::builder()
                 .max_sets((*swapchain).views().len() as u32)
-                .pool_sizes(&descriptor_pool_sizes);
+                .pool_sizes(&descriptor_pool_sizes)
+                .build();
 
             let pool = unsafe {
                 _device.handle().create_descriptor_pool(&create_info, None)
@@ -431,10 +434,9 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
             descriptor_sets = swapchain.views().iter()
                 .map(|_| {
-                    let layouts = [descriptor_set_layouts[0]];
                     let create_info = ash::vk::DescriptorSetAllocateInfo::builder()
                         .descriptor_pool(pool)
-                        .set_layouts(&layouts);
+                        .set_layouts(&descriptor_set_layouts);
                     unsafe {
                         _device.handle().allocate_descriptor_sets(&create_info)
                             .expect("Failed to allocate descriptor set")[0]
@@ -548,13 +550,13 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }
         };
 
-        {
+        ubo_buffer = {
             let count = swapchain.views().len(); // one ubo per swapchain image
             let size: usize = count * std::mem::size_of::<UniformBufferObject>();
 
             let mut buffer = resource_manager.create_buffer("uniform-buffer", &BufferAllocationDescriptor {
-                buffer_usage: BufferUsage::UniformBuffer,
-                memory_usage: MemoryLocation::CpuToGpu
+                usage: [BufferUsage::UniformBuffer],
+                memory: MemoryLocation::CpuToGpu
             }, count).expect("Failed to create uniform buffer");
 
             let ubos = (0..count).map(|_| {
@@ -568,8 +570,8 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 resource_manager.flush(&mut buffer, 0, count);
             }
 
-            ubo_buffer = buffer;
-        }
+            buffer
+        };
 
         {
             let size: usize = std::mem::size_of::<UniformBufferObject>();
@@ -623,9 +625,11 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
 pub fn create_geometry(
     engine: &mut Engine,
-    indices: Vec<u32>,
-    vertices: Vec<Vertex>,
-    instances: Vec<InstanceData>,
+    indices: &Vec<u32>,
+    vertices: &Vec<Vertex>,
+    texture_data: &Vec<u8>,
+    texture_extent: Extent,
+    instances: &Vec<InstanceData>,
 ) -> Geometry {
 
     let mut resource_manager = &mut engine.resource_manager;
@@ -635,8 +639,8 @@ pub fn create_geometry(
         let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
         let mut buffer = resource_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
-            buffer_usage: BufferUsage::IndexBuffer,
-            memory_usage: MemoryLocation::CpuToGpu
+            usage: [BufferUsage::IndexBuffer],
+            memory: MemoryLocation::CpuToGpu
         }, indices.len()).expect("geometry index buffer");
 
         unsafe {
@@ -652,8 +656,8 @@ pub fn create_geometry(
         let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
         let mut buffer = resource_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
-            buffer_usage: BufferUsage::VertexBuffer,
-            memory_usage: MemoryLocation::CpuToGpu
+            usage: [BufferUsage::VertexBuffer],
+            memory: MemoryLocation::CpuToGpu
         }, vertices.len()).expect("geometry vertex buffer");
 
         unsafe {
@@ -664,13 +668,41 @@ pub fn create_geometry(
         buffer
     };
 
+    let texture_transfere_buffer = {
+
+        let size: usize = texture_data.len() * std::mem::size_of::<u8>();
+
+        let mut buffer = resource_manager.create_buffer("texture-transfer-buffer", &BufferAllocationDescriptor {
+            usage: [BufferUsage::TransferSourceBuffer],
+            memory: MemoryLocation::CpuToGpu,
+        }, size).expect("Failed to create texture data transfer buffer");
+
+        unsafe {
+            resource_manager.copy(&texture_data, &mut buffer, 0, texture_data.len());
+            resource_manager.flush(&mut buffer, 0, texture_data.len());
+        }
+
+        buffer
+    };
+
+    let texture_image = {
+
+        let image = resource_manager.create_image("texture-image", &ImageAllocationDescriptor {
+            usage: [ImageUsage::Sampled, ImageUsage::TransferDestination],
+            extent: texture_extent,
+            memory: MemoryLocation::CpuToGpu
+        }).expect("Failed to create texture image");
+
+        image
+    };
+
     let instances_buffer = {
 
         let size: usize = (instances.len() * std::mem::size_of::<InstanceData>());
 
         let mut buffer = resource_manager.create_buffer("geometry-instance-data-buffer", &BufferAllocationDescriptor {
-            buffer_usage: BufferUsage::VertexBuffer,
-            memory_usage: MemoryLocation::CpuToGpu
+            usage: [BufferUsage::VertexBuffer],
+            memory: MemoryLocation::CpuToGpu
         }, instances.len()).expect("geometry instance data buffer");
 
         unsafe {
@@ -682,12 +714,96 @@ pub fn create_geometry(
     };
 
     Geometry {
-        indices: indices,
         index_buffer: index_buffer,
-        vertices: vertices,
         vertex_buffer: vertex_buffer,
-        instances: instances,
         instances_buffer: instances_buffer,
+        texture_buffer: texture_transfere_buffer,
+        texture_image: texture_image,
+    }
+}
+
+pub fn prepare(engine: &mut Engine, world: &mut World) {
+
+    let _device = (*engine.device).borrow();
+    let queue = Rc::clone(&_device.queues()[0]);
+
+    let command_buffer = {
+        let create_info = ::ash::vk::CommandBufferAllocateInfo::builder()
+            .command_pool(_device.command_pool().handle())
+            .command_buffer_count(1)
+            .level(ash::vk::CommandBufferLevel::PRIMARY)
+            .build();
+
+        unsafe {
+            _device.handle().allocate_command_buffers(&create_info)
+                .expect("Failed to create command buffer")[0]
+        }
+    };
+
+    let completion_fence = {
+        let fence_create_info = ::ash::vk::FenceCreateInfo::builder()
+            .build();
+
+        unsafe {
+            _device.handle().create_fence(&fence_create_info, None)
+                .expect("Expected successfull fence creation!")
+        }
+    };
+
+    unsafe {
+        let begin_info = ash::vk::CommandBufferBeginInfo::builder()
+            .flags(ash::vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+        _device.handle().begin_command_buffer(command_buffer, &begin_info)
+            .expect("Failed to begin command buffer");
+    }
+
+    world.geometries.iter().for_each(|geometry| {
+
+        let buffer_copy = ::ash::vk::BufferImageCopy::builder()
+            .buffer_row_length(0)
+            .buffer_image_height(0)
+            .image_subresource(::ash::vk::ImageSubresourceLayers::builder()
+                .aspect_mask(::ash::vk::ImageAspectFlags::COLOR)
+                .mip_level(0)
+                .base_array_layer(0)
+                .layer_count(1)
+                .build()
+            )
+            .image_offset(Offset3D { x: 0, y: 0, z: 0 })
+            .image_extent(geometry.texture_image.extent().into());
+
+        unsafe {
+            // _device.handle().cmd_copy_buffer_to_image(
+            //     command_buffer,
+            // geometry.texture_buffer,
+            // geometry.texture_image,
+            //
+            // )
+        }
+    });
+
+    unsafe {
+        _device.handle().end_command_buffer(command_buffer)
+            .expect("Failed to end command buffer");
+    }
+
+    let command_buffers = [command_buffer];
+    let submit_info = ash::vk::SubmitInfo::builder()
+        .command_buffers(&command_buffers);
+
+    unsafe {
+        _device.handle().queue_submit(*queue.handle(), &[*submit_info], completion_fence)
+    }.expect("Failed to submit queue");
+
+    unsafe {
+        let fences = [completion_fence];
+        _device.handle().wait_for_fences(&fences, true, 5_000_000_000)
+            .expect("Failed to wait for command buffers completed fence!");
+    }
+
+    unsafe {
+        _device.handle().free_command_buffers(_device.command_pool().handle(), &command_buffers);
     }
 }
 
@@ -892,8 +1008,8 @@ fn record_commands(
             unsafe {
                 _device.handle().cmd_draw_indexed(
                     *command_buffer,
-                    geometry.indices.len() as u32,
-                    geometry.instances.len() as u32,
+                    geometry.index_buffer.capacity() as u32,
+                    geometry.instances_buffer.capacity() as u32,
                     0,
                     0,
                     0,

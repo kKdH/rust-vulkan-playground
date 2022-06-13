@@ -1,15 +1,14 @@
 
 mod buffer;
-mod image;
 mod copy;
-
-pub mod descriptors;
+mod descriptors;
+mod image;
 
 pub use buffer::{Buffer, Element};
-pub use image::{Image};
 pub use copy::{CopyDestination, CopySource};
+pub use descriptors::{BufferAllocationDescriptor, ImageAllocationDescriptor, BufferUsage, ImageUsage, MemoryLocation};
+pub use image::{Image};
 
-use descriptors::{BufferUsage, MemoryLocation, ImageUsage, BufferAllocationDescriptor, ImageAllocationDescriptor};
 use log::info;
 
 use thiserror::Error;
@@ -47,14 +46,19 @@ impl ResourceManager {
         Ok(result)
     }
 
-    pub fn create_buffer<A>(&mut self, name: &'static str, descriptor: &BufferAllocationDescriptor, capacity: usize) -> Result<Buffer<A>> {
+    pub fn create_buffer<A, const UsagesCount: usize>(&mut self, name: &'static str, descriptor: &BufferAllocationDescriptor<UsagesCount>, capacity: usize) -> Result<Buffer<A>> {
 
         let element_size = ::std::mem::size_of::<A>();
         let size = (capacity * element_size) as Size;
 
         let buffer: ::ash::vk::Buffer = {
 
-            let buffer_create_info = ResourceManager::buffer_descriptor_to_ash(descriptor, size)?;
+            let buffer_create_info  = descriptor
+                .try_into()
+                .map(|builder: ::ash::vk::BufferCreateInfoBuilder| {
+                    builder.size(size as ash::vk::DeviceSize)
+                           .build()
+                })?;
 
             unsafe { self.device.create_buffer(&buffer_create_info, None) }
                 .map_err(|error| ResourceManagerError::CreateBufferError { name })
@@ -68,7 +72,7 @@ impl ResourceManager {
             self.allocator.allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
                 name: format!("{}.allocation", name).as_str(),
                 requirements: requirements,
-                location: ResourceManager::memory_usage_to_ash(descriptor.memory_usage)?,
+                location: descriptor.memory.into(),
                 linear: true
             }).map_err(|error| ResourceManagerError::AllocateMemoryError { cause: error })
         }?;
@@ -78,16 +82,20 @@ impl ResourceManager {
                 .map_err(|error| ResourceManagerError::BindBufferError { name })
         }?;
 
-        info!("Created {:?} '{}' with a capacity for {} elements respectifely {} bytes.", descriptor.buffer_usage, name, capacity, size);
+        info!("Created buffer '{}' as {:?} with a capacity for {} elements respectifely {} bytes ({} bytes pre element).", name, descriptor.usage, capacity, size, element_size);
 
         Ok(Buffer::new(name, capacity, element_size, buffer, allocation))
     }
 
-    pub fn create_image(&mut self, name: &'static str, descriptor: &ImageAllocationDescriptor) -> Result<Image> {
+    pub fn create_image<const N: usize>(&mut self, name: &'static str, descriptor: &ImageAllocationDescriptor<N>) -> Result<Image> {
 
         let image: ::ash::vk::Image = {
 
-            let image_create_info = ResourceManager::image_descriptor_to_ash(descriptor)?;
+            let image_create_info = descriptor
+                .try_into()
+                .map(|builder: ::ash::vk::ImageCreateInfoBuilder| {
+                    builder.build()
+                })?;
 
             unsafe { self.device.create_image(&image_create_info, None) }
                 .map_err(|error| ResourceManagerError::CreateImageError { name })
@@ -101,7 +109,7 @@ impl ResourceManager {
             self.allocator.allocate(&gpu_allocator::vulkan::AllocationCreateDesc {
                 name: name,
                 requirements: requirements,
-                location: ResourceManager::memory_usage_to_ash(descriptor.memory_usage)?,
+                location: descriptor.memory.into(),
                 linear: true
             }).map_err(|error| ResourceManagerError::AllocateMemoryError { cause: error })
         }?;
@@ -111,9 +119,14 @@ impl ResourceManager {
                 .map_err(|error| ResourceManagerError::BindBufferError { name })
         }?;
 
-        info!("Created image '{}' as {:?} with an extend of {}x{}x{}.", name, descriptor.image_usage, descriptor.extent.width, descriptor.extent.height, descriptor.extent.depth);
+        info!("Created image '{}' as {:?} with an extent of {}x{}x{}.", name, descriptor.usage, descriptor.extent.width, descriptor.extent.height, descriptor.extent.depth);
 
-        Ok(Image::new(name, image, allocation))
+        Ok(Image::new(
+            name,
+            descriptor.extent,
+            image,
+            allocation
+        ))
     }
 
     pub unsafe fn copy<T, Src, Dst>(&mut self, source: &Src, destination: &mut Dst, offset: usize, count: usize) -> Result<()>
@@ -149,58 +162,11 @@ impl ResourceManager {
         self.allocator.free(allocation)
             .map_err(|error| ResourceManagerError::FreeMemoryError { name: resource.name() })
     }
-
-    fn buffer_descriptor_to_ash(descriptor: &BufferAllocationDescriptor, size: Size) -> Result<ash::vk::BufferCreateInfo> {
-
-        let mut builder = ash::vk::BufferCreateInfo::builder();
-
-        builder = match descriptor.buffer_usage {
-            BufferUsage::UniformBuffer => builder.usage(::ash::vk::BufferUsageFlags::UNIFORM_BUFFER),
-            BufferUsage::VertexBuffer => builder.usage(::ash::vk::BufferUsageFlags::VERTEX_BUFFER),
-            BufferUsage::IndexBuffer => builder.usage(::ash::vk::BufferUsageFlags::INDEX_BUFFER),
-            BufferUsage::IndirectBuffer => builder.usage(::ash::vk::BufferUsageFlags::INDIRECT_BUFFER),
-        };
-
-        builder = builder.sharing_mode(ash::vk::SharingMode::EXCLUSIVE);
-        builder = builder.size(size as ash::vk::DeviceSize);
-
-        Ok(builder.build())
-    }
-
-    fn image_descriptor_to_ash(descriptor: &ImageAllocationDescriptor) -> Result<ash::vk::ImageCreateInfo> {
-
-        let mut builder = ash::vk::ImageCreateInfo::builder();
-
-        builder = builder
-            .image_type(::ash::vk::ImageType::TYPE_2D)
-            .extent((&descriptor.extent).into())
-            .mip_levels(1)
-            .array_layers(1)
-            .format(ash::vk::Format::D32_SFLOAT_S8_UINT)
-            .tiling(ash::vk::ImageTiling::OPTIMAL)
-            .initial_layout(ash::vk::ImageLayout::UNDEFINED)
-            .samples(ash::vk::SampleCountFlags::TYPE_1)
-            .sharing_mode(ash::vk::SharingMode::EXCLUSIVE);
-
-        builder = match descriptor.image_usage {
-            ImageUsage::DepthStencilAttachment => builder.usage(ash::vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
-        };
-
-        Ok(builder.build())
-    }
-
-    fn memory_usage_to_ash(usage: MemoryLocation) -> Result<gpu_allocator::MemoryLocation> {
-        let result = match usage {
-            MemoryLocation::CpuToGpu => gpu_allocator::MemoryLocation::CpuToGpu,
-            MemoryLocation::GpuToCpu => gpu_allocator::MemoryLocation::GpuToCpu,
-            MemoryLocation::GpuOnly => gpu_allocator::MemoryLocation::GpuOnly,
-        };
-        Ok(result)
-    }
 }
 
 pub trait Resource {
     fn name(&self) -> &'static str;
+    fn capacity(&self) -> usize;
     fn byte_offset(&self, offset: usize) -> Offset;
     fn byte_size(&self, count: usize) -> Size;
     fn allocation(&self) -> &gpu_allocator::vulkan::Allocation;
@@ -210,6 +176,11 @@ pub trait Resource {
 #[derive(Error, Debug)]
 pub enum ResourceManagerError {
 
+    #[error("Invalid allocation descriptor for buffer '{name}'!")]
+    InvalidBufferAllocationDescriptorError {
+        name: &'static str
+    },
+
     #[error("Failed to create buffer '{name}'!")]
     CreateBufferError {
         name: &'static str
@@ -217,6 +188,11 @@ pub enum ResourceManagerError {
 
     #[error("Failed to bind buffer '{name}'!")]
     BindBufferError {
+        name: &'static str
+    },
+
+    #[error("Invalid allocation descriptor for image '{name}'!")]
+    InvalidImageAllocationDescriptorError {
         name: &'static str
     },
 

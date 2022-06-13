@@ -31,6 +31,12 @@ impl <A> CopySource<A> for Vec<A> {
     }
 }
 
+impl<A> CopySource<A> for &Vec<A> {
+    fn ptr(&self) -> *const A {
+        self.as_ptr()
+    }
+}
+
 impl <A, const N: usize> CopySource<A> for [A; N] {
     fn ptr(&self) -> *const A {
         self.as_ptr()
