@@ -221,7 +221,6 @@ fn main() {
         let mut redraw_requested = true;
         let mut close_requested = false;
 
-        info!("Starting event loop");
         engine.reference_counts();
 
         let mut camera = Camera::new(
@@ -242,6 +241,8 @@ fn main() {
         let mut yaw = 0.0;
 
         skyshard::prepare(&mut engine, &mut world);
+
+        info!("Starting event loop");
 
         skyshard::render(&mut engine, &mut world, &camera);
 

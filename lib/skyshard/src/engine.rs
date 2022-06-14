@@ -1,5 +1,5 @@
 use std::borrow::Borrow;
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::io::Cursor;
@@ -9,7 +9,7 @@ use std::rc::Rc;
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
 use ash::vk;
-use ash::vk::{CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Offset3D, Rect2D, xcb_connection_t};
+use ash::vk::{AccessFlags, CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Offset3D, Rect2D, xcb_connection_t};
 use chrono::Duration;
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
@@ -690,7 +690,7 @@ pub fn create_geometry(
         let image = resource_manager.create_image("texture-image", &ImageAllocationDescriptor {
             usage: [ImageUsage::Sampled, ImageUsage::TransferDestination],
             extent: texture_extent,
-            memory: MemoryLocation::CpuToGpu
+            memory: MemoryLocation::GpuOnly
         }).expect("Failed to create texture image");
 
         image
@@ -724,8 +724,10 @@ pub fn create_geometry(
 
 pub fn prepare(engine: &mut Engine, world: &mut World) {
 
-    let _device = (*engine.device).borrow();
+    let _device: Ref<Device> = (*engine.device).borrow();
     let queue = Rc::clone(&_device.queues()[0]);
+
+    info!("Preparing resources.");
 
     let command_buffer = {
         let create_info = ::ash::vk::CommandBufferAllocateInfo::builder()
@@ -758,7 +760,59 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
             .expect("Failed to begin command buffer");
     }
 
+    let range = ::ash::vk::ImageSubresourceRange::builder()
+        .aspect_mask(::ash::vk::ImageAspectFlags::COLOR)
+        .base_mip_level(0)
+        .level_count(1)
+        .base_array_layer(0)
+        .layer_count(1)
+        .build();
+
+    fn layout_transition(
+        device: &Ref<Device>,
+        command_buffer: ::ash::vk::CommandBuffer,
+        image: ::ash::vk::Image,
+        range: ::ash::vk::ImageSubresourceRange,
+        from: ::ash::vk::ImageLayout,
+        to: ::ash::vk::ImageLayout,
+        src_access_mask: ::ash::vk::AccessFlags,
+        dst_access_mask: ::ash::vk::AccessFlags,
+    ) {
+
+        let barrier = ::ash::vk::ImageMemoryBarrier::builder()
+            .image(image)
+            .old_layout(from)
+            .new_layout(to)
+            .subresource_range(range)
+            .src_access_mask(src_access_mask)
+            .dst_access_mask(dst_access_mask);
+
+
+        unsafe {
+            device.handle().cmd_pipeline_barrier(
+                command_buffer,
+                ::ash::vk::PipelineStageFlags::TOP_OF_PIPE,
+                ::ash::vk::PipelineStageFlags::TRANSFER,
+                ::ash::vk::DependencyFlags::empty(),
+                &[],
+                &[],
+                &[*barrier]
+            )
+        }
+    }
+
     world.geometries.iter().for_each(|geometry| {
+
+        layout_transition(
+            _device.borrow(),
+            command_buffer,
+            *geometry.texture_image.handle(),
+            range,
+            ::ash::vk::ImageLayout::UNDEFINED,
+            ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            ::ash::vk::AccessFlags::NONE,
+            ::ash::vk::AccessFlags::TRANSFER_WRITE
+        );
 
         let buffer_copy = ::ash::vk::BufferImageCopy::builder()
             .buffer_row_length(0)
@@ -774,13 +828,25 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
             .image_extent(geometry.texture_image.extent().into());
 
         unsafe {
-            // _device.handle().cmd_copy_buffer_to_image(
-            //     command_buffer,
-            // geometry.texture_buffer,
-            // geometry.texture_image,
-            //
-            // )
+            _device.handle().cmd_copy_buffer_to_image(
+                command_buffer,
+                *geometry.texture_buffer.handle(),
+                *geometry.texture_image.handle(),
+                ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                &[*buffer_copy]
+            )
         }
+
+        layout_transition(
+            _device.borrow(),
+            command_buffer,
+            *geometry.texture_image.handle(),
+            range,
+            ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+            ::ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            ::ash::vk::AccessFlags::TRANSFER_WRITE,
+            ::ash::vk::AccessFlags::SHADER_READ,
+        )
     });
 
     unsafe {
@@ -805,6 +871,8 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
     unsafe {
         _device.handle().free_command_buffers(_device.command_pool().handle(), &command_buffers);
     }
+
+    info!("Resources prepared.");
 }
 
 pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
