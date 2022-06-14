@@ -109,35 +109,43 @@ fn main() {
                 &vec![
                     Vertex {
                         position: [-0.5, -0.5, 0.0], // front top-left
-                        color: [1.0, 0.0, 0.0]
+                        color: [1.0, 0.0, 0.0],
+                        uv: [0.7, 0.5],
                     },
                     Vertex {
                         position: [0.5, -0.5, 0.0], // front top-right
-                        color: [0.0, 1.0, 0.0]
+                        color: [0.0, 1.0, 0.0],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, 0.5, 0.0], // front bottom-right
-                        color: [0.0, 0.0, 1.0]
+                        color: [0.0, 0.0, 1.0],
+                        uv: [0.3, 0.8],
                     },
                     Vertex {
                         position: [-0.5, 0.5, 0.0], // front bottom-left
-                        color: [1.0, 1.0, 1.0]
+                        color: [1.0, 1.0, 1.0],
+                        uv: [0.1, 0.75],
                     },
                     Vertex {
                         position: [-0.5, 0.5, 1.0], // rear bottom-left
-                        color: [1.0, 0.0, 1.0]
+                        color: [1.0, 0.0, 1.0],
+                        uv: [0.4, 1.0],
                     },
                     Vertex {
                         position: [-0.5, -0.5, 1.0], // rear top-left
-                        color: [1.0, 1.0, 0.0]
+                        color: [1.0, 1.0, 0.0],
+                        uv: [0.3, 0.1],
                     },
                     Vertex {
                         position: [0.5, 0.5, 1.0], // rear bottom-right
-                        color: [1.0, 0.0, 0.0]
+                        color: [1.0, 0.0, 0.0],
+                        uv: [0.2, 0.9],
                     },
                     Vertex {
                         position: [0.5, -0.5, 1.0], // rear top-right
-                        color: [0.0, 0.0, 1.0]
+                        color: [0.0, 0.0, 1.0],
+                        uv: [0.2, 0.0],
                     },
                 ],
                 &texture_data,
@@ -182,27 +190,33 @@ fn main() {
                 &vec![
                     Vertex {
                         position: [0.0, -0.5, 0.0], // front top
-                        color: [1.0, 0.0, 0.0]
+                        color: [1.0, 0.0, 0.0],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [-0.5, 0.5, 0.0], // front left
-                        color: [0.0, 1.0, 0.0]
+                        color: [0.0, 1.0, 0.0],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, 0.5, 0.0], // front right
-                        color: [0.0, 0.0, 1.0]
+                        color: [0.0, 0.0, 1.0],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.0, -0.5, 1.0], // rear top
-                        color: [1.0, 0.0, 0.0]
+                        color: [1.0, 0.0, 0.0],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [-0.5, 0.5, 1.0], // rear left
-                        color: [0.0, 1.0, 0.0]
+                        color: [0.0, 1.0, 0.0],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, 0.5, 1.0], // rear right
-                        color: [0.0, 0.0, 1.0]
+                        color: [0.0, 0.0, 1.0],
+                        uv: [0.0, 0.0],
                     },
                 ],
                 &texture_data,

@@ -36,6 +36,7 @@ use crate::util::Version;
 pub struct Vertex {
     pub position: [f32; 3],
     pub color: [f32; 3],
+    pub uv: [f32; 2]
 }
 
 #[repr(C, align(16))]
@@ -254,26 +255,32 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .offset(offset_of!(Vertex, color) as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
-                .binding(1)
+                .binding(0)
                 .location(2)
-                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(0 as u32)
+                .format(ash::vk::Format::R32G32_SFLOAT)
+                .offset(offset_of!(Vertex, uv) as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(3)
                 .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(16 as u32)
+                .offset(0 as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(4)
                 .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(32 as u32)
+                .offset(16 as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(5)
+                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
+                .offset(32 as u32)
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(6)
                 .format(ash::vk::Format::R32G32B32A32_SFLOAT)
                 .offset(48 as u32)
                 .build(),

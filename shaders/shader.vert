@@ -7,13 +7,16 @@ layout(binding = 0) uniform UniformBufferObject {
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec3 inColor;
+layout(location = 2) in vec2 inTextCord;
 
-layout(location = 2) in mat4 transformation; // consumes location 2, 3, 4, 5
+layout(location = 3) in mat4 transformation; // consumes location 3, 4, 5, 6
 
 layout(location = 0) out vec3 outColor;
+layout(location = 1) out vec2 outTextCord;
 
 void main() {
 
     gl_Position = ubo.mvp * transformation * vec4(inPosition, 1.0);
     outColor = inColor;
+    outTextCord = inTextCord;
 }
