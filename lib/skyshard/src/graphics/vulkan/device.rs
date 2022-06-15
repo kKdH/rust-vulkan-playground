@@ -88,14 +88,23 @@ impl Device {
                 .wide_lines(true)
                 .fill_mode_non_solid(true)
                 .pipeline_statistics_query(true)
+                .sampler_anisotropy(true)
                 .build();
 
             let mut buffer_features = ::ash::vk::PhysicalDeviceBufferDeviceAddressFeatures::builder()
                 .buffer_device_address(true)
                 .build();
 
+            let mut descriptor_indexing_features = ::ash::vk::PhysicalDeviceDescriptorIndexingFeatures::builder()
+                .shader_sampled_image_array_non_uniform_indexing(true)
+                .runtime_descriptor_array(true)
+                .descriptor_binding_variable_descriptor_count(true)
+                .descriptor_binding_partially_bound(true)
+                .build();
+
             ash::vk::PhysicalDeviceFeatures2::builder()
                 .features(device_features)
+                .push_next(&mut descriptor_indexing_features)
                 .push_next(&mut buffer_features)
                 .build()
         };
