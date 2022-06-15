@@ -3,6 +3,7 @@ use std::cell::{Cell, Ref, RefCell};
 use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::io::Cursor;
+use std::mem::uninitialized;
 use std::ops::Deref;
 use std::rc::Rc;
 
@@ -13,10 +14,11 @@ use ash::vk::{AccessFlags, CommandBuffer, CommandBufferResetFlags, DrawIndexedIn
 use chrono::Duration;
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
+use syn::__private::quote::quote_bind_into_iter;
 use winit::window::Window;
 
 use crate::entity::World;
-use crate::graphics::{Extent, Geometry, Position, vulkan};
+use crate::graphics::{Extent, Geometry, Material, Position, vulkan};
 use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
@@ -69,7 +71,10 @@ pub struct Engine {
     pipeline_layout: ash::vk::PipelineLayout,
     frame_buffers: Vec<ash::vk::Framebuffer>,
     command_buffers: Vec<ash::vk::CommandBuffer>,
-    descriptor_sets: Vec<ash::vk::DescriptorSet>,
+    descriptor_pool: ::ash::vk::DescriptorPool,
+    global_descriptor_sets: Vec<ash::vk::DescriptorSet>,
+    material_descriptor_set_layout: ::ash::vk::DescriptorSetLayout,
+    texture_sampler: ::ash::vk::Sampler,
     ubo_buffer: Buffer<UniformBufferObject>,
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
@@ -126,8 +131,11 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
     let viewports: [ash::vk::Viewport; 1];
     let scissors: [ash::vk::Rect2D; 1];
     let pipelines: Vec<ash::vk::Pipeline>;
-    let pipeline_layout: ash::vk::PipelineLayout;
-    let descriptor_sets: Vec<ash::vk::DescriptorSet>;
+    let pipeline_layout: ::ash::vk::PipelineLayout;
+    let descriptor_pool: ::ash::vk::DescriptorPool;
+    let global_descriptor_sets: Vec<ash::vk::DescriptorSet>;
+    let material_descriptor_set_layout: ::ash::vk::DescriptorSetLayout;
+    let texture_sampler: ::ash::vk::Sampler;
     let ubo_buffer: Buffer<UniformBufferObject>;
     let index_buffer: ash::vk::Buffer;
     let vertex_buffer: ash::vk::Buffer;
@@ -399,61 +407,93 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         let dynamic_state_info = ash::vk::PipelineDynamicStateCreateInfo::builder()
             .dynamic_states(&dynamic_state);
 
-        let ubo_layout_binding = ash::vk::DescriptorSetLayoutBinding::builder()
-            .binding(0)
-            .descriptor_count(1)
-            .stage_flags(::ash::vk::ShaderStageFlags::VERTEX)
-            .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
-            .build();
+        descriptor_pool = {
+            let pool_sizes = {
+                let count = (*swapchain).views().len() as u32;
+                [
+                    ::ash::vk::DescriptorPoolSize::builder()
+                        .ty(ash::vk::DescriptorType::UNIFORM_BUFFER)
+                        .descriptor_count(count)
+                        .build(),
+                    ::ash::vk::DescriptorPoolSize::builder()
+                        .ty(::ash::vk::DescriptorType::SAMPLER)
+                        .descriptor_count(count * 16) // TODO: how many sampler descriptors do we need?
+                        .build(),
+                ]
+            };
 
-        let descriptor_set_layouts = [
-            {
-                let bindings = [ubo_layout_binding];
+            let pool_create_info = ash::vk::DescriptorPoolCreateInfo::builder()
+                .max_sets(1024) // TODO: how many descriptor sets do we need?
+                .pool_sizes(&pool_sizes)
+                .build();
 
-                let create_info = ash::vk::DescriptorSetLayoutCreateInfo::builder()
-                    .bindings(&bindings)
-                    .build();
-
-                unsafe {
-                    _device.handle().create_descriptor_set_layout(&create_info, None)
-                        .expect("Failed to create descriptor set!")
-                }
+            unsafe {
+                _device.handle().create_descriptor_pool(&pool_create_info, None)
+                    .expect("Failed to create descriptor pool")
             }
-        ];
+        };
 
-        {
-            let descriptor_pool_sizes = [
-                ash::vk::DescriptorPoolSize::builder()
-                    .ty(ash::vk::DescriptorType::UNIFORM_BUFFER)
-                    .descriptor_count((*swapchain).views().len() as u32)
+        let global_descriptor_set_layout = {
+            let bindings = [
+                ::ash::vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0)
+                    .descriptor_count(1)
+                    .stage_flags(::ash::vk::ShaderStageFlags::VERTEX)
+                    .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
                     .build()
             ];
 
-            let create_info = ash::vk::DescriptorPoolCreateInfo::builder()
-                .max_sets((*swapchain).views().len() as u32)
-                .pool_sizes(&descriptor_pool_sizes)
+            let create_info = ::ash::vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings)
                 .build();
 
-            let pool = unsafe {
-                _device.handle().create_descriptor_pool(&create_info, None)
-                    .expect("Failed to create descriptor pool")
-            };
+            unsafe {
+                _device.handle().create_descriptor_set_layout(&create_info, None)
+                    .expect("Failed to create descriptor set!")
+            }
+        };
 
-            descriptor_sets = swapchain.views().iter()
-                .map(|_| {
-                    let create_info = ash::vk::DescriptorSetAllocateInfo::builder()
-                        .descriptor_pool(pool)
-                        .set_layouts(&descriptor_set_layouts);
-                    unsafe {
-                        _device.handle().allocate_descriptor_sets(&create_info)
-                            .expect("Failed to allocate descriptor set")[0]
-                    }
-                }).collect::<Vec<_>>();
-        }
+        material_descriptor_set_layout = {
+            let bindings = [
+                ::ash::vk::DescriptorSetLayoutBinding::builder()
+                    .binding(0)
+                    .descriptor_count(1)
+                    .stage_flags(::ash::vk::ShaderStageFlags::FRAGMENT)
+                    .descriptor_type(::ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                    .build()
+            ];
+
+            let descriptor_set_layout_create_info = ::ash::vk::DescriptorSetLayoutCreateInfo::builder()
+                .bindings(&bindings)
+                .build();
+
+            unsafe {
+                _device.handle().create_descriptor_set_layout(&descriptor_set_layout_create_info, None)
+                    .expect("Failed to create descriptor set layout!")
+            }
+        };
+
+        global_descriptor_sets = swapchain.views().iter().map(|_| {
+            let descriptor_set_layouts = [
+                global_descriptor_set_layout
+            ];
+            let create_info = ash::vk::DescriptorSetAllocateInfo::builder()
+                .descriptor_pool(descriptor_pool)
+                .set_layouts(&descriptor_set_layouts);
+            unsafe {
+                _device.handle().allocate_descriptor_sets(&create_info)
+                    .expect("Failed to allocate descriptor set")[0]
+            }
+        }).collect::<Vec<_>>();
 
         pipeline_layout = {
 
-            let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::builder()
+            let descriptor_set_layouts = [
+                global_descriptor_set_layout,
+                material_descriptor_set_layout,
+            ];
+
+            let pipeline_layout_create_info = ::ash::vk::PipelineLayoutCreateInfo::builder()
                 .set_layouts(&descriptor_set_layouts)
                 .build();
 
@@ -580,23 +620,37 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             buffer
         };
 
+        texture_sampler = {
+            let sampler_create_info = ::ash::vk::SamplerCreateInfo::builder()
+                .mag_filter(::ash::vk::Filter::LINEAR)
+                .min_filter(::ash::vk::Filter::LINEAR)
+                .address_mode_u(::ash::vk::SamplerAddressMode::REPEAT)
+                .address_mode_v(::ash::vk::SamplerAddressMode::REPEAT)
+                .address_mode_w(::ash::vk::SamplerAddressMode::REPEAT);
+
+            unsafe {
+                _device.handle().create_sampler(&sampler_create_info, None)
+                    .expect("Failed to create sampler")
+            }
+        };
+
         {
             let size: usize = std::mem::size_of::<UniformBufferObject>();
-            descriptor_sets.iter().enumerate().for_each(|(index, descriptor_set)| {
+            global_descriptor_sets.iter().enumerate().for_each(|(index, descriptor_set)| {
                 let buffer_info = [
-                    ash::vk::DescriptorBufferInfo::builder()
+                    ::ash::vk::DescriptorBufferInfo::builder()
                         .buffer(*ubo_buffer.handle())
                         .offset((index * size) as u64)
                         .range(size as u64)
                         .build()
                 ];
                 let descriptor_writes = [
-                    ash::vk::WriteDescriptorSet::builder()
+                    ::ash::vk::WriteDescriptorSet::builder()
                         .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
                         .dst_set(*descriptor_set)
                         .dst_binding(0)
                         .buffer_info(&buffer_info)
-                        .build()
+                        .build(),
                 ];
                 let descriptor_copies: [ash::vk::CopyDescriptorSet; 0] = [];
                 unsafe {
@@ -619,7 +673,10 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         scissors,
         pipelines,
         pipeline_layout,
-        descriptor_sets,
+        descriptor_pool,
+        global_descriptor_sets,
+        material_descriptor_set_layout,
+        texture_sampler,
         ubo_buffer,
         image_available_semaphore,
         render_finished_semaphore,
@@ -639,6 +696,7 @@ pub fn create_geometry(
     instances: &Vec<InstanceData>,
 ) -> Geometry {
 
+    let _device = (*engine.device).borrow();
     let mut resource_manager = &mut engine.resource_manager;
 
     let index_buffer = {
@@ -703,6 +761,26 @@ pub fn create_geometry(
         image
     };
 
+    let texture_image_view = {
+        let image_view_create_info = ::ash::vk::ImageViewCreateInfo::builder()
+            .image(*texture_image.handle())
+            .view_type(::ash::vk::ImageViewType::TYPE_2D)
+            .format(::ash::vk::Format::R8G8B8A8_SRGB)
+            .subresource_range(::ash::vk::ImageSubresourceRange::builder()
+                .aspect_mask(::ash::vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1)
+                .build()
+            );
+
+        unsafe {
+            _device.handle().create_image_view(&image_view_create_info, None)
+                .expect("Failed to create image view")
+        }
+    };
+
     let instances_buffer = {
 
         let size: usize = (instances.len() * std::mem::size_of::<InstanceData>());
@@ -720,12 +798,57 @@ pub fn create_geometry(
         buffer
     };
 
+    let descriptor_set = {
+        let pool = engine.descriptor_pool;
+        let descriptor_set_layouts = [
+            engine.material_descriptor_set_layout
+        ];
+        let create_info = ash::vk::DescriptorSetAllocateInfo::builder()
+            .descriptor_pool(pool)
+            .set_layouts(&descriptor_set_layouts);
+        unsafe {
+            _device.handle().allocate_descriptor_sets(&create_info)
+                .expect("Failed to allocate descriptor set")[0]
+        }
+    };
+
+    {
+        let sampler = engine.texture_sampler;
+
+        let descriptor_image_info = [
+            ::ash::vk::DescriptorImageInfo::builder()
+                .sampler(sampler)
+                .image_layout(::ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(texture_image_view)
+                .build()
+        ];
+
+        let descriptor_writes = [
+            ::ash::vk::WriteDescriptorSet::builder()
+                .descriptor_type(::ash::vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .dst_set(descriptor_set)
+                .dst_binding(0)
+                .image_info(&descriptor_image_info)
+                .build()
+        ];
+
+        let descriptor_copies: [ash::vk::CopyDescriptorSet; 0] = [];
+
+        unsafe {
+            _device.handle().update_descriptor_sets(&descriptor_writes, &descriptor_copies)
+        }
+    }
+
     Geometry {
         index_buffer: index_buffer,
         vertex_buffer: vertex_buffer,
         instances_buffer: instances_buffer,
-        texture_buffer: texture_transfere_buffer,
-        texture_image: texture_image,
+        material: Material {
+            descriptor_set: descriptor_set,
+            texture_buffer: texture_transfere_buffer,
+            texture_image: texture_image,
+            texture_image_view: texture_image_view
+        },
     }
 }
 
@@ -810,10 +933,12 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
 
     world.geometries.iter().for_each(|geometry| {
 
+        let material = &geometry.material;
+
         layout_transition(
             _device.borrow(),
             command_buffer,
-            *geometry.texture_image.handle(),
+            *material.texture_image.handle(),
             range,
             ::ash::vk::ImageLayout::UNDEFINED,
             ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
@@ -832,13 +957,13 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
                 .build()
             )
             .image_offset(Offset3D { x: 0, y: 0, z: 0 })
-            .image_extent(geometry.texture_image.extent().into());
+            .image_extent(material.texture_image.extent().into());
 
         unsafe {
             _device.handle().cmd_copy_buffer_to_image(
                 command_buffer,
-                *geometry.texture_buffer.handle(),
-                *geometry.texture_image.handle(),
+                *material.texture_buffer.handle(),
+                *material.texture_image.handle(),
                 ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
                 &[*buffer_copy]
             )
@@ -847,7 +972,7 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
         layout_transition(
             _device.borrow(),
             command_buffer,
-            *geometry.texture_image.handle(),
+            *material.texture_image.handle(),
             range,
             ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
             ::ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -903,7 +1028,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
     record_commands(
         engine.device.clone(),
         &engine.command_buffers[index as usize],
-        &engine.descriptor_sets[index as usize],
+        &engine.global_descriptor_sets[index as usize],
         &engine.frame_buffers[index as usize],
         &engine.renderpass,
         &engine.viewports[0],
@@ -1056,12 +1181,6 @@ fn record_commands(
         _device.handle().cmd_begin_render_pass(*command_buffer, &renderpass_begin_info, ash::vk::SubpassContents::INLINE);
     }
 
-    let descriptor_sets = [*descriptor_set];
-    let offsets = [];
-    unsafe {
-        _device.handle().cmd_bind_descriptor_sets(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline_layout, 0, &descriptor_sets, &offsets)
-    }
-
     pipelines.iter().for_each(| pipeline | {
 
         unsafe {
@@ -1072,12 +1191,18 @@ fn record_commands(
 
             let vertex_buffers = [*geometry.vertex_buffer.handle()];
             let instance_data_buffers = [*geometry.instances_buffer.handle()];
-            let offsets: [u64; 1] = [0];
+            let buffer_offsets: [u64; 1] = [0];
+            let descriptor_sets = [
+                *descriptor_set,
+                geometry.material.descriptor_set
+            ];
+            let descriptor_sets_offsets = [];
 
             unsafe {
-                _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &offsets);
-                _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &offsets);
+                _device.handle().cmd_bind_vertex_buffers(*command_buffer, 0, &vertex_buffers, &buffer_offsets);
+                _device.handle().cmd_bind_vertex_buffers(*command_buffer, 1, &instance_data_buffers, &buffer_offsets);
                 _device.handle().cmd_bind_index_buffer(*command_buffer, *geometry.index_buffer.handle(), 0, ::ash::vk::IndexType::UINT32);
+                _device.handle().cmd_bind_descriptor_sets(*command_buffer, ash::vk::PipelineBindPoint::GRAPHICS, *pipeline_layout, 0, &descriptor_sets, &descriptor_sets_offsets)
             }
 
             unsafe {

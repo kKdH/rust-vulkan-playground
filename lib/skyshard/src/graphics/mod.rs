@@ -54,6 +54,12 @@ pub struct Geometry {
     pub index_buffer: Buffer<u32>,
     pub vertex_buffer: Buffer<Vertex>,
     pub instances_buffer: Buffer<InstanceData>,
+    pub material: Material,
+}
+
+pub struct Material {
+    pub descriptor_set: ::ash::vk::DescriptorSet,
     pub texture_buffer: Buffer<u8>,
-    pub texture_image: Image
+    pub texture_image: Image,
+    pub texture_image_view: ::ash::vk::ImageView,
 }
