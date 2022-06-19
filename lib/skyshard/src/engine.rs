@@ -10,11 +10,12 @@ use std::rc::Rc;
 use ash::extensions::ext::DebugUtils;
 use ash::extensions::khr;
 use ash::vk;
-use ash::vk::{AccessFlags, CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Offset3D, Rect2D, xcb_connection_t};
+use ash::vk::{AccessFlags, CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Extent3D, ImageLayout, Offset3D, Rect2D, xcb_connection_t};
 use chrono::Duration;
 use log::info;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
 use syn::__private::quote::quote_bind_into_iter;
+use winit::platform::unix::x11::ffi::_XkbDesc;
 use winit::window::Window;
 
 use crate::entity::World;
@@ -23,7 +24,7 @@ use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
-use crate::graphics::vulkan::resources::{Buffer, CopyDestination, ResourceManager, Resource, ImageAllocationDescriptor, ImageUsage};
+use crate::graphics::vulkan::resources::{Buffer, CopyDestination, ResourceManager, Resource, ImageAllocationDescriptor, ImageUsage, Image, ImageFormat};
 use crate::graphics::vulkan::resources::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::renderpass::create_render_pass;
@@ -626,7 +627,8 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
                 .min_filter(::ash::vk::Filter::LINEAR)
                 .address_mode_u(::ash::vk::SamplerAddressMode::REPEAT)
                 .address_mode_v(::ash::vk::SamplerAddressMode::REPEAT)
-                .address_mode_w(::ash::vk::SamplerAddressMode::REPEAT);
+                .address_mode_w(::ash::vk::SamplerAddressMode::REPEAT)
+                .border_color(::ash::vk::BorderColor::FLOAT_OPAQUE_WHITE);
 
             unsafe {
                 _device.handle().create_sampler(&sampler_create_info, None)
@@ -750,22 +752,21 @@ pub fn create_geometry(
         buffer
     };
 
-    let texture_image = {
+    let texture_image: Image = {
 
-        let image = resource_manager.create_image("texture-image", &ImageAllocationDescriptor {
+        resource_manager.create_image("texture-image", &ImageAllocationDescriptor {
             usage: [ImageUsage::Sampled, ImageUsage::TransferDestination],
             extent: texture_extent,
+            format: ImageFormat::RGBA8,
             memory: MemoryLocation::GpuOnly
-        }).expect("Failed to create texture image");
-
-        image
+        }).expect("Failed to create texture image")
     };
 
     let texture_image_view = {
         let image_view_create_info = ::ash::vk::ImageViewCreateInfo::builder()
             .image(*texture_image.handle())
             .view_type(::ash::vk::ImageViewType::TYPE_2D)
-            .format(::ash::vk::Format::R8G8B8A8_SRGB)
+            .format(::ash::vk::Format::R8G8B8A8_UNORM)
             .subresource_range(::ash::vk::ImageSubresourceRange::builder()
                 .aspect_mask(::ash::vk::ImageAspectFlags::COLOR)
                 .base_mip_level(0)
@@ -905,24 +906,42 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
         range: ::ash::vk::ImageSubresourceRange,
         from: ::ash::vk::ImageLayout,
         to: ::ash::vk::ImageLayout,
-        src_access_mask: ::ash::vk::AccessFlags,
-        dst_access_mask: ::ash::vk::AccessFlags,
     ) {
+
+        let (source_stage, source_access_mask, destination_stage, destination_access_mask) =
+            if from == ::ash::vk::ImageLayout::UNDEFINED && to == ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL {
+                (
+                    ::ash::vk::PipelineStageFlags::TOP_OF_PIPE,
+                    ::ash::vk::AccessFlags::NONE,
+                    ::ash::vk::PipelineStageFlags::TRANSFER,
+                    ::ash::vk::AccessFlags::TRANSFER_WRITE
+                )
+            }
+            else if from == ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL && to == ::ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL {
+                (
+                    ::ash::vk::PipelineStageFlags::TRANSFER,
+                    ::ash::vk::AccessFlags::TRANSFER_WRITE,
+                    ::ash::vk::PipelineStageFlags::FRAGMENT_SHADER,
+                    ::ash::vk::AccessFlags::SHADER_READ,
+                )
+            }
+            else {
+                todo!()
+            };
 
         let barrier = ::ash::vk::ImageMemoryBarrier::builder()
             .image(image)
             .old_layout(from)
             .new_layout(to)
             .subresource_range(range)
-            .src_access_mask(src_access_mask)
-            .dst_access_mask(dst_access_mask);
-
+            .src_access_mask(source_access_mask)
+            .dst_access_mask(destination_access_mask);
 
         unsafe {
             device.handle().cmd_pipeline_barrier(
                 command_buffer,
-                ::ash::vk::PipelineStageFlags::TOP_OF_PIPE,
-                ::ash::vk::PipelineStageFlags::TRANSFER,
+                source_stage,
+                destination_stage,
                 ::ash::vk::DependencyFlags::empty(),
                 &[],
                 &[],
@@ -941,9 +960,7 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
             *material.texture_image.handle(),
             range,
             ::ash::vk::ImageLayout::UNDEFINED,
-            ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            ::ash::vk::AccessFlags::NONE,
-            ::ash::vk::AccessFlags::TRANSFER_WRITE
+            ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL
         );
 
         let buffer_copy = ::ash::vk::BufferImageCopy::builder()
@@ -975,10 +992,8 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
             *material.texture_image.handle(),
             range,
             ::ash::vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-            ::ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-            ::ash::vk::AccessFlags::TRANSFER_WRITE,
-            ::ash::vk::AccessFlags::SHADER_READ,
-        )
+            ::ash::vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        );
     });
 
     unsafe {
@@ -992,12 +1007,13 @@ pub fn prepare(engine: &mut Engine, world: &mut World) {
 
     unsafe {
         _device.handle().queue_submit(*queue.handle(), &[*submit_info], completion_fence)
-    }.expect("Failed to submit queue");
+            .expect("Failed to submit queue");
+    }
 
     unsafe {
         let fences = [completion_fence];
         _device.handle().wait_for_fences(&fences, true, 5_000_000_000)
-            .expect("Failed to wait for command buffers completed fence!");
+            .expect("Failed to wait for command buffer completion fence!");
     }
 
     unsafe {

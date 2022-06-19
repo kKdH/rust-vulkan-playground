@@ -35,6 +35,7 @@ impl <const UsagesCount: usize> TryFrom<&BufferAllocationDescriptor<UsagesCount>
 pub struct ImageAllocationDescriptor<const N: usize> {
     pub usage: [ImageUsage; N],
     pub extent: Extent,
+    pub format: ImageFormat,
     pub memory: MemoryLocation,
 }
 
@@ -48,7 +49,7 @@ impl <const N: usize> TryFrom<&ImageAllocationDescriptor<N>> for ::ash::vk::Imag
             .extent((&descriptor.extent).into())
             .mip_levels(1)
             .array_layers(1)
-            .format(ash::vk::Format::D32_SFLOAT_S8_UINT)
+            .format(descriptor.format.into())
             .tiling(ash::vk::ImageTiling::OPTIMAL)
             .initial_layout(ash::vk::ImageLayout::UNDEFINED)
             .samples(ash::vk::SampleCountFlags::TYPE_1)
@@ -96,6 +97,21 @@ impl From<MemoryLocation> for gpu_allocator::MemoryLocation {
             MemoryLocation::CpuToGpu => gpu_allocator::MemoryLocation::CpuToGpu,
             MemoryLocation::GpuToCpu => gpu_allocator::MemoryLocation::GpuToCpu,
             MemoryLocation::GpuOnly => gpu_allocator::MemoryLocation::GpuOnly,
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum ImageFormat {
+    RGBA8,
+    DepthStencil,
+}
+
+impl From<ImageFormat> for ::ash::vk::Format {
+    fn from(format: ImageFormat) -> Self {
+        match format {
+            ImageFormat::RGBA8 => ::ash::vk::Format::R8G8B8A8_UNORM,
+            ImageFormat::DepthStencil => ::ash::vk::Format::D32_SFLOAT_S8_UINT,
         }
     }
 }

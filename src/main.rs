@@ -110,42 +110,42 @@ fn main() {
                     Vertex {
                         position: [-0.5, -0.5, 0.0], // front top-left
                         color: [1.0, 0.0, 0.0],
-                        uv: [0.7, 0.5],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, -0.5, 0.0], // front top-right
                         color: [0.0, 1.0, 0.0],
-                        uv: [0.0, 0.0],
+                        uv: [1.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, 0.5, 0.0], // front bottom-right
                         color: [0.0, 0.0, 1.0],
-                        uv: [0.3, 0.8],
+                        uv: [1.0, 1.0],
                     },
                     Vertex {
                         position: [-0.5, 0.5, 0.0], // front bottom-left
                         color: [1.0, 1.0, 1.0],
-                        uv: [0.1, 0.75],
+                        uv: [0.0, 1.0],
                     },
                     Vertex {
                         position: [-0.5, 0.5, 1.0], // rear bottom-left
                         color: [1.0, 0.0, 1.0],
-                        uv: [0.4, 1.0],
+                        uv: [0.0, 1.0],
                     },
                     Vertex {
                         position: [-0.5, -0.5, 1.0], // rear top-left
                         color: [1.0, 1.0, 0.0],
-                        uv: [0.3, 0.1],
+                        uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, 0.5, 1.0], // rear bottom-right
                         color: [1.0, 0.0, 0.0],
-                        uv: [0.2, 0.9],
+                        uv: [1.0, 1.0],
                     },
                     Vertex {
                         position: [0.5, -0.5, 1.0], // rear top-right
                         color: [0.0, 0.0, 1.0],
-                        uv: [0.2, 0.0],
+                        uv: [1.0, 0.0],
                     },
                 ],
                 &texture_data,

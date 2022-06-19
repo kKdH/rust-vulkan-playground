@@ -30,7 +30,6 @@ impl From<Extent> for ::ash::vk::Extent3D {
     }
 }
 
-
 impl From<&Extent> for ::ash::vk::Extent3D {
     fn from(extent: &Extent) -> Self {
         ::ash::vk::Extent3D {

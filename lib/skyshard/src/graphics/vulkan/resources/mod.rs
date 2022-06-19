@@ -6,7 +6,7 @@ mod image;
 
 pub use buffer::{Buffer, Element};
 pub use copy::{CopyDestination, CopySource};
-pub use descriptors::{BufferAllocationDescriptor, ImageAllocationDescriptor, BufferUsage, ImageUsage, MemoryLocation};
+pub use descriptors::{BufferAllocationDescriptor, ImageAllocationDescriptor, BufferUsage, ImageUsage, ImageFormat, MemoryLocation};
 pub use image::{Image};
 
 use log::info;

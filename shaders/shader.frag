@@ -11,6 +11,6 @@ layout(location = 0) out vec4 outColor;
 void main() {
     vec3 color = texture(texture_sampler, inTextCord).xyz;
     outColor = vec4(color, 1.0f);
-//    outColor = vec4(inTextCord.x, inTextCord.y, 0.5f, 1.0f);
+//    outColor = vec4(inTextCord.x, inTextCord.y, 0.15f, 1.0f);
 //    outColor = vec4(inFragColor, 1.0);
 }
