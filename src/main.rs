@@ -14,7 +14,7 @@ use std::process::exit;
 use std::rc::{Rc, Weak};
 use std::slice::Iter;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, SystemTimeError};
 use std::vec;
 
 use ash::extensions::{
@@ -65,11 +65,12 @@ fn main() {
 
     let mut events_loop = EventLoop::new();
 
-    let window_width = 640;
-    let window_height = 480;
+    let window_width = 960;
+    let window_height = 540;
 
+    let window_title_prefix = "rust vulkan example: ";
     let window = WindowBuilder::new()
-        .with_title("rust vulkan example")
+        .with_title(window_title_prefix)
         .with_inner_size(winit::dpi::LogicalSize::new(
             f64::from(window_width),
             f64::from(window_height),
@@ -253,6 +254,10 @@ fn main() {
         let mut roll = 0.0;
         let mut pitch = 0.0;
         let mut yaw = 0.0;
+        let mut render_time: SystemTime = SystemTime::now();
+        let mut frames_per_second_time: SystemTime = SystemTime::now();
+        let mut frame_count: u32 = 0;
+        let mut frames_per_second: u32 = 0;
 
         skyshard::prepare(&mut engine, &mut world);
 
@@ -386,6 +391,24 @@ fn main() {
                         (false, false) => {}
                         (true, false) => {
                             skyshard::render(&mut engine, &mut world, &camera);
+                            frame_count += 1;
+                            match frames_per_second_time.elapsed() {
+                                Ok(elapsed) => {
+                                    if elapsed >= Duration::new(1, 0) {
+                                        frames_per_second = frame_count;
+                                        frames_per_second_time = SystemTime::now();
+                                        frame_count = 0;
+                                    }
+                                }
+                                Err(_) => {}
+                            };
+                            match render_time.elapsed() {
+                                Ok(elapsed) => {
+                                    window.set_title(format!("{} {} ms, {} fps", window_title_prefix, elapsed.as_millis(), frames_per_second).as_str());
+                                }
+                                Err(_) => {}
+                            };
+                            render_time = SystemTime::now();
                             std::thread::sleep(Duration::from_millis(30))
                         }
                         (_, true) => {
