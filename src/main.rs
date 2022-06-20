@@ -439,7 +439,3 @@ fn load_image(filepath: &'static str) -> (Extent, Vec<u8>) {
 
     (Extent::from(info.width, info.width, 1), Vec::from(bytes))
 }
-
-mod tests {
-
-}

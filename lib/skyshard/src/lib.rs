@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate memoffset;
 
+mod assets;
 mod engine;
 mod util;
 

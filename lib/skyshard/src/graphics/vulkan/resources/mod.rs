@@ -1,4 +1,3 @@
-
 mod buffer;
 mod copy;
 mod descriptors;
@@ -221,7 +220,4 @@ pub enum ResourceManagerError {
     FreeMemoryError {
         name: &'static str
     },
-
-    #[error("Somthing went wrong!")]
-    UnknownFailure,
 }

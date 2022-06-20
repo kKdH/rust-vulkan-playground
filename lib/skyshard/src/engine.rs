@@ -17,6 +17,7 @@ use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3
 use syn::__private::quote::quote_bind_into_iter;
 use winit::platform::unix::x11::ffi::_XkbDesc;
 use winit::window::Window;
+use crate::assets::AssetsManager;
 
 use crate::entity::World;
 use crate::graphics::{Extent, Geometry, Material, Position, vulkan};
@@ -63,6 +64,7 @@ pub struct Engine {
     instance: InstanceRef,
     device: DeviceRef,
     resource_manager: ResourceManager,
+    assets_manager: AssetsManager,
     surface: SurfaceRef,
     swapchain: SwapchainRef,
     renderpass: ash::vk::RenderPass,
@@ -124,6 +126,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
 
     let device;
     let mut resource_manager;
+    let assets_manager;
     let surface;
     let swapchain;
     let frame_buffers: Vec<ash::vk::Framebuffer>;
@@ -168,6 +171,9 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             (*device).borrow().handle(),
             (*physical_device).handle()
         ).expect("Failed to create ResourceManager");
+
+        assets_manager = AssetsManager::new("./assets")
+            .expect("Failed to create AssetsManager");
 
         swapchain = {
             let _device = (*device).borrow();
@@ -666,6 +672,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
         instance,
         device,
         resource_manager,
+        assets_manager,
         surface,
         swapchain,
         frame_buffers,
