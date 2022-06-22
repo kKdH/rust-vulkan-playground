@@ -50,6 +50,12 @@ impl Extent {
     }
 }
 
+impl Default for Extent {
+    fn default() -> Self {
+        Extent::new()
+    }
+}
+
 pub struct Geometry {
     pub index_buffer: Buffer<u32>,
     pub vertex_buffer: Buffer<Vertex>,

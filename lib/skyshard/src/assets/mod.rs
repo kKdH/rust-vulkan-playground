@@ -4,6 +4,7 @@ use std::fs::read_dir;
 use log::{debug, info};
 
 use thiserror::Error;
+use crate::Engine;
 
 type Result<T, E = AssetsManagerError> = ::std::result::Result<T, E>;
 
@@ -14,7 +15,7 @@ pub struct AssetsManager {
 
 impl AssetsManager {
 
-    pub fn new(base_dir: &'static str) -> Result<AssetsManager> {
+    pub fn new(base_dir: &String) -> Result<AssetsManager> {
         let base_dir_path = PathBuf::from(base_dir);
 
         if base_dir_path.exists() {
@@ -32,7 +33,7 @@ impl AssetsManager {
                         .to_string();
                     result.insert(Clone::clone(&name), Node {
                         file_path: Box::from(file_path.as_path()),
-                        name: name
+                        name: Clone::clone(&name)
                     });
                     debug!("Added asset '{}' from file '{}'.", &name, file_path_str);
                     result
@@ -44,10 +45,29 @@ impl AssetsManager {
             })
         }
         else {
-            Err(AssetsManagerError::BaseDirNotFoundError { path: base_dir })
+            Err(AssetsManagerError::BaseDirNotFoundError { path: Clone::clone(base_dir) })
         }
     }
 
+    pub fn load_node<A, B>(&self, name: &String, mut load_fn: A) -> Result<B>
+    where A: FnMut(&Node) -> B {
+        match self.nodes.get(name.as_str()) {
+            None => { todo!() }
+            Some(node) => {
+                Ok(load_fn(node))
+            }
+        }
+    }
+}
+
+pub fn load_node<A, B>(engine: &Engine, name: &String, mut load_fn: A) -> Result<B>
+where A: FnMut(&Node) -> B {
+    match engine.asset_manager().nodes.get(name.as_str()) {
+        None => { todo!() }
+        Some(node) => {
+            Ok(load_fn(node))
+        }
+    }
 }
 
 #[derive(Error, Debug)]
@@ -57,13 +77,23 @@ pub enum AssetsManagerError {
     AssetsManagerInstantiationError,
 
     #[error("The AssetsManager's base directory '{path}' does not exists!")]
-    BaseDirNotFoundError { path: &'static str},
+    BaseDirNotFoundError { path: String },
 
     #[error("Failed to open file '{path}'!")]
-    OpenFileError { path: String }
+    OpenFileError { path: String },
+
+    #[error("Asset '{name}' not found!")]
+    AssetNotFound { name: String },
 }
 
 pub struct Node {
     file_path: Box<Path>,
     name: String,
+}
+
+impl Node {
+
+    pub fn name(&self) -> &String {
+        &self.name
+    }
 }

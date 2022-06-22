@@ -80,7 +80,28 @@ fn main() {
 
     {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
+        let asset_manager = engine.asset_manager();
         let mut world = World::new();
+
+        let cube = skyshard::load_node(&engine, &String::from("Cube"), |node| {
+
+            info!("Loading '{}'.", node.name());
+
+
+
+            info!("Loaded '{}'.", node.name());
+
+        }).expect("Failed to load cube");
+
+        // let cube = skyshard::create_geometry(&mut engine,
+        //     &Vec::new(),
+        //     &Vec::new(),
+        //     &Vec::new(),
+        //     Extent::new(),
+        //     &Vec::new(),
+        // );
+
+        // world.geometries.push(cube);
 
         let (texture_extent, texture_data) = load_image("src/texture-small.png");
 

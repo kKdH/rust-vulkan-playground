@@ -18,3 +18,4 @@ pub use engine::render;
 pub use engine::prepare;
 pub use engine::Vertex;
 pub use engine::InstanceData;
+pub use assets::load_node;

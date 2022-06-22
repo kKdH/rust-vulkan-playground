@@ -95,6 +95,10 @@ impl Engine {
         info!("surface references: {} / {} ", Rc::strong_count(&self.surface), Rc::weak_count(&self.surface));
         info!("swapchain references: {} / {}", Rc::strong_count(&self.swapchain), Rc::weak_count(&self.swapchain));
     }
+
+    pub fn asset_manager(&self) -> &AssetsManager {
+        &self.assets_manager
+    }
 }
 
 impl Drop for Engine {
@@ -172,7 +176,7 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             (*physical_device).handle()
         ).expect("Failed to create ResourceManager");
 
-        assets_manager = AssetsManager::new("./assets")
+        assets_manager = AssetsManager::new(&String::from("./assets"))
             .expect("Failed to create AssetsManager");
 
         swapchain = {
