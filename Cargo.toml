@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 skyshard = { path = "lib/skyshard" }
-
+rand = "0.8.5"
 log = "0.4.17"
 log4rs = "1.1.1"
 ash = "0.36.0+1.3.206"

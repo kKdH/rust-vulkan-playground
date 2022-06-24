@@ -1,0 +1,93 @@
+{
+    "asset" : {
+        "generator" : "Khronos glTF Blender I/O v3.2.40",
+        "version" : "2.0"
+    },
+    "scene" : 0,
+    "scenes" : [
+        {
+            "name" : "Scene",
+            "nodes" : [
+                0
+            ]
+        }
+    ],
+    "nodes" : [
+        {
+            "mesh" : 0,
+            "name" : "Cube",
+            "scale" : [
+                2,
+                2,
+                2
+            ]
+        }
+    ],
+    "meshes" : [
+        {
+            "name" : "Cube.001",
+            "primitives" : [
+                {
+                    "attributes" : {
+                        "POSITION" : 0,
+                        "TEXCOORD_0" : 1
+                    },
+                    "indices" : 2
+                }
+            ]
+        }
+    ],
+    "accessors" : [
+        {
+            "bufferView" : 0,
+            "componentType" : 5126,
+            "count" : 58,
+            "max" : [
+                0.2889188528060913,
+                0.32071059942245483,
+                0.23600199818611145
+            ],
+            "min" : [
+                -0.11611808836460114,
+                -0.11611808836460114,
+                -0.11611808091402054
+            ],
+            "type" : "VEC3"
+        },
+        {
+            "bufferView" : 1,
+            "componentType" : 5126,
+            "count" : 58,
+            "type" : "VEC2"
+        },
+        {
+            "bufferView" : 2,
+            "componentType" : 5123,
+            "count" : 300,
+            "type" : "SCALAR"
+        }
+    ],
+    "bufferViews" : [
+        {
+            "buffer" : 0,
+            "byteLength" : 696,
+            "byteOffset" : 0
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 464,
+            "byteOffset" : 696
+        },
+        {
+            "buffer" : 0,
+            "byteLength" : 600,
+            "byteOffset" : 1160
+        }
+    ],
+    "buffers" : [
+        {
+            "byteLength" : 1760,
+            "uri" : "data:application/octet-stream;base64,Us/tvVLP7b1Rz+29Us/tvVLP7b1Rz+29Us/tvVLP7b1Rz+29gAWdvYAFnb1Rz+09nkGXvVLP7T2cQZe9gAWdvYAFnT1Rz+09LO2TPtrGSr3Yxkq9gAWdPYAFnb1Rz+09LO2TPtrGSj3Zxkq9gAWdPYAFnT1Rz+09Us/tvVLP7b1Rz+09Us/tvVLP7b1Rz+09Us/tvVLP7b1Rz+09nkGXvVLP7T2cQZc9LO2TPtrGSj3Zxko9LO2TPtrGSr3Yxko9gAWdvYAFnb2CqnE+gAWdvYAFnT2CqnE+gAWdPYAFnT2CqnE+gAWdPYAFnb2CqnE+nEGXPVLP7T2cQZc9nEGXPVLP7T2cQZe9Us/tPVLP7b1Rz+29Us/tPVLP7b1Rz+09Us/tPczvqz3M76s9Us/tPczvqz3M76u9Us/tPczvq73L76u9Us/tPczvq73L76s9Us/tvVLP7T1Rz+09Us/tvVLP7T1Rz+09Us/tvVLP7T1Rz+29Us/tvVLP7T1Rz+29Us/tPVLP7T1Rz+29Us/tPVLP7T1Rz+098t0yvVriYz7u3TI98t0yvVriYz7u3TK97N0yPVriYz7u3TK97N0yPVriYz7u3TI9nkGXvVriYz6cQZc9nkGXvVriYz6cQZe9nEGXPVriYz6cQZe9nEGXPVriYz6cQZc98t0yvd8ejD7u3TI98t0yvd8ejD7u3TK97N0yPd8ejD7u3TK97N0yPd8ejD7u3TI98t0yvS40pD7u3TI98t0yvS40pD7u3TK97N0yPS40pD7u3TK97N0yPS40pD7u3TI98t0yvd8ejD4kQLU97N0yPd8ejD4kQLU98t0yvS40pD4kQLU97N0yPS40pD4kQLU9O1vKPd8ejD7u3TI9O1vKPd8ejD7u3TK9O1vKPS40pD7u3TI9O1vKPS40pD7u3TK9AAAAPgAAgD4AAMA+AAAAAAAAwD4AAIA/CCFVP/K9lT4kS9c+blo0PwchVT8OQuo+0LbkPtC2pD743io/9L2VPtC25D4ySds++N4qPxBC6j4AACA/AAAAAAAAID8AAIA/AABgPwAAgD5uWhQ/blo0P5ikDT8wSds+mKQNP9C2pD4IIVU/8r2VPgchVT8OQuo++N4qPxBC6j743io/9L2VPm1aFD+SpQs/I0vXPpKlCz8AAMA+AACAPgAAID8AAIA+0yIXP6RF7j5butE+pkXuPlu60T5cupE+0yIXP1q6kT4AACA/AABAPwAAYD8AAAA/AAAAPgAAAD8AAMA+AABAPwAAwD4AAAA/AAAgPwAAAD/HCAw/xwgsP3Lu5z7HCCw/c+7nPjr3Ez/GCAw/OvcTP25aFD9uWjQ/JEvXPm5aND8jS9c+kqULP21aFD+SpQs/xwgMP8cILD9y7uc+xwgsP3Pu5z469xM/xggMPzr3Ez/HCAw/xwgsP3Lu5z7HCCw/c+7nPjr3Ez/GCAw/OvcTP8cIDD/HCCw/xggMPzr3Ez/HCAw/xwgsP8YIDD869xM/xggMPzr3Ez9z7uc+OvcTP8YIDD869xM/c+7nPjr3Ez8CAAsAHAACABwAHwANABQAKQANACkAJgAIAA4ADwAIAA8ABgAWABcACgAWAAoAAQAeACAAFgAeABYAAAAHAAkAEgAHABIAEwADAAUAHQADAB0ADAAFAAkAIQAFACEAHQAJAAcAFwAJABcAIQAHAAMADAAHAAwAFwASABEAEAASABAAEwAFAAMAEAAFABAAEQADAAcAEwADABMAEAAJAAUAEQAJABEAEgAYABkAIAAYACAAIQAZABoAFgAZABYAIAAbABgAIQAbACEAFwAaABsAFwAaABcAFgAOAAgAGQAOABkAGAAIAAYAGgAIABoAGQAPAA4AGAAPABgAGwAGAA8AGwAGABsAGgANAAQAHwANAB8AHAAEABUAIAAEACAAHwAUAA0AHAAUABwAIQAVABQAIQAVACEAIAAiACUALQAiAC0AKgAEAA0AJgAEACYAJwAUABUAKAAUACgAKQAVAAQAJwAVACcAKAAiACMAJwAiACcAJgAjACQAKAAjACgAJwAlACIAJgAlACYAKQAkACUAKQAkACkAKAAtACwANwAtADcANgAjACIAKgAjACoAKwAlACQALAAlACwALQAkACMAKwAkACsALAAvAC4AMQAvADEAMAAsACsALwAsAC8AMAAxAC4ANAAxADQANQArACoALgArAC4ALwAyADMANQAyADUANAAuACoAMgAuADIANAAqAC0AMwAqADMAMgAtADEANQAtADUAMwA2ADcAOQA2ADkAOAAsADAAOQAsADkANwAxAC0ANgAxADYAOAAwADEAOAAwADgAOQA="
+        }
+    ]
+}

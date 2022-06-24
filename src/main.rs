@@ -38,6 +38,8 @@ use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
+use rand::Rng;
+
 
 fn main() {
 
@@ -78,98 +80,46 @@ fn main() {
         .build(&events_loop)
         .unwrap();
 
+    let mut rng = rand::thread_rng();
+
     {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
         let asset_manager = engine.asset_manager();
         let mut world = World::new();
 
-        let cube = skyshard::load_node(&engine, &String::from("Cube"), |node| {
-
-            info!("Loading '{}'.", node.name());
-
-
-
-            info!("Loaded '{}'.", node.name());
-
-        }).expect("Failed to load cube");
-
-        // let cube = skyshard::create_geometry(&mut engine,
-        //     &Vec::new(),
-        //     &Vec::new(),
-        //     &Vec::new(),
-        //     Extent::new(),
-        //     &Vec::new(),
-        // );
-
-        // world.geometries.push(cube);
-
         let (texture_extent, texture_data) = load_image("src/texture-small.png");
+        let cube_node = asset_manager.load_node(&String::from("Cube")).expect("Failed to load cube");
+        let cube_mesh = cube_node.mesh();
+        let cube_vertices: Vec<Vertex> = cube_mesh.positions.iter().map(|index| {
+            Vertex {
+                position: *index,
+                color: [
+                    rng.gen_range(0f32..1f32),
+                    rng.gen_range(0f32..1f32),
+                    rng.gen_range(0f32..1f32)
+                ],
+                uv: [0.0, 0.0] //(&cube_mesh.texture_coordinates)[*index as usize],
+            }
+        }).collect();
 
-        {
+        let cube = {
+
             let transformation1 = Matrix4::<f32>::identity()
                 .append_translation(&Vector3::new(0.0, 0.0, 0.0));
 
             let mut transformation2 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(1.5, 0.0, 0.0));
+                .append_translation(&Vector3::new(2.5, 0.0, 0.0));
 
             transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, 0.7);
 
             let mut  transformation3 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(0.0, 2.0, 1.5));
+                .append_translation(&Vector3::new(0.0, 3.0, 1.5));
 
             transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
 
-            world.geometries.push(skyshard::create_geometry(&mut engine,
-                &vec![
-                    0, 1, 2, 2, 3, 0, // front
-                    0, 3, 4, 5, 0, 4, // left
-                    1, 7, 6, 2, 1, 6, // right
-                    0, 5, 1, 1, 5, 7, // top
-                    2, 4, 3, 6, 4, 2, // bottom
-                    5, 4, 6, 6, 7, 5, // rear
-                ],
-                &vec![
-                    Vertex {
-                        position: [-0.5, -0.5, 0.0], // front top-left
-                        color: [1.0, 0.0, 0.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [0.5, -0.5, 0.0], // front top-right
-                        color: [0.0, 1.0, 0.0],
-                        uv: [1.0, 0.0],
-                    },
-                    Vertex {
-                        position: [0.5, 0.5, 0.0], // front bottom-right
-                        color: [0.0, 0.0, 1.0],
-                        uv: [1.0, 1.0],
-                    },
-                    Vertex {
-                        position: [-0.5, 0.5, 0.0], // front bottom-left
-                        color: [1.0, 1.0, 1.0],
-                        uv: [0.0, 1.0],
-                    },
-                    Vertex {
-                        position: [-0.5, 0.5, 1.0], // rear bottom-left
-                        color: [1.0, 0.0, 1.0],
-                        uv: [0.0, 1.0],
-                    },
-                    Vertex {
-                        position: [-0.5, -0.5, 1.0], // rear top-left
-                        color: [1.0, 1.0, 0.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [0.5, 0.5, 1.0], // rear bottom-right
-                        color: [1.0, 0.0, 0.0],
-                        uv: [1.0, 1.0],
-                    },
-                    Vertex {
-                        position: [0.5, -0.5, 1.0], // rear top-right
-                        color: [0.0, 0.0, 1.0],
-                        uv: [1.0, 0.0],
-                    },
-                ],
+            skyshard::create_geometry(&mut engine,
+                &cube_mesh.indices,
+                &cube_vertices,
                 &texture_data,
                 texture_extent,
                 &vec![
@@ -192,8 +142,99 @@ fn main() {
                             .expect("slice with incorect length")
                     },
                 ])
-            );
-        }
+        };
+
+        world.geometries.push(cube);
+
+        // {
+        //     let transformation1 = Matrix4::<f32>::identity()
+        //         .append_translation(&Vector3::new(0.0, 0.0, 0.0));
+        //
+        //     let mut transformation2 = Matrix4::<f32>::identity()
+        //         .append_translation(&Vector3::new(1.5, 0.0, 0.0));
+        //
+        //     transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, 0.7);
+        //
+        //     let mut  transformation3 = Matrix4::<f32>::identity()
+        //         .append_translation(&Vector3::new(0.0, 2.0, 1.5));
+        //
+        //     transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
+        //
+        //     world.geometries.push(skyshard::create_geometry(&mut engine,
+        //         &vec![
+        //             0, 1, 2, 2, 3, 0, // front
+        //             0, 3, 4, 5, 0, 4, // left
+        //             1, 7, 6, 2, 1, 6, // right
+        //             0, 5, 1, 1, 5, 7, // top
+        //             2, 4, 3, 6, 4, 2, // bottom
+        //             5, 4, 6, 6, 7, 5, // rear
+        //         ],
+        //         &vec![
+        //             Vertex {
+        //                 position: [-0.5, -0.5, 0.0], // front top-left
+        //                 color: [1.0, 0.0, 0.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.5, -0.5, 0.0], // front top-right
+        //                 color: [0.0, 1.0, 0.0],
+        //                 uv: [1.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.5, 0.5, 0.0], // front bottom-right
+        //                 color: [0.0, 0.0, 1.0],
+        //                 uv: [1.0, 1.0],
+        //             },
+        //             Vertex {
+        //                 position: [-0.5, 0.5, 0.0], // front bottom-left
+        //                 color: [1.0, 1.0, 1.0],
+        //                 uv: [0.0, 1.0],
+        //             },
+        //             Vertex {
+        //                 position: [-0.5, 0.5, 1.0], // rear bottom-left
+        //                 color: [1.0, 0.0, 1.0],
+        //                 uv: [0.0, 1.0],
+        //             },
+        //             Vertex {
+        //                 position: [-0.5, -0.5, 1.0], // rear top-left
+        //                 color: [1.0, 1.0, 0.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.5, 0.5, 1.0], // rear bottom-right
+        //                 color: [1.0, 0.0, 0.0],
+        //                 uv: [1.0, 1.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.5, -0.5, 1.0], // rear top-right
+        //                 color: [0.0, 0.0, 1.0],
+        //                 uv: [1.0, 0.0],
+        //             },
+        //         ],
+        //         &texture_data,
+        //         texture_extent,
+        //         &vec![
+        //             InstanceData {
+        //                 transformation: transformation1.data
+        //                     .as_slice()
+        //                     .try_into()
+        //                     .expect("slice with incorect length")
+        //             },
+        //             InstanceData {
+        //                 transformation: transformation2.data
+        //                     .as_slice()
+        //                     .try_into()
+        //                     .expect("slice with incorect length")
+        //             },
+        //             InstanceData {
+        //                 transformation: transformation3.data
+        //                     .as_slice()
+        //                     .try_into()
+        //                     .expect("slice with incorect length")
+        //             },
+        //         ])
+        //     );
+        // }
 
         {
             let mut transformation1 = Matrix4::<f32>::identity()
@@ -203,11 +244,11 @@ fn main() {
 
             world.geometries.push(skyshard::create_geometry(&mut engine,
                 &vec![
-                    1, 0, 2, // front
-                    5, 3, 4, // back
-                    0, 3, 2, 2, 3, 5, // right
-                    3, 0, 1, 1, 4, 3, // left
-                    1, 2, 4, 4, 2, 5, // bottom
+                    2, 0, 1, // front
+                    4, 3, 5, // back
+                    2, 3, 0, 5, 3, 2, // right
+                    1, 0, 3, 3, 4, 1, // left
+                    4, 2, 1, 5, 2, 4, // bottom
                 ],
                 &vec![
                     Vertex {
