@@ -1,6 +1,11 @@
 use std::collections::HashMap;
 use std::num::NonZeroU64;
 
+mod analyse {
+
+
+}
+
 mod parse {
 
     use std::collections::HashMap;
@@ -274,6 +279,7 @@ mod parse {
         })(input)
     }
 
+    #[cfg(test)]
     mod test {
         use nom::{Err, Finish};
         use hamcrest2::{assert_that, HamcrestMatcher, equal_to, is};
