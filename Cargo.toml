@@ -7,13 +7,14 @@ edition = "2021"
 [dependencies]
 ash = "0.36.0+1.3.206"
 ash-window = "0.9.1"
-skyshard = { path = "lib/skyshard" }
+itertools = "0.10.3"
 log = "0.4.17"
 log4rs = "1.1.1"
 nalgebra = "0.31.0"
 nom = "7.1.1"
 png = "0.17.5"
 rand = "0.8.5"
+skyshard = { path = "lib/skyshard" }
 thiserror = "1.0.31"
 winit = "0.26.1"
 

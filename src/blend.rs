@@ -2,8 +2,11 @@ use std::collections::HashMap;
 use std::num::NonZeroU64;
 
 mod analyse {
+    use crate::blend::parse::Blend;
 
+    fn analyse(blend: Blend) {
 
+    }
 }
 
 mod parse {
@@ -11,6 +14,7 @@ mod parse {
     use std::collections::HashMap;
     use std::num::NonZeroU64;
     use std::default::Default;
+    use itertools::Itertools;
     use nom::branch::alt;
     use nom::bytes::complete::{tag, take, take_until, take_until1};
     use nom::combinator::map;
@@ -24,60 +28,67 @@ mod parse {
     type Result<'a, A> = IResult<&'a[u8], A>;
 
     const BLENDER: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
-    const REND: [u8; 4] = [0x52, 0x45, 0x4e, 0x44];
 
     #[derive(Debug)]
-    struct Blend {
+    pub struct Blend {
         header: FileHeader,
-        blocks: HashMap<NonZeroU64, FileBlock>
+        blocks: Vec<FileBlock>,
+        blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>>,
+        blocks_by_address: HashMap<NonZeroU64, Vec<FileBlock>>,
     }
 
-    #[derive(Debug, Copy, Clone, PartialEq)]
-    struct FileHeader {
-        pointer_size: PointerSize,
-        endianness: Endianness,
-        version: Version,
-    }
+    impl Blend {
 
-    #[derive(Debug, Copy, Clone, PartialEq)]
-    enum PointerSize {
-        Pointer4Bytes,
-        Pointer8Bytes
-    }
+        pub fn header(&self) -> &FileHeader {
+            &self.header
+        }
 
-    impl PointerSize {
-        fn size(&self) -> usize {
-            match self {
-                PointerSize::Pointer4Bytes => 4,
-                PointerSize::Pointer8Bytes => 8
-            }
+        pub fn blocks_by_address(&self, address: NonZeroU64) -> Option<&Vec<FileBlock>> {
+            self.blocks_by_address.get(&address)
+        }
+
+        pub fn blocks_by_identifier(&self, identifier: Identifier) -> Option<&Vec<FileBlock>> {
+            self.blocks_by_identifier.get(&identifier)
         }
     }
 
     #[derive(Debug, Copy, Clone, PartialEq)]
-    enum Endianness {
+    pub struct FileHeader {
+        pub pointer_size: PointerSize,
+        pub endianness: Endianness,
+        pub version: Version,
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq)]
+    pub enum PointerSize {
+        Pointer4Bytes,
+        Pointer8Bytes
+    }
+
+    #[derive(Debug, Copy, Clone, PartialEq)]
+    pub enum Endianness {
         Little,
         Big
     }
 
     #[derive(Debug, Copy, Clone, PartialEq)]
-    struct Version {
+    pub struct Version {
         major: char,
         minor: char,
         patch: char,
     }
 
     #[derive(Debug, Copy, Clone)]
-    struct FileBlock {
-        identifier: Identifier,
-        length: usize,
-        address: Option<NonZeroU64>,
-        index: usize,
-        count: usize,
+    pub struct FileBlock {
+        pub identifier: Identifier,
+        pub length: usize,
+        pub address: Option<NonZeroU64>,
+        pub index: usize,
+        pub count: usize,
     }
 
-    #[derive(Debug, Copy, Clone, PartialEq)]
-    enum Identifier {
+    #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
+    pub enum Identifier {
         Unknown { code: [u8; 4] },
         REND,
         TEST,
@@ -103,7 +114,7 @@ mod parse {
     }
 
     #[derive(Error, Debug)]
-    enum BlendParseError {
+    pub enum BlendParseError {
 
         #[error("Failed to parse header!")]
         ParseHeaderError,
@@ -112,15 +123,24 @@ mod parse {
         ParseError,
     }
 
-    fn parse_blend(input: Input) -> ::core::result::Result<Blend, BlendParseError> {
+    pub fn parse_blend(input: Input) -> ::core::result::Result<Blend, BlendParseError> {
         match parse_file_header(input) {
-            Ok((input, file_header)) => {
-                match parse_file_blocks(file_header.pointer_size, file_header.endianness, input) {
-                    Ok((_, file_blocks)) => {
+            Ok((input, header)) => {
+                match parse_file_blocks(header.pointer_size, header.endianness, input) {
+                    Ok((_, blocks)) => {
+                        let blocks_by_address: HashMap<NonZeroU64, Vec<FileBlock>> = blocks.iter()
+                            .cloned()
+                            .filter(|block| block.address.is_some())
+                            .into_group_map_by(|block| block.address.unwrap());
+                        let blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>> = blocks.iter()
+                            .cloned()
+                            .into_group_map_by(|block| block.identifier);
                         ::std::result::Result::Ok(
                             Blend {
-                                header: file_header,
-                                blocks: file_blocks,
+                                header,
+                                blocks,
+                                blocks_by_identifier,
+                                blocks_by_address,
                             }
                         )
                     }
@@ -155,15 +175,13 @@ mod parse {
         })(input)
     }
 
-    fn parse_file_blocks(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<HashMap<NonZeroU64, FileBlock>> {
+    fn parse_file_blocks(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<Vec<FileBlock>> {
         let mut input = input;
-        let mut file_blocks: HashMap<NonZeroU64, FileBlock> = HashMap::new();
+        let mut file_blocks = Vec::new();
         loop {
             match parse_file_block(pointer_size, endianness, input) {
                 Ok((remaining_input, file_block)) => {
-                    if let Some(address) = file_block.address {
-                        file_blocks.insert(address, file_block);
-                    }
+                    file_blocks.push(file_block);
                     input = remaining_input;
                 }
                 Err(Err::Error(_)) => {
@@ -178,7 +196,7 @@ mod parse {
 
     fn parse_file_block(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<FileBlock> {
 
-        let (input, code) = parse_file_block_identifier(input)?;
+        let (input, identifier) = parse_file_block_identifier(input)?;
 
         let (input, length) = match endianness {
             Endianness::Little => le_u32,
@@ -215,7 +233,7 @@ mod parse {
         Ok((
             input,
             FileBlock {
-                identifier: code,
+                identifier,
                 length: length as usize,
                 address: NonZeroU64::new(address),
                 index: index as usize,
@@ -293,7 +311,7 @@ mod parse {
             let blend_file = std::fs::read("assets/cube.blend").unwrap();
             let blend = parse_blend(blend_file.as_slice()).unwrap();
 
-            assert_that!(blend.blocks.len(), is(equal_to(1936)));
+            assert_that!(blend.blocks.len(), is(equal_to(1938)));
         }
 
         #[test]
