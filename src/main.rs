@@ -1,3 +1,5 @@
+mod blend;
+
 extern crate ash;
 extern crate skyshard;
 extern crate winit;
