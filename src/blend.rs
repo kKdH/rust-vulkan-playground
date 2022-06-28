@@ -7,15 +7,6 @@ struct FileHeader {
     version: Version,
 }
 
-#[derive(Debug)]
-struct FileBlock {
-    code: [u8; 4],
-    length: usize,
-    address: NonZeroU64,
-    index: usize,
-    count: usize,
-}
-
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum PointerSize {
     Pointer4Bytes,
@@ -44,6 +35,41 @@ struct Version {
     patch: char,
 }
 
+#[derive(Debug, Copy, Clone)]
+struct FileBlock {
+    identifier: Identifier,
+    length: usize,
+    address: Option<NonZeroU64>,
+    index: usize,
+    count: usize,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum Identifier {
+    Unknown { code: [u8; 4] },
+    REND,
+    TEST,
+    GLOB,
+    DATA,
+    WM,
+    IM,
+    SN,
+    WS,
+    BR,
+    SC,
+    PL,
+    OB,
+    GR,
+    CA,
+    LA,
+    ME,
+    WO,
+    LS,
+    MA,
+    DNA,
+    ENDB,
+}
+
 mod parse {
     use std::num::NonZeroU64;
     use std::default::Default;
@@ -54,7 +80,7 @@ mod parse {
     use nom::error::{Error, ParseError};
     use nom::number::complete::{be_u32, be_u64, le_u32, le_u64};
     use nom::sequence::{pair, preceded, terminated, tuple};
-    use crate::blend::{Endianness, FileBlock, FileHeader, PointerSize, Version};
+    use crate::blend::{Identifier, Endianness, FileBlock, FileHeader, PointerSize, Version};
 
     type Input<'a> = &'a[u8];
     type Result<'a, A> = IResult<&'a[u8], A>;
@@ -114,7 +140,32 @@ mod parse {
 
     fn parse_file_block(header: FileHeader, input: Input) -> Result<FileBlock> {
 
-        let (input, code) = take(4usize)(input)?;
+        let (input, code) = map(take(4usize), |parsed: &[u8]| {
+            match parsed {
+                &[0x52, 0x45, 0x4e, 0x44] => Identifier::REND,
+                &[0x54, 0x45, 0x53, 0x54] => Identifier::TEST,
+                &[0x47, 0x4c, 0x4f, 0x42] => Identifier::GLOB,
+                &[0x44, 0x41, 0x54, 0x41] => Identifier::DATA,
+                &[0x57, 0x4d, 0x00, 0x00] => Identifier::WM,
+                &[0x49, 0x4d, 0x00, 0x00] => Identifier::IM,
+                &[0x53, 0x4e, 0x00, 0x00] => Identifier::SN,
+                &[0x57, 0x53, 0x00, 0x00] => Identifier::WS,
+                &[0x42, 0x52, 0x00, 0x00] => Identifier::BR,
+                &[0x53, 0x43, 0x00, 0x00] => Identifier::SC,
+                &[0x50, 0x4C, 0x00, 0x00] => Identifier::PL,
+                &[0x4f, 0x42, 0x00, 0x00] => Identifier::OB,
+                &[0x47, 0x52, 0x00, 0x00] => Identifier::GR,
+                &[0x43, 0x41, 0x00, 0x00] => Identifier::CA,
+                &[0x4c, 0x41, 0x00, 0x00] => Identifier::LA,
+                &[0x4d, 0x45, 0x00, 0x00] => Identifier::ME,
+                &[0x57, 0x4f, 0x00, 0x00] => Identifier::WO,
+                &[0x4c, 0x53, 0x00, 0x00] => Identifier::LS,
+                &[0x4d, 0x41, 0x00, 0x00] => Identifier::MA,
+                &[0x44, 0x4e, 0x41, 0x31] => Identifier::DNA,
+                &[0x45, 0x4e, 0x44, 0x42] => Identifier::ENDB,
+                _ => Identifier::Unknown { code: [parsed[0], parsed[1], parsed[2], parsed[3]]},
+            }
+        })(input)?;
 
         let (input, length) = match header.endianness {
             Endianness::Little => le_u32,
@@ -151,9 +202,9 @@ mod parse {
         Ok((
             input,
             FileBlock {
-                code: [code[0], code[1], code[2], code[3]],
+                identifier: code,
                 length: length as usize,
-                address: NonZeroU64::new(address).unwrap(),
+                address: NonZeroU64::new(address),
                 index: index as usize,
                 count: count as usize,
             }
@@ -165,7 +216,7 @@ mod parse {
         use hamcrest2::{assert_that, HamcrestMatcher, equal_to, is};
         use nom::bytes::complete::take;
         use nom::error::Error;
-        use crate::blend::{Endianness, PointerSize, Version};
+        use crate::blend::{Identifier, Endianness, PointerSize, Version};
         use crate::blend::parse::{parse_file_block, parse_file_header};
 
         #[test]
@@ -191,57 +242,74 @@ mod parse {
             // REND block
             let (input, file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
 
-            println!("FileBlock: {:?}", file_block);
-
-            assert_that!(file_block.code, is(equal_to([0x52, 0x45, 0x4e, 0x44])));
+            assert_that!(file_block.identifier, is(equal_to(Identifier::REND)));
             assert_that!(file_block.length, is(equal_to(72)));
-            assert_that!(file_block.address.get(), is(equal_to(4005448480)));
+            assert_that!(file_block.address.unwrap().get(), is(equal_to(4005448480)));
             assert_that!(file_block.index, is(equal_to(32766)));
             assert_that!(file_block.count, is(equal_to(0)));
 
             // TEST block
             let (input, file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
 
-            println!("FileBlock: {:?}", file_block);
-
-            assert_that!(file_block.code, is(equal_to([0x54, 0x45, 0x53, 0x54])));
+            assert_that!(file_block.identifier, is(equal_to(Identifier::TEST)));
             assert_that!(file_block.length, is(equal_to(65544)));
-            assert_that!(file_block.address.get(), is(equal_to(1949085320)));
+            assert_that!(file_block.address.unwrap().get(), is(equal_to(1949085320)));
             assert_that!(file_block.index, is(equal_to(32737)));
             assert_that!(file_block.count, is(equal_to(0)));
 
             // GLOB block
             let (input, file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
 
-            println!("FileBlock: {:?}", file_block);
-
-            assert_that!(file_block.code, is(equal_to([0x47, 0x4c, 0x4f, 0x42])));
+            assert_that!(file_block.identifier, is(equal_to(Identifier::GLOB)));
             assert_that!(file_block.length, is(equal_to(1104)));
-            assert_that!(file_block.address.get(), is(equal_to(4005448480)));
+            assert_that!(file_block.address.unwrap().get(), is(equal_to(4005448480)));
             assert_that!(file_block.index, is(equal_to(32766)));
             assert_that!(file_block.count, is(equal_to(314)));
 
             // WM block
             let (input, file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
 
-            println!("FileBlock: {:?}", file_block);
-
-            assert_that!(file_block.code, is(equal_to([0x57, 0x4d, 0x0, 0x0])));
+            assert_that!(file_block.identifier, is(equal_to(Identifier::WM)));
             assert_that!(file_block.length, is(equal_to(1448)));
-            assert_that!(file_block.address.get(), is(equal_to(3024905224)));
+            assert_that!(file_block.address.unwrap().get(), is(equal_to(3024905224)));
             assert_that!(file_block.index, is(equal_to(32737)));
             assert_that!(file_block.count, is(equal_to(631)));
 
             // First DATA block
             let (input, file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
 
-            println!("FileBlock: {:?}", file_block);
-
-            assert_that!(file_block.code, is(equal_to([0x44, 0x41, 0x54, 0x41])));
+            assert_that!(file_block.identifier, is(equal_to(Identifier::DATA)));
             assert_that!(file_block.length, is(equal_to(336)));
-            assert_that!(file_block.address.get(), is(equal_to(2429373576)));
+            assert_that!(file_block.address.unwrap().get(), is(equal_to(2429373576)));
             assert_that!(file_block.index, is(equal_to(32737)));
             assert_that!(file_block.count, is(equal_to(632)));
+
+            // Skip to DNA block
+            let (input, file_block) = {
+                let (mut input, mut file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
+                while file_block.identifier != Identifier::DNA {
+                    let (next, block) = parse_file_block(file_header, input).finish().ok().unwrap();
+                    input = next;
+                    file_block = block;
+                }
+
+                (input, file_block)
+            };
+
+            assert_that!(file_block.identifier, is(equal_to(Identifier::DNA)));
+            assert_that!(file_block.length, is(equal_to(116240)));
+            assert_that!(file_block.address.unwrap().get(), is(equal_to(216360692)));
+            assert_that!(file_block.index, is(equal_to(0)));
+            assert_that!(file_block.count, is(equal_to(0)));
+
+            // ENDB block
+            let (input, file_block) = parse_file_block(file_header, input).finish().ok().unwrap();
+
+            assert_that!(file_block.identifier, is(equal_to(Identifier::ENDB)));
+            assert_that!(file_block.length, is(equal_to(0)));
+            assert_that!(file_block.address, is(equal_to(None)));
+            assert_that!(file_block.index, is(equal_to(0)));
+            assert_that!(file_block.count, is(equal_to(0)));
         }
     }
 }
