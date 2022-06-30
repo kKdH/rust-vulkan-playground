@@ -1,7 +1,9 @@
-use std::num::NonZeroUsize;
 use std::convert::TryInto;
-use crate::blend::parse::{Blend, Identifier};
+use std::num::NonZeroUsize;
 
+use crate::blend::parse::{Blend, FileBlock, Identifier};
+
+type Data<'a> = &'a[u8];
 type Input<'a> = &'a[u8];
 
 struct Structure {}
@@ -9,28 +11,33 @@ struct Structure {}
 fn analyse(blend: Blend, input: Input) {
 
     let dna_block = blend.blocks_by_identifier(Identifier::DNA).unwrap()[0];
-    let address = dna_block.address.unwrap();
-    let start: usize = address.into();
+    let location = dna_block.location;
+    let start: usize = location.into();
     let end: usize = start + dna_block.length;
 
-    let data = &input[start..end];
-    let x: [u8; 4] =  data[..3].try_into().unwrap();
-    println!("start: {:?}", start);
-    println!("end: {:?}", end);
-    println!("sdna: {:?}", x);
+    let data = read(dna_block, input);
+
+    println!("x: {:?}", data);
 }
+
+fn read(file_block: FileBlock, input: Data) -> Data {
+    let start = file_block.location + 24;
+    let end = start + file_block.length;
+    &input[start..end]
+}
+
+
 
 #[cfg(test)]
 mod test {
     use crate::blend::analyse::{analyse, Input};
-    // use crate::blend::parse::parse_blend;
+    use crate::blend::parse::parse;
 
     #[test]
     fn test_analyse() {
         let blend_file = std::fs::read("assets/cube.blend").unwrap();
-        let input = crate::blend::parse::Input::new(blend_file.as_slice());
-        // let blend = parse_blend(input).unwrap();
-        //
-        // analyse(blend, input.0)
+        let blend = parse(blend_file.as_slice()).unwrap();
+
+        analyse(blend, blend_file.as_slice());
     }
 }

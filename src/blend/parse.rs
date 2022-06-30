@@ -226,7 +226,12 @@ pub enum BlendParseError {
     ParseError,
 }
 
-pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
+pub fn parse(blend: Data) -> ::std::result::Result<Blend, BlendParseError> {
+    let input = Input::new(blend);
+    parse_blend(input)
+}
+
+fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
     match parse_file_header(input) {
         Ok((input, header)) => {
             match parse_file_blocks(header.pointer_size, header.endianness, input) {
