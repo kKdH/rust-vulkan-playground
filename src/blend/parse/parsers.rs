@@ -63,6 +63,17 @@ fn parse_file_header(input: Input) -> Result<FileHeader> {
             version,
         }
     })(input)
+        .map(|(input, result)| {
+            (
+                Input {
+                    data: input.data,
+                    position: input.position,
+                    endianness: Some(result.endianness),
+                    pointer_size: Some(result.pointer_size)
+                },
+                result
+            )
+        })
 }
 
 fn parse_file_blocks(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<Vec<FileBlock>> {
@@ -88,10 +99,10 @@ fn parse_file_block(pointer_size: PointerSize, endianness: Endianness, input: In
 
     let location = input.position;
     let (input, identifier) = parse_file_block_identifier(input)?;
-    let (input, length) = parse_u32(endianness, input)?;
-    let (input, address) = parse_pointer(pointer_size, endianness, input)?;
-    let (input, dna) = parse_u32(endianness, input)?;
-    let (input, count) = parse_u32(endianness, input)?;
+    let (input, length) = parse_u32(input)?;
+    let (input, address) = parse_pointer(input)?;
+    let (input, dna) = parse_u32(input)?;
+    let (input, count) = parse_u32(input)?;
     let (input, _) = take(length + 4)(input)?; //TODO: WTF? +4?
 
     Ok((
@@ -171,20 +182,21 @@ fn parse_file_block_identifier(input: Input) -> Result<Identifier> {
     })(input)
 }
 
-fn parse_pointer(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<usize> {
-    match pointer_size {
-        PointerSize::Pointer4Bytes => {
-            parse_u32(endianness, input)
+fn parse_pointer(input: Input) -> Result<usize> {
+    match input.pointer_size {
+        None => Err(Err::Failure(make_error(input, ErrorKind::Fail))),
+        Some(PointerSize::Pointer4Bytes) => {
+            parse_u32(input)
                 .map(|(input, address)| (input, address as usize))
-        },
-        PointerSize::Pointer8Bytes => {
-            parse_u64(endianness, input)
+        }
+        Some(PointerSize::Pointer8Bytes) => {
+            parse_u64(input)
                 .map(|(input, address)| (input, address as usize))
         }
     }
 }
 
-fn parse_u32(endianness: Endianness, input: Input) -> Result<u32> {
+fn parse_u32(input: Input) -> Result<u32> {
     let bound: usize = 4;
     if input.data.input_len() < bound {
         Err(Err::Error(make_error(input, ErrorKind::Eof)))
@@ -192,23 +204,25 @@ fn parse_u32(endianness: Endianness, input: Input) -> Result<u32> {
     else {
         let bytes = input.data.iter_indices().take(bound);
         let mut result = 0u32;
-        match endianness {
-            Endianness::Little => {
+        match input.endianness {
+            None => Err(Err::Failure(make_error(input, ErrorKind::Fail))),
+            Some(Endianness::Little) => {
                 for (index, byte) in  bytes {
                     result += (byte as u32) << (8 * index);
                 }
+                Ok((input.slice(bound..), result))
             }
-            Endianness::Big => {
+            Some(Endianness::Big) => {
                 for (_, byte) in bytes {
                     result = (result << 8) + byte as u32;
                 }
+                Ok((input.slice(bound..), result))
             }
         }
-        Ok((input.slice(bound..), result))
     }
 }
 
-fn parse_u64(endianness: Endianness, input: Input) -> Result<u64> {
+fn parse_u64(input: Input) -> Result<u64> {
     let bound: usize = 8;
     if input.data.input_len() < bound {
         Err(Err::Error(make_error(input, ErrorKind::Eof)))
@@ -216,19 +230,21 @@ fn parse_u64(endianness: Endianness, input: Input) -> Result<u64> {
     else {
         let bytes = input.data.iter_indices().take(bound);
         let mut result = 0u64;
-        match endianness {
-            Endianness::Little => {
+        match input.endianness {
+            None => Err(Err::Failure(make_error(input, ErrorKind::Fail))),
+            Some(Endianness::Little) => {
                 for (index, byte) in  bytes {
                     result += (byte as u64) << (8 * index);
                 }
+                Ok((input.slice(bound..), result))
             }
-            Endianness::Big => {
+            Some(Endianness::Big) => {
                 for (_, byte) in bytes {
                     result = (result << 8) + byte as u64;
                 }
+                Ok((input.slice(bound..), result))
             }
         }
-        Ok((input.slice(bound..), result))
     }
 }
 
@@ -241,12 +257,13 @@ mod test {
     use nom::error::Error;
     use crate::blend::parse::{Endianness, Identifier, PointerSize, Version};
     use crate::blend::parse::input::Input;
-    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer_size, parse_u32, parse_version, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
+    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
+    use crate::blend::parse::parsers::{parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer, parse_pointer_size, parse_u32, parse_u64, parse_version};
 
     #[test]
     fn test_parse_blend() {
         let blend_file = std::fs::read("assets/cube.blend").unwrap();
-        let input = Input::new(blend_file.as_slice());
+        let input = Input::new(blend_file.as_slice(), None, None);
         let blend = parse_blend(input).unwrap();
 
         assert_that!(blend.blocks.len(), is(equal_to(1938)));
@@ -256,7 +273,7 @@ mod test {
     fn test_parse_file_header() {
 
         let blend_file = std::fs::read("assets/cube.blend").unwrap();
-        let input = Input::new(blend_file.as_slice());
+        let input = Input::new(blend_file.as_slice(), None, None);
         let (remaining, file_header) = parse_file_header(input)
             .finish()
             .ok()
@@ -266,13 +283,15 @@ mod test {
         assert_that!(file_header.endianness, is(equal_to(Endianness::Little)));
         assert_that!(file_header.version, is(equal_to(Version { major: '3', minor: '0', patch: '2' })));
         assert_that!(remaining.position, is(equal_to(12)));
+        assert_that!(remaining.endianness, is(equal_to(Some(Endianness::Little))));
+        assert_that!(remaining.pointer_size, is(equal_to(Some(PointerSize::Pointer4Bytes))));
     }
 
     #[test]
     fn test_parse_file_blocks() {
 
         let blend_file = std::fs::read("assets/cube.blend").unwrap();
-        let input = Input::new(blend_file.as_slice());
+        let input = Input::new(blend_file.as_slice(), None, None);
         let (input, file_header) = parse_file_header(input)
             .finish()
             .ok()
@@ -368,7 +387,7 @@ mod test {
     #[test]
     fn test_parse_pointer_size_32bit() {
         let data = [POINTER_SIZE_32_BIT_TAG[0], 0xaa, 0xbb];
-        let input = Input::new(&data);
+        let input = Input::new(&data, None, None);
         let (remaining, actual) = parse_pointer_size(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(PointerSize::Pointer4Bytes)));
@@ -378,7 +397,7 @@ mod test {
     #[test]
     fn test_parse_pointer_size_64bit() {
         let data = [POINTER_SIZE_64_BIT_TAG[0], 0xaa, 0xbb];
-        let input = Input::new(&data);
+        let input = Input::new(&data, None, None);
         let (remaining, actual) = parse_pointer_size(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(PointerSize::Pointer8Bytes)));
@@ -389,7 +408,7 @@ mod test {
     #[test]
     fn test_parse_endianness_little() {
         let data = [ENDIANNESS_LITTLE_TAG[0], 0xaa, 0xbb];
-        let input = Input::new(&data);
+        let input = Input::new(&data, None, None);
         let (remaining, actual) = parse_endianness(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(Endianness::Little)));
@@ -400,7 +419,7 @@ mod test {
     #[test]
     fn test_parse_endianness_big() {
         let data = [ENDIANNESS_BIG_TAG[0], 0xaa, 0xbb];
-        let input = Input::new(&data);
+        let input = Input::new(&data, None, None);
         let (remaining, actual) = parse_endianness(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(Endianness::Big)));
@@ -411,7 +430,7 @@ mod test {
     #[test]
     fn test_parse_version() {
         let data = [0x01, 0x02, 0x03, 0xaa, 0xbb];
-        let input = Input::new(&data);
+        let input = Input::new(&data, None, None);
         let (remaining, actual) = parse_version(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(Version::new('\u{1}', '\u{2}', '\u{3}'))));
@@ -419,12 +438,11 @@ mod test {
         assert_that!(remaining.position, is(equal_to(3)))
     }
 
-
     #[test]
     fn test_parse_u32_le() {
         let data = [0x54, 0x45, 0x53, 0x54, 0xaa, 0xbb];
-        let input = Input::new(&data);
-        let (remaining, actual) = parse_u32(Endianness::Little, input).finish().ok().unwrap();
+        let input = Input::new(&data, None, Some(Endianness::Little));
+        let (remaining, actual) = parse_u32(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(1414743380u32)));
         assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
@@ -434,11 +452,78 @@ mod test {
     #[test]
     fn test_parse_u32_be() {
         let data = [0x54, 0x45, 0x53, 0x54, 0xaa, 0xbb];
-        let input = Input::new(&data);
-        let (remaining, actual) = parse_u32(Endianness::Big, input).finish().ok().unwrap();
+        let input = Input::new(&data, None, Some(Endianness::Big));
+        let (remaining, actual) = parse_u32(input).finish().ok().unwrap();
 
         assert_that!(actual, is(equal_to(1413829460u32)));
         assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
         assert_that!(remaining.position, is(equal_to(4)))
+    }
+
+    #[test]
+    fn test_parse_u64_le() {
+        let data = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb];
+        let input = Input::new(&data, None, Some(Endianness::Little));
+        let (remaining, actual) = parse_u64(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(3265748839470287938u64)));
+        assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(8)))
+    }
+
+    #[test]
+    fn test_parse_u64_be() {
+        let data = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb];
+        let input = Input::new(&data, None, Some(Endianness::Big));
+        let (remaining, actual) = parse_u64(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(4777269507188412973u64)));
+        assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(8)))
+    }
+
+    #[test]
+    fn test_parse_pointer_32bit_le() {
+        let data = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb];
+        let input = Input::new(&data, Some(PointerSize::Pointer4Bytes), Some(Endianness::Little));
+        let (remaining, actual) = parse_pointer(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(1313164354usize)));
+        assert_that!(remaining.data, is(equal_to(&[0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(4)))
+    }
+
+    #[test]
+    fn test_parse_pointer_32bit_be() {
+        let data = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb];
+        let input = Input::new(&data, Some(PointerSize::Pointer4Bytes), Some(Endianness::Big));
+        let (remaining, actual) = parse_pointer(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(1112294734usize)));
+        assert_that!(remaining.data, is(equal_to(&[0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(4)))
+    }
+
+
+    #[test]
+    fn test_parse_pointer_64bit_le() {
+        let data = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb];
+        let input = Input::new(&data, Some(PointerSize::Pointer8Bytes), Some(Endianness::Little));
+        let (remaining, actual) = parse_pointer(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(3265748839470287938usize)));
+        assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(8)))
+    }
+
+    #[test]
+    fn test_parse_pointer_64bit_be() {
+        let data = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52, 0x2d, 0xaa, 0xbb];
+        let input = Input::new(&data, Some(PointerSize::Pointer8Bytes), Some(Endianness::Big));
+        let (remaining, actual) = parse_pointer(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(4777269507188412973usize)));
+        assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(8)))
     }
 }

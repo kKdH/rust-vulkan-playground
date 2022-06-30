@@ -111,6 +111,6 @@ pub enum BlendParseError {
 }
 
 pub fn parse(blend: Data) -> Result<Blend, BlendParseError> {
-    let input = Input::new(blend);
+    let input = Input::new(blend, None, None);
     parse_blend(input)
 }

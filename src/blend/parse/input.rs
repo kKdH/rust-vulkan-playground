@@ -2,29 +2,52 @@ use std::iter::{Copied, Enumerate};
 use std::ops::RangeFrom;
 use std::slice::Iter;
 use nom::{AsBytes, Compare, CompareResult, InputIter, InputLength, InputTake, Needed, Slice};
-use crate::blend::parse::Data;
+use crate::blend::parse::{Data, Endianness, PointerSize};
 
 
 #[derive(Debug, Copy, Clone)]
 pub struct Input<'a> {
     pub data: &'a [u8],
     pub position: usize,
+    pub endianness: Option<Endianness>,
+    pub pointer_size: Option<PointerSize>
 }
 
 impl<'a> Input<'a> {
 
-    pub fn new(data: &[u8]) -> Input {
+    pub fn new(data: &[u8], pointer_size: Option<PointerSize>, endianness: Option<Endianness>) -> Input {
         Input {
             data,
-            position: 0
+            position: 0,
+            endianness,
+            pointer_size,
         }
     }
 
-    pub fn new_with_position(data: &[u8], position: usize) -> Input {
-        Input {
-            data,
-            position
+    pub fn take(&self, count: usize) -> Self {
+        Self {
+            data: &self.data[..count],
+            position: self.position + count,
+            endianness: self.endianness,
+            pointer_size: self.pointer_size,
         }
+    }
+
+    pub fn split(&self, count: usize) -> (Self, Self) {
+        (
+            Self {
+                data: &self.data[count..],
+                position: self.position + count,
+                endianness: self.endianness,
+                pointer_size: self.pointer_size,
+            },
+            Self {
+                data: &self.data[..count],
+                position: self.position,
+                endianness: self.endianness,
+                pointer_size: self.pointer_size,
+            }
+        )
     }
 }
 
@@ -65,13 +88,11 @@ impl <'a> InputLength for Input<'a> {
 impl <'a> InputTake for Input<'a> {
 
     fn take(&self, count: usize) -> Self {
-        Input::new_with_position(&self.data[..count], self.position + count)
+        self.take(count)
     }
 
     fn take_split(&self, count: usize) -> (Self, Self) {
-        let head = &self.data[..count];
-        let tail = &self.data[count..];
-        (Input::new_with_position(tail, self.position + count), Input::new_with_position(head, self.position))
+        self.split(count)
     }
 }
 
@@ -103,6 +124,7 @@ impl<'a> InputIter for Input<'a> {
 
 impl<'a> Slice<RangeFrom<usize>> for Input<'a> {
     fn slice(&self, range: RangeFrom<usize>) -> Self {
-        Input::new_with_position(&self.data[range.start..], self.position + range.start)
+        let (result, _) = self.split(range.start);
+        result
     }
 }
