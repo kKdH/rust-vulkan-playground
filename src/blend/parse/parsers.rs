@@ -1,21 +1,16 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
-use std::default::Default;
-use std::iter::{Copied, Enumerate};
-use std::ops::RangeFrom;
-use std::slice::Iter;
 use itertools::Itertools;
+use nom::bytes::complete::{tag, take};
+use nom::combinator::map;
+use nom::{Err, InputIter, InputLength, IResult, Slice};
 use nom::branch::alt;
-use nom::bytes::complete::{tag, take, take_until, take_until1};
-use nom::combinator::{map, map_res};
-use nom::{AsBytes, Compare, CompareResult, Err, Finish, InputIter, InputLength, InputTake, IResult, Needed, Slice};
-use nom::error::{context, Error, ErrorKind, make_error, ParseError};
-use nom::number::complete::{be_u32, be_u64, le_u32, le_u64};
-use nom::sequence::{pair, preceded, terminated, tuple};
-use thiserror::Error;
+use nom::error::{context, ErrorKind, make_error};
+use nom::sequence::{preceded, tuple};
+use crate::blend::parse::{Blend, BlendParseError, Endianness, FileBlock, FileHeader, Identifier, PointerSize, Version};
+use crate::blend::parse::input::Input;
 
 type Result<'a, A> = IResult<Input<'a>, A>;
-type Data<'a> = &'a [u8];
 
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
 const POINTER_SIZE_32_BIT_TAG: [u8; 1] = [0x2d];
@@ -23,215 +18,8 @@ const POINTER_SIZE_64_BIT_TAG: [u8; 1] = [0x5f];
 const ENDIANNESS_LITTLE_TAG: [u8; 1] = [0x76];
 const ENDIANNESS_BIG_TAG: [u8; 1] = [0x56];
 
-#[derive(Debug, Copy, Clone)]
-pub struct Input<'a> {
-    data: &'a [u8],
-    position: usize,
-}
 
-impl<'a> Input<'a> {
-
-    pub fn new(data: &[u8]) -> Input {
-        Input {
-            data,
-            position: 0
-        }
-    }
-
-    pub fn new_with_position(data: &[u8], position: usize) -> Input {
-        Input {
-            data,
-            position
-        }
-    }
-}
-
-impl <'a> AsBytes for Input<'a> {
-    fn as_bytes(&self) -> &[u8] {
-        self.data
-    }
-}
-
-impl <'a> Compare<Data<'a>> for Input<'a> {
-
-    fn compare(&self, tag: Data<'a>) -> CompareResult {
-
-        if tag.len() > self.data.len() {
-            return CompareResult::Incomplete
-        }
-
-        for (a, b) in tag.iter().zip(self.data) {
-            if a != b {
-                return CompareResult::Error
-            }
-        }
-
-        CompareResult::Ok
-    }
-
-    fn compare_no_case(&self, _tag: Data<'a>) -> CompareResult {
-        unimplemented!()
-    }
-}
-
-impl <'a> InputLength for Input<'a> {
-    fn input_len(&self) -> usize {
-        self.data.len()
-    }
-}
-
-impl <'a> InputTake for Input<'a> {
-
-    fn take(&self, count: usize) -> Self {
-        Input::new_with_position(&self.data[..count], self.position + count)
-    }
-
-    fn take_split(&self, count: usize) -> (Self, Self) {
-        let head = &self.data[..count];
-        let tail = &self.data[count..];
-        (Input::new_with_position(tail, self.position + count), Input::new_with_position(head, self.position))
-    }
-}
-
-impl<'a> InputIter for Input<'a> {
-    type Item = Input<'a>;
-    type Iter = Enumerate<Self::IterElem>;
-    type IterElem = Copied<Iter<'a, Input<'a>>>;
-
-    fn iter_indices(&self) -> Self::Iter {
-        unimplemented!()
-    }
-
-    fn iter_elements(&self) -> Self::IterElem {
-        unimplemented!()
-    }
-
-    fn position<P>(&self, _predicate: P) -> Option<usize> where P: Fn(Self::Item) -> bool {
-        unimplemented!()
-    }
-
-    fn slice_index(&self, count: usize) -> ::std::result::Result<usize, Needed> {
-        if self.data.len() >= count {
-            Ok(count)
-        } else {
-            Err(Needed::new(count - self.data.len()))
-        }
-    }
-}
-
-impl<'a> Slice<RangeFrom<usize>> for Input<'a> {
-    fn slice(&self, range: RangeFrom<usize>) -> Self {
-        Input::new_with_position(&self.data[range.start..], self.position + range.start)
-    }
-}
-
-#[derive(Debug)]
-pub struct Blend {
-    header: FileHeader,
-    blocks: Vec<FileBlock>,
-    blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>>,
-    blocks_by_address: HashMap<NonZeroUsize, Vec<FileBlock>>,
-}
-
-impl Blend {
-
-    pub fn header(&self) -> &FileHeader {
-        &self.header
-    }
-
-    pub fn blocks_by_address(&self, address: NonZeroUsize) -> Option<&Vec<FileBlock>> {
-        self.blocks_by_address.get(&address)
-    }
-
-    pub fn blocks_by_identifier(&self, identifier: Identifier) -> Option<&Vec<FileBlock>> {
-        self.blocks_by_identifier.get(&identifier)
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct FileHeader {
-    pub pointer_size: PointerSize,
-    pub endianness: Endianness,
-    pub version: Version,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum PointerSize {
-    Pointer4Bytes,
-    Pointer8Bytes
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum Endianness {
-    Little,
-    Big
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Version {
-    major: char,
-    minor: char,
-    patch: char,
-}
-
-impl Version {
-    fn new(major: char, minor: char, patch: char) -> Version {
-        Version { major, minor, patch }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct FileBlock {
-    pub identifier: Identifier,
-    pub length: usize,
-    pub address: Option<NonZeroUsize>,
-    pub location: usize,
-    pub dna: usize,
-    pub count: usize,
-}
-
-#[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
-pub enum Identifier {
-    Unknown { code: [u8; 4] },
-    REND,
-    TEST,
-    GLOB,
-    DATA,
-    WM,
-    IM,
-    SN,
-    WS,
-    BR,
-    SC,
-    PL,
-    OB,
-    GR,
-    CA,
-    LA,
-    ME,
-    WO,
-    LS,
-    MA,
-    DNA,
-    ENDB,
-}
-
-#[derive(Error, Debug)]
-pub enum BlendParseError {
-
-    #[error("Failed to parse header!")]
-    ParseHeaderError,
-
-    #[error("An error occurred parsing blend file!")]
-    ParseError,
-}
-
-pub fn parse(blend: Data) -> ::std::result::Result<Blend, BlendParseError> {
-    let input = Input::new(blend);
-    parse_blend(input)
-}
-
-fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
+pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
     match parse_file_header(input) {
         Ok((input, header)) => {
             match parse_file_blocks(header.pointer_size, header.endianness, input) {
@@ -451,7 +239,9 @@ mod test {
     use hamcrest2::{assert_that, HamcrestMatcher, equal_to, is};
     use nom::bytes::complete::take;
     use nom::error::Error;
-    use crate::blend::parse::{Endianness, ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, Identifier, Input, parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer_size, parse_u32, parse_version, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG, PointerSize, Version};
+    use crate::blend::parse::{Endianness, Identifier, PointerSize, Version};
+    use crate::blend::parse::input::Input;
+    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer_size, parse_u32, parse_version, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
 
     #[test]
     fn test_parse_blend() {

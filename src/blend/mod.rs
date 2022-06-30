@@ -1,2 +1,2 @@
 mod analyse;
-mod parse;
+pub(crate) mod parse;
