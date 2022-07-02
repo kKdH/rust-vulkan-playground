@@ -7,10 +7,8 @@ use nom::{Err, InputIter, InputLength, IResult, Slice};
 use nom::branch::alt;
 use nom::error::{context, ErrorKind, make_error};
 use nom::sequence::{preceded, tuple};
-use crate::blend::parse::{Blend, BlendParseError, Endianness, FileBlock, FileHeader, Identifier, PointerSize, Version};
+use crate::blend::parse::{Blend, BlendParseError, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
 use crate::blend::parse::input::Input;
-
-type Result<'a, A> = IResult<Input<'a>, A>;
 
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
 const POINTER_SIZE_32_BIT_TAG: [u8; 1] = [0x2d];
@@ -18,11 +16,17 @@ const POINTER_SIZE_64_BIT_TAG: [u8; 1] = [0x5f];
 const ENDIANNESS_LITTLE_TAG: [u8; 1] = [0x76];
 const ENDIANNESS_BIG_TAG: [u8; 1] = [0x56];
 
+const FILE_BLOCK_IDENTIFIER_SIZE: usize = 4;
+const FILE_BLOCK_LENGTH_SIZE: usize = 4;
+const FILE_BLOCK_DNA_SIZE: usize = 4;
+const FILE_BLOCK_COUNT_SIZE: usize = 4;
+
+type Result<'a, A> = IResult<Input<'a>, A>;
 
 pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
     match parse_file_header(input) {
         Ok((input, header)) => {
-            match parse_file_blocks(header.pointer_size, header.endianness, input) {
+            match parse_file_blocks(input) {
                 Ok((_, blocks)) => {
                     let blocks_by_address: HashMap<NonZeroUsize, Vec<FileBlock>> = blocks.iter()
                         .cloned()
@@ -76,11 +80,11 @@ fn parse_file_header(input: Input) -> Result<FileHeader> {
         })
 }
 
-fn parse_file_blocks(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<Vec<FileBlock>> {
+fn parse_file_blocks(input: Input) -> Result<Vec<FileBlock>> {
     let mut input = input;
     let mut file_blocks = Vec::new();
     loop {
-        match parse_file_block(pointer_size, endianness, input) {
+        match parse_file_block(input) {
             Ok((remaining_input, file_block)) => {
                 file_blocks.push(file_block);
                 input = remaining_input;
@@ -95,9 +99,23 @@ fn parse_file_blocks(pointer_size: PointerSize, endianness: Endianness, input: I
     }
 }
 
-fn parse_file_block(pointer_size: PointerSize, endianness: Endianness, input: Input) -> Result<FileBlock> {
+fn parse_file_block(input: Input) -> Result<FileBlock> {
 
-    let location = input.position;
+    let block_location: Location = input.position;
+    let data_location: Location = match input.pointer_size {
+        None => Err(Err::Failure(make_error(input, ErrorKind::Fail))),
+        Some(pointer_size) => {
+            Ok(block_location
+                + FILE_BLOCK_IDENTIFIER_SIZE
+                + FILE_BLOCK_LENGTH_SIZE
+                + pointer_size.size()
+                + FILE_BLOCK_DNA_SIZE
+                + FILE_BLOCK_COUNT_SIZE
+                + 4
+            )
+        }
+    }?;
+
     let (input, identifier) = parse_file_block_identifier(input)?;
     let (input, length) = parse_u32(input)?;
     let (input, address) = parse_pointer(input)?;
@@ -111,9 +129,10 @@ fn parse_file_block(pointer_size: PointerSize, endianness: Endianness, input: In
             identifier,
             length: length as usize,
             address: NonZeroUsize::new(address),
-            location,
             dna: dna as usize,
             count: count as usize,
+            block_location,
+            data_location
         }
     ))
 }
@@ -298,65 +317,65 @@ mod test {
             .unwrap();
 
         // REND block
-        let (input, file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+        let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::REND)));
         assert_that!(file_block.length, is(equal_to(72)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(4005448480)));
-        assert_that!(file_block.location, is(equal_to(12)));
+        assert_that!(file_block.block_location(), is(equal_to(12)));
         assert_that!(file_block.dna, is(equal_to(32766)));
         assert_that!(file_block.count, is(equal_to(0)));
         assert_that!(input.position, is(equal_to(108)));
 
         // TEST block
-        let (input, file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+        let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::TEST)));
         assert_that!(file_block.length, is(equal_to(65544)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(1949085320)));
-        assert_that!(file_block.location, is(equal_to(108)));
+        assert_that!(file_block.block_location(), is(equal_to(108)));
         assert_that!(file_block.dna, is(equal_to(32737)));
         assert_that!(file_block.count, is(equal_to(0)));
         assert_that!(input.position, is(equal_to(65676)));
 
         // GLOB block
-        let (input, file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+        let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::GLOB)));
         assert_that!(file_block.length, is(equal_to(1104)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(4005448480)));
-        assert_that!(file_block.location, is(equal_to(65676)));
+        assert_that!(file_block.block_location(), is(equal_to(65676)));
         assert_that!(file_block.dna, is(equal_to(32766)));
         assert_that!(file_block.count, is(equal_to(314)));
         assert_that!(input.position, is(equal_to(66804)));
 
         // WM block
-        let (input, file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+        let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::WM)));
         assert_that!(file_block.length, is(equal_to(1448)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(3024905224)));
-        assert_that!(file_block.location, is(equal_to(66804)));
+        assert_that!(file_block.block_location(), is(equal_to(66804)));
         assert_that!(file_block.dna, is(equal_to(32737)));
         assert_that!(file_block.count, is(equal_to(631)));
         assert_that!(input.position, is(equal_to(68276)));
 
         // First DATA block
-        let (input, file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+        let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::DATA)));
         assert_that!(file_block.length, is(equal_to(336)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(2429373576)));
-        assert_that!(file_block.location, is(equal_to(68276)));
+        assert_that!(file_block.block_location(), is(equal_to(68276)));
         assert_that!(file_block.dna, is(equal_to(32737)));
         assert_that!(file_block.count, is(equal_to(632)));
         assert_that!(input.position, is(equal_to(68636)));
 
         // Skip to DNA block
         let (input, file_block) = {
-            let (mut input, mut file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+            let (mut input, mut file_block) = parse_file_block(input).finish().ok().unwrap();
             while file_block.identifier != Identifier::DNA {
-                let (next, block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+                let (next, block) = parse_file_block(input).finish().ok().unwrap();
                 input = next;
                 file_block = block;
             }
@@ -367,18 +386,18 @@ mod test {
         assert_that!(file_block.identifier, is(equal_to(Identifier::DNA)));
         assert_that!(file_block.length, is(equal_to(116240)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(216360692)));
-        assert_that!(file_block.location, is(equal_to(713032)));
+        assert_that!(file_block.block_location(), is(equal_to(713032)));
         assert_that!(file_block.dna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(0)));
         assert_that!(input.position, is(equal_to(829296)));
 
         // ENDB block
-        let (input, file_block) = parse_file_block(file_header.pointer_size, file_header.endianness, input).finish().ok().unwrap();
+        let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::ENDB)));
         assert_that!(file_block.length, is(equal_to(0)));
         assert_that!(file_block.address, is(equal_to(None)));
-        assert_that!(file_block.location, is(equal_to(829296)));
+        assert_that!(file_block.block_location(), is(equal_to(829296)));
         assert_that!(file_block.dna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(0)));
         assert_that!(input.position, is(equal_to(829320)));

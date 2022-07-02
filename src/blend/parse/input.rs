@@ -2,20 +2,20 @@ use std::iter::{Copied, Enumerate};
 use std::ops::RangeFrom;
 use std::slice::Iter;
 use nom::{AsBytes, Compare, CompareResult, InputIter, InputLength, InputTake, Needed, Slice};
-use crate::blend::parse::{Data, Endianness, PointerSize};
+use crate::blend::parse::{Data, Endianness, Location, PointerSize};
 
 
 #[derive(Debug, Copy, Clone)]
 pub struct Input<'a> {
-    pub data: &'a [u8],
-    pub position: usize,
+    pub data: Data<'a>,
+    pub position: Location,
     pub endianness: Option<Endianness>,
     pub pointer_size: Option<PointerSize>
 }
 
 impl<'a> Input<'a> {
 
-    pub fn new(data: &[u8], pointer_size: Option<PointerSize>, endianness: Option<Endianness>) -> Input {
+    pub fn new(data: Data<'a>, pointer_size: Option<PointerSize>, endianness: Option<Endianness>) -> Input {
         Input {
             data,
             position: 0,
@@ -48,12 +48,6 @@ impl<'a> Input<'a> {
                 pointer_size: self.pointer_size,
             }
         )
-    }
-}
-
-impl <'a> AsBytes for Input<'a> {
-    fn as_bytes(&self) -> &[u8] {
-        self.data
     }
 }
 

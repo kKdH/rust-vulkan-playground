@@ -8,6 +8,7 @@ use crate::blend::parse::input::Input;
 use crate::blend::parse::parsers::parse_blend;
 
 pub type Data<'a> = &'a [u8];
+pub type Location = usize;
 
 #[derive(Debug)]
 pub struct Blend {
@@ -45,6 +46,15 @@ pub enum PointerSize {
     Pointer8Bytes
 }
 
+impl PointerSize {
+    fn size(&self) -> usize {
+        match self {
+            PointerSize::Pointer4Bytes => 4,
+            PointerSize::Pointer8Bytes => 8,
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Endianness {
     Little,
@@ -69,9 +79,21 @@ pub struct FileBlock {
     pub identifier: Identifier,
     pub length: usize,
     pub address: Option<NonZeroUsize>,
-    pub location: usize,
     pub dna: usize,
     pub count: usize,
+    block_location: Location,
+    data_location: Location,
+}
+
+impl FileBlock {
+
+    pub fn block_location(&self) -> Location {
+        self.block_location
+    }
+
+    pub fn data_location(&self) -> Location {
+        self.data_location
+    }
 }
 
 #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
