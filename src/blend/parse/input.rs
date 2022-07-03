@@ -1,7 +1,7 @@
 use std::iter::{Copied, Enumerate};
 use std::ops::RangeFrom;
 use std::slice::Iter;
-use nom::{AsBytes, Compare, CompareResult, InputIter, InputLength, InputTake, Needed, Slice};
+use nom::{AsBytes, Compare, CompareResult, FindSubstring, InputIter, InputLength, InputTake, Needed, Slice};
 use crate::blend::parse::{Data, Endianness, Location, PointerSize};
 
 
@@ -120,5 +120,11 @@ impl<'a> Slice<RangeFrom<usize>> for Input<'a> {
     fn slice(&self, range: RangeFrom<usize>) -> Self {
         let (result, _) = self.split(range.start);
         result
+    }
+}
+
+impl<'a> FindSubstring<Data<'a>> for Input<'a> {
+    fn find_substring(&self, substr: Data) -> Option<usize> {
+        self.data.find_substring(substr)
     }
 }

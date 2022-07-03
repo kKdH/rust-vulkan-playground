@@ -1,13 +1,16 @@
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::os::unix::raw::ino_t;
 use itertools::Itertools;
-use nom::bytes::complete::{tag, take};
-use nom::combinator::map;
+use nom::bytes::complete::{tag, take, take_until, take_until1};
+use nom::combinator::{map, rest};
 use nom::{Err, InputIter, InputLength, IResult, Slice};
 use nom::branch::alt;
 use nom::error::{context, ErrorKind, make_error};
-use nom::sequence::{preceded, tuple};
-use crate::blend::parse::{Blend, BlendParseError, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use nom::multi::length_count;
+use nom::sequence::{preceded, terminated, tuple};
+use winit::event::VirtualKeyCode::P;
+use crate::blend::parse::{Blend, BlendParseError, Dna, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
 use crate::blend::parse::input::Input;
 
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
@@ -50,6 +53,63 @@ pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError
         Err(_) => ::std::result::Result::Err(BlendParseError::ParseHeaderError)
     }
 }
+
+fn parse_dna(input: Input) -> Result<Dna> {
+    let (input, _) = parse_dna_id(input)?;
+    let (input, names) = parse_dna_names(input)?;
+    let (input, types) = parse_dna_types(input)?;
+    Ok((input, Dna {
+        names,
+        types,
+    }))
+}
+
+fn parse_dna_id(input: Input) -> Result<[u8; 4]> {
+    map(take(4usize), |input: Input| {
+        [input.data[0], input.data[1], input.data[2], input.data[3]]
+    })(input)
+}
+
+fn parse_dna_names(input: Input) -> Result<Vec<String>> {
+    context(
+        "names",
+        preceded(
+            tag(&[0x4e, 0x41, 0x4d, 0x45][..]),
+            length_count(
+                parse_u32,
+                map(terminated(
+                    take_until1(&[0x00][..]),
+                    take(1usize)
+                ), |parsed: Input| {
+                    parsed.data.iter()
+                        .map(|byte| *byte as char)
+                        .collect::<String>()
+                })
+            )
+        )
+    )(input)
+}
+
+fn parse_dna_types(input: Input) -> Result<Vec<String>> {
+    context(
+        "types",
+        preceded(
+            tag(&[0x54, 0x59, 0x50, 0x45][..]),
+            length_count(
+                parse_u32,
+                map(terminated(
+                    take_until1(&[0x00][..]),
+                    take(1usize)
+                ), |parsed: Input| {
+                    parsed.data.iter()
+                        .map(|byte| *byte as char)
+                        .collect::<String>()
+                })
+            )
+        )
+    )(input)
+}
+
 
 fn parse_file_header(input: Input) -> Result<FileHeader> {
     let parse_file_header = preceded(
@@ -269,14 +329,14 @@ fn parse_u64(input: Input) -> Result<u64> {
 
 #[cfg(test)]
 mod test {
-
-    use nom::{Err, Finish};
+    use std::ops::RangeFrom;
+    use nom::{Err, Finish, Slice};
     use hamcrest2::{assert_that, HamcrestMatcher, equal_to, is};
     use nom::bytes::complete::take;
     use nom::error::Error;
     use crate::blend::parse::{Endianness, Identifier, PointerSize, Version};
     use crate::blend::parse::input::Input;
-    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
+    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
     use crate::blend::parse::parsers::{parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer, parse_pointer_size, parse_u32, parse_u64, parse_version};
 
     #[test]
@@ -401,6 +461,19 @@ mod test {
         assert_that!(file_block.dna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(0)));
         assert_that!(input.position, is(equal_to(829320)));
+    }
+
+    #[test]
+    fn test_parse_dna() {
+
+        let blend_file = std::fs::read("assets/cube.blend").unwrap();
+        let input = Input::new(blend_file.as_slice(), Some(PointerSize::Pointer4Bytes), Some(Endianness::Little));
+        let (dna_input, _) = input.split(713032usize + 24);
+        let (_, dna) = parse_dna(dna_input).unwrap();
+
+        assert_that!(dna.names.len(), is(equal_to(4969)));
+        assert_that!(dna.types.len(), is(equal_to(927)));
+        println!("types: {:?}", dna.types);
     }
 
     #[test]

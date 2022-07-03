@@ -33,6 +33,24 @@ impl Blend {
     }
 }
 
+#[derive(Debug)]
+pub struct Dna {
+    pub names: Vec<String>,
+    pub types: Vec<String>
+}
+
+#[derive(Debug)]
+pub struct DnaStruct {
+    pub type_index: usize,
+    pub fields: Vec<DnaField>,
+}
+
+#[derive(Debug)]
+pub struct DnaField {
+    pub name_index: usize,
+    pub type_index: usize,
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct FileHeader {
     pub pointer_size: PointerSize,

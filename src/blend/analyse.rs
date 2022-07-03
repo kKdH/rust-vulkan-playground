@@ -50,28 +50,7 @@ fn analyse(blend: Blend, input: Input) {
     // println!("x: {:?}", data);
 }
 
-struct Dna {}
 
-fn analyse_dna(input: Input) -> Result<Dna> {
-    let dna_block = input.blend.blocks_by_identifier(Identifier::DNA).unwrap()[0];
-    let dna_data = read(input, dna_block)?;
-    let (dna_data, id) = parse_dna_id(dna_data).ok().unwrap(); //TODO
-    // let (dna_data, names_count) =
-    println!("id: {:?}", id);
-    Ok(Dna {})
-}
-
-fn parse_dna_id(input: Data) -> IResult<Data, [u8; 4]> {
-    map(terminated(take(4usize),take(4usize)), |parsed: &[u8]| {
-        [parsed[0], parsed[1], parsed[2], parsed[3]]
-    })(input)
-}
-
-// fn parse_dna_names_count(input: Data) -> IResult<Data, usize> {
-//     map(, |parsed: &[u8]| {
-//         [parsed[0], parsed[1], parsed[2], parsed[3]]
-//     })(input)
-// }
 
 fn read(input: Input, file_block: FileBlock) -> Result<Data> {
     let start = file_block.data_location();
@@ -81,16 +60,16 @@ fn read(input: Input, file_block: FileBlock) -> Result<Data> {
 
 #[cfg(test)]
 mod test {
-    use crate::blend::analyse::{analyse, analyse_dna, Input};
+    use crate::blend::analyse::{analyse, Input};
     use crate::blend::parse::parse;
 
-    #[test]
-    fn test_analyse_dna() {
-        let blend_file = std::fs::read("assets/cube.blend").unwrap();
-        let blend = parse(blend_file.as_slice()).unwrap();
-
-        let input = Input::new(blend, blend_file.as_slice());
-        let dna = analyse_dna(input).ok().unwrap();
-        // analyse(blend, blend_file.as_slice());
-    }
+    // #[test]
+    // fn test_analyse_dna() {
+    //     let blend_file = std::fs::read("assets/cube.blend").unwrap();
+    //     let blend = parse(blend_file.as_slice()).unwrap();
+    //
+    //     let input = Input::new(blend, blend_file.as_slice());
+    //     let dna = analyse_dna(input).ok().unwrap();
+    //     analyse(blend, blend_file.as_slice());
+    // }
 }
