@@ -8,9 +8,9 @@ use nom::{Err, InputIter, InputLength, IResult, Slice};
 use nom::branch::alt;
 use nom::error::{context, ErrorKind, make_error};
 use nom::multi::{count, length_count};
-use nom::sequence::{preceded, terminated, tuple};
+use nom::sequence::{pair, preceded, terminated, tuple};
 use winit::event::VirtualKeyCode::P;
-use crate::blend::parse::{Blend, BlendParseError, Dna, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use crate::blend::parse::{Blend, BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
 use crate::blend::parse::input::Input;
 
 /// Value: `BLENDER`
@@ -49,8 +49,8 @@ type Result<'a, A> = IResult<Input<'a>, A>;
 
 pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
     match parse_file_header(input) {
-        Ok((input, header)) => {
-            match parse_file_blocks(input) {
+        Ok((file_blocks_input, header)) => {
+            match parse_file_blocks(file_blocks_input) {
                 Ok((_, blocks)) => {
                     let blocks_by_address: HashMap<NonZeroUsize, Vec<FileBlock>> = blocks.iter()
                         .cloned()
@@ -59,12 +59,24 @@ pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError
                     let blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>> = blocks.iter()
                         .cloned()
                         .into_group_map_by(|block| block.identifier);
+                    let dna = {
+                        let block = blocks_by_identifier
+                            .get(&Identifier::DNA)
+                            .expect("Failed to get DNA block")[0];
+                        let (input, _) = Input::new(input.data, file_blocks_input.pointer_size, file_blocks_input.endianness)
+                            .split(block.data_location);
+                        match parse_dna(input) {
+                            Ok((_, dna)) => Ok(dna),
+                            Err(_) => ::std::result::Result::Err(BlendParseError::ParseDnaError)
+                        }
+                    }?;
                     ::std::result::Result::Ok(
                         Blend {
                             header,
                             blocks,
                             blocks_by_identifier,
                             blocks_by_address,
+                            dna,
                         }
                     )
                 }
@@ -80,6 +92,7 @@ fn parse_dna(input: Input) -> Result<Dna> {
     let (input, field_names) = parse_dna_field_names(input)?;
     let (input, type_names) = parse_dna_type_names(input)?;
     let (input, type_sizes) = parse_dna_type_sizes(input, type_names.len())?;
+    let (input, structs) = parse_dna_structs(input)?;
     let types: Vec<DnaType> = type_names.into_iter()
         .zip(type_sizes)
         .map(|(name, length)| {
@@ -88,8 +101,9 @@ fn parse_dna(input: Input) -> Result<Dna> {
         .collect();
 
     Ok((input, Dna {
-        names: field_names,
+        field_names,
         types,
+        structs
     }))
 }
 
@@ -123,10 +137,10 @@ fn parse_dna_type_names(input: Input) -> Result<Vec<String>> {
     context(
         "dna.types",
         preceded(
-            tuple((
+            pair(
                 take_until(&DNA_TYPE_NAMES_TAG[..]),
                 take(4usize)
-            )),
+            ),
             length_count(
                 parse_u32,
                 map(terminated(
@@ -146,13 +160,51 @@ fn parse_dna_type_sizes(input: Input, types_count: usize) -> Result<Vec<usize>> 
     context(
         "dna.types-length",
         preceded(
-            tuple((
+            pair(
                 take_until1(&DNA_TYPE_SIZES_TAG[..]),
                 take(4usize)
-            )),
+            ),
             count(
                 map(parse_u16,|length| length as usize),
                 types_count
+            )
+        )
+    )(input)
+}
+
+fn parse_dna_structs(input: Input) -> Result<Vec<DnaStruct>> {
+    context(
+        "dna.structs",
+        preceded(
+            pair(
+                take_until1(&DNA_STRUCTS_TAG[..]),
+                take(4usize)
+            ),
+            length_count(
+                parse_u32,
+                map(
+                    pair(
+                        parse_u16,
+                        length_count(
+                            parse_u16,
+                            pair(
+                                parse_u16,
+                                parse_u16
+                            )
+                        )
+                    ),
+                    |(struct_type_index, fields)| {
+                        DnaStruct {
+                            type_index: struct_type_index as usize,
+                            fields: fields.into_iter().map(|(type_index, name_index)| {
+                                DnaField {
+                                    name_index: name_index as usize,
+                                    type_index: type_index as usize
+                                }
+                            }).collect()
+                        }
+                    }
+                )
             )
         )
     )(input)
@@ -545,9 +597,9 @@ mod test {
         let (dna_input, _) = input.split(713032usize + 24);
         let (_, dna) = parse_dna(dna_input).unwrap();
 
-        assert_that!(dna.names.len(), is(equal_to(4969)));
+        assert_that!(dna.field_names.len(), is(equal_to(4969)));
         assert_that!(dna.types.len(), is(equal_to(927)));
-        println!("types: {:?}", dna.types);
+        assert_that!(dna.structs.len(), is(equal_to(799)));
     }
 
     #[test]

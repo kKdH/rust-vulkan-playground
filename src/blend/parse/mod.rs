@@ -16,6 +16,7 @@ pub struct Blend {
     blocks: Vec<FileBlock>,
     blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>>,
     blocks_by_address: HashMap<NonZeroUsize, Vec<FileBlock>>,
+    dna: Dna,
 }
 
 impl Blend {
@@ -35,8 +36,9 @@ impl Blend {
 
 #[derive(Debug)]
 pub struct Dna {
-    pub names: Vec<String>,
-    pub types: Vec<DnaType>
+    pub field_names: Vec<String>,
+    pub types: Vec<DnaType>,
+    pub structs: Vec<DnaStruct>,
 }
 
 #[derive(Debug)]
@@ -151,6 +153,9 @@ pub enum BlendParseError {
 
     #[error("Failed to parse header!")]
     ParseHeaderError,
+
+    #[error("Failed to parse dna!")]
+    ParseDnaError,
 
     #[error("An error occurred parsing blend file!")]
     ParseError,
