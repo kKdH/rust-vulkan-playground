@@ -36,7 +36,13 @@ impl Blend {
 #[derive(Debug)]
 pub struct Dna {
     pub names: Vec<String>,
-    pub types: Vec<String>
+    pub types: Vec<DnaType>
+}
+
+#[derive(Debug)]
+pub struct DnaType {
+    pub name: String,
+    pub size: usize,
 }
 
 #[derive(Debug)]

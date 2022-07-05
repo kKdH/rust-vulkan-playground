@@ -7,17 +7,38 @@ use nom::combinator::{map, rest};
 use nom::{Err, InputIter, InputLength, IResult, Slice};
 use nom::branch::alt;
 use nom::error::{context, ErrorKind, make_error};
-use nom::multi::length_count;
+use nom::multi::{count, length_count};
 use nom::sequence::{preceded, terminated, tuple};
 use winit::event::VirtualKeyCode::P;
-use crate::blend::parse::{Blend, BlendParseError, Dna, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use crate::blend::parse::{Blend, BlendParseError, Dna, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
 use crate::blend::parse::input::Input;
 
+/// Value: `BLENDER`
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
+
+/// Value: `-`
 const POINTER_SIZE_32_BIT_TAG: [u8; 1] = [0x2d];
+
+/// Value: `_`
 const POINTER_SIZE_64_BIT_TAG: [u8; 1] = [0x5f];
+
+/// Value: `v`
 const ENDIANNESS_LITTLE_TAG: [u8; 1] = [0x76];
+
+/// Value: `V`
 const ENDIANNESS_BIG_TAG: [u8; 1] = [0x56];
+
+/// Value: `NAME`
+const DNA_FIELD_NAMES_TAG: [u8; 4] = [0x4e, 0x41, 0x4d, 0x45];
+
+/// Value: `TYPE`
+const DNA_TYPE_NAMES_TAG: [u8; 4] = [0x54, 0x59, 0x50, 0x45];
+
+/// Value: `TLEN`
+const DNA_TYPE_SIZES_TAG: [u8; 4] = [0x54, 0x4c, 0x45, 0x4e];
+
+/// Value: `STRC`
+const DNA_STRUCTS_TAG: [u8; 4] = [0x53, 0x54, 0x52, 0x43];
 
 const FILE_BLOCK_IDENTIFIER_SIZE: usize = 4;
 const FILE_BLOCK_LENGTH_SIZE: usize = 4;
@@ -56,10 +77,18 @@ pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError
 
 fn parse_dna(input: Input) -> Result<Dna> {
     let (input, _) = parse_dna_id(input)?;
-    let (input, names) = parse_dna_names(input)?;
-    let (input, types) = parse_dna_types(input)?;
+    let (input, field_names) = parse_dna_field_names(input)?;
+    let (input, type_names) = parse_dna_type_names(input)?;
+    let (input, type_sizes) = parse_dna_type_sizes(input, type_names.len())?;
+    let types: Vec<DnaType> = type_names.into_iter()
+        .zip(type_sizes)
+        .map(|(name, length)| {
+            DnaType { name, size: length }
+        })
+        .collect();
+
     Ok((input, Dna {
-        names,
+        names: field_names,
         types,
     }))
 }
@@ -70,11 +99,11 @@ fn parse_dna_id(input: Input) -> Result<[u8; 4]> {
     })(input)
 }
 
-fn parse_dna_names(input: Input) -> Result<Vec<String>> {
+fn parse_dna_field_names(input: Input) -> Result<Vec<String>> {
     context(
-        "names",
+        "dna.names",
         preceded(
-            tag(&[0x4e, 0x41, 0x4d, 0x45][..]),
+            tag(&DNA_FIELD_NAMES_TAG[..]),
             length_count(
                 parse_u32,
                 map(terminated(
@@ -90,11 +119,14 @@ fn parse_dna_names(input: Input) -> Result<Vec<String>> {
     )(input)
 }
 
-fn parse_dna_types(input: Input) -> Result<Vec<String>> {
+fn parse_dna_type_names(input: Input) -> Result<Vec<String>> {
     context(
-        "types",
+        "dna.types",
         preceded(
-            tag(&[0x54, 0x59, 0x50, 0x45][..]),
+            tuple((
+                take_until(&DNA_TYPE_NAMES_TAG[..]),
+                take(4usize)
+            )),
             length_count(
                 parse_u32,
                 map(terminated(
@@ -110,6 +142,21 @@ fn parse_dna_types(input: Input) -> Result<Vec<String>> {
     )(input)
 }
 
+fn parse_dna_type_sizes(input: Input, types_count: usize) -> Result<Vec<usize>> {
+    context(
+        "dna.types-length",
+        preceded(
+            tuple((
+                take_until1(&DNA_TYPE_SIZES_TAG[..]),
+                take(4usize)
+            )),
+            count(
+                map(parse_u16,|length| length as usize),
+                types_count
+            )
+        )
+    )(input)
+}
 
 fn parse_file_header(input: Input) -> Result<FileHeader> {
     let parse_file_header = preceded(
@@ -275,6 +322,32 @@ fn parse_pointer(input: Input) -> Result<usize> {
     }
 }
 
+fn parse_u16(input: Input) -> Result<u16> {
+    let bound: usize = 2;
+    if input.data.input_len() < bound {
+        Err(Err::Error(make_error(input, ErrorKind::Eof)))
+    }
+    else {
+        let bytes = input.data.iter_indices().take(bound);
+        let mut result = 0u16;
+        match input.endianness {
+            None => Err(Err::Failure(make_error(input, ErrorKind::Fail))),
+            Some(Endianness::Little) => {
+                for (index, byte) in  bytes {
+                    result += (byte as u16) << (8 * index);
+                }
+                Ok((input.slice(bound..), result))
+            }
+            Some(Endianness::Big) => {
+                for (_, byte) in bytes {
+                    result = (result << 8) + byte as u16;
+                }
+                Ok((input.slice(bound..), result))
+            }
+        }
+    }
+}
+
 fn parse_u32(input: Input) -> Result<u32> {
     let bound: usize = 4;
     if input.data.input_len() < bound {
@@ -329,14 +402,15 @@ fn parse_u64(input: Input) -> Result<u64> {
 
 #[cfg(test)]
 mod test {
-    use std::ops::RangeFrom;
+    use std::ops::{AddAssign, RangeFrom};
+    use std::sync::Arc;
     use nom::{Err, Finish, Slice};
     use hamcrest2::{assert_that, HamcrestMatcher, equal_to, is};
     use nom::bytes::complete::take;
     use nom::error::Error;
     use crate::blend::parse::{Endianness, Identifier, PointerSize, Version};
     use crate::blend::parse::input::Input;
-    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
+    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, parse_u16, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
     use crate::blend::parse::parsers::{parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer, parse_pointer_size, parse_u32, parse_u64, parse_version};
 
     #[test]
@@ -528,6 +602,28 @@ mod test {
         assert_that!(actual, is(equal_to(Version::new('\u{1}', '\u{2}', '\u{3}'))));
         assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
         assert_that!(remaining.position, is(equal_to(3)))
+    }
+
+    #[test]
+    fn test_parse_u16_le() {
+        let data = [0x54, 0x45, 0xaa, 0xbb];
+        let input = Input::new(&data, None, Some(Endianness::Little));
+        let (remaining, actual) = parse_u16(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(17748u16)));
+        assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(2)))
+    }
+
+    #[test]
+    fn test_parse_u16_be() {
+        let data = [0x54, 0x45, 0xaa, 0xbb];
+        let input = Input::new(&data, None, Some(Endianness::Big));
+        let (remaining, actual) = parse_u16(input).finish().ok().unwrap();
+
+        assert_that!(actual, is(equal_to(21573u16)));
+        assert_that!(remaining.data, is(equal_to(&[0xaa, 0xbb])));
+        assert_that!(remaining.position, is(equal_to(2)))
     }
 
     #[test]

@@ -5,7 +5,7 @@ use nom::{AsBytes, Compare, CompareResult, FindSubstring, InputIter, InputLength
 use crate::blend::parse::{Data, Endianness, Location, PointerSize};
 
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Input<'a> {
     pub data: Data<'a>,
     pub position: Location,
