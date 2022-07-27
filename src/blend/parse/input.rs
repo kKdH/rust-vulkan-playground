@@ -7,10 +7,10 @@ use crate::blend::parse::{Data, Endianness, Location, PointerSize};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Input<'a> {
-    pub data: Data<'a>,
     pub position: Location,
     pub endianness: Option<Endianness>,
-    pub pointer_size: Option<PointerSize>
+    pub pointer_size: Option<PointerSize>,
+    pub data: Data<'a>,
 }
 
 impl<'a> Input<'a> {
@@ -34,20 +34,19 @@ impl<'a> Input<'a> {
     }
 
     pub fn split(&self, count: usize) -> (Self, Self) {
-        (
-            Self {
-                data: &self.data[count..],
-                position: self.position + count,
-                endianness: self.endianness,
-                pointer_size: self.pointer_size,
-            },
-            Self {
-                data: &self.data[..count],
-                position: self.position,
-                endianness: self.endianness,
-                pointer_size: self.pointer_size,
-            }
-        )
+        let left = Self {
+            data: &self.data[count..],
+            position: self.position + count,
+            endianness: self.endianness,
+            pointer_size: self.pointer_size,
+        };
+        let right = Self {
+            data: &self.data[..count],
+            position: self.position,
+            endianness: self.endianness,
+            pointer_size: self.pointer_size,
+        };
+        (left, right)
     }
 }
 
