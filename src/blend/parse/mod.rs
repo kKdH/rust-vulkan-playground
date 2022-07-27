@@ -25,6 +25,10 @@ impl Blend {
         &self.header
     }
 
+    pub fn dna(&self) -> &Dna {
+        &self.dna
+    }
+
     pub fn blocks_by_address(&self, address: NonZeroUsize) -> Option<&Vec<FileBlock>> {
         self.blocks_by_address.get(&address)
     }
@@ -125,6 +129,7 @@ impl FileBlock {
 #[derive(Debug, Hash, Copy, Clone, Eq, PartialEq)]
 pub enum Identifier {
     Unknown { code: [u8; 4] },
+    /// Identifier for the end of the file header of a blend file.
     REND,
     TEST,
     GLOB,
@@ -134,17 +139,22 @@ pub enum Identifier {
     SN,
     WS,
     BR,
+    /// Identifier for a [`FileBlock`] containing scene information.
     SC,
     PL,
+    /// Identifier for a [`FileBlock`] containing object information.
     OB,
     GR,
     CA,
     LA,
+    /// Identifier for a [`FileBlock`] containing mesh data.
     ME,
     WO,
     LS,
     MA,
+    /// Identifier for the DNA block.
     DNA,
+    /// Identifier for the end of a blend file.
     ENDB,
 }
 

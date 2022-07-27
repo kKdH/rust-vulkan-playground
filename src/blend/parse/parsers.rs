@@ -278,9 +278,10 @@ fn parse_file_block(input: Input) -> Result<FileBlock> {
     let (input, identifier) = parse_file_block_identifier(input)?;
     let (input, length) = parse_u32(input)?;
     let (input, address) = parse_pointer(input)?;
+    let (input, _) = take(4usize)(input)?; //TODO: WTF? +4?
     let (input, dna) = parse_u32(input)?;
     let (input, count) = parse_u32(input)?;
-    let (input, _) = take(length + 4)(input)?; //TODO: WTF? +4?
+    let (input, _) = take(length)(input)?;
 
     Ok((
         input,
@@ -509,8 +510,8 @@ mod test {
         assert_that!(file_block.length, is(equal_to(72)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(4005448480)));
         assert_that!(file_block.block_location(), is(equal_to(12)));
-        assert_that!(file_block.dna, is(equal_to(32766)));
-        assert_that!(file_block.count, is(equal_to(0)));
+        assert_that!(file_block.dna, is(equal_to(0)));
+        assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(108)));
 
         // TEST block
@@ -520,8 +521,8 @@ mod test {
         assert_that!(file_block.length, is(equal_to(65544)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(1949085320)));
         assert_that!(file_block.block_location(), is(equal_to(108)));
-        assert_that!(file_block.dna, is(equal_to(32737)));
-        assert_that!(file_block.count, is(equal_to(0)));
+        assert_that!(file_block.dna, is(equal_to(0)));
+        assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(65676)));
 
         // GLOB block
@@ -531,8 +532,8 @@ mod test {
         assert_that!(file_block.length, is(equal_to(1104)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(4005448480)));
         assert_that!(file_block.block_location(), is(equal_to(65676)));
-        assert_that!(file_block.dna, is(equal_to(32766)));
-        assert_that!(file_block.count, is(equal_to(314)));
+        assert_that!(file_block.dna, is(equal_to(314)));
+        assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(66804)));
 
         // WM block
@@ -542,8 +543,8 @@ mod test {
         assert_that!(file_block.length, is(equal_to(1448)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(3024905224)));
         assert_that!(file_block.block_location(), is(equal_to(66804)));
-        assert_that!(file_block.dna, is(equal_to(32737)));
-        assert_that!(file_block.count, is(equal_to(631)));
+        assert_that!(file_block.dna, is(equal_to(631)));
+        assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(68276)));
 
         // First DATA block
@@ -553,8 +554,8 @@ mod test {
         assert_that!(file_block.length, is(equal_to(336)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(2429373576)));
         assert_that!(file_block.block_location(), is(equal_to(68276)));
-        assert_that!(file_block.dna, is(equal_to(32737)));
-        assert_that!(file_block.count, is(equal_to(632)));
+        assert_that!(file_block.dna, is(equal_to(632)));
+        assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(68636)));
 
         // Skip to DNA block
@@ -574,7 +575,7 @@ mod test {
         assert_that!(file_block.address.unwrap().get(), is(equal_to(216360692)));
         assert_that!(file_block.block_location(), is(equal_to(713032)));
         assert_that!(file_block.dna, is(equal_to(0)));
-        assert_that!(file_block.count, is(equal_to(0)));
+        assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(829296)));
 
         // ENDB block
