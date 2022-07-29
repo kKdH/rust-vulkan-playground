@@ -8,15 +8,16 @@ use nom::sequence::{delimited, pair, tuple};
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::blend::analyse::input::Input;
-use crate::blend::Blend;
-use crate::blend::parse::{Dna, DnaField, DnaStruct, DnaType, FileBlock, FileHeader, Identifier};
-
-mod input;
+use crate::blend::analyse::Type::FunctionPointer;
+use crate::blend::parse::{Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader};
 
 pub type Result<A> = ::core::result::Result<A, AnalyseError>;
 
-pub struct Structure {}
+#[derive(Debug)]
+pub struct Structure {
+    endianness: Endianness,
+    structs: HashMap<String, Struct>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -35,10 +36,47 @@ pub enum Type {
     Void,
     Struct { name: String, size: usize },
     Pointer { base_type: Box<Type>, size: usize },
-    Array { base_type: Box<Type>, length: usize }
+    Array { base_type: Box<Type>, length: usize },
+    FunctionPointer
 }
 
 impl Type {
+
+    const TYPE_NAME_CHAR: &'static str = "char";
+    const TYPE_NAME_UCHAR: &'static str = "uchar";
+    const TYPE_NAME_SHORT: &'static str = "short";
+    const TYPE_NAME_USHORT: &'static str = "ushort";
+    const TYPE_NAME_INT: &'static str = "int";
+    const TYPE_NAME_INT8: &'static str = "int8_t";
+    const TYPE_NAME_INT64: &'static str = "int64_t";
+    const TYPE_NAME_UINT64: &'static str = "uint64_t";
+    const TYPE_NAME_LONG: &'static str = "long";
+    const TYPE_NAME_ULONG: &'static str = "ulong";
+    const TYPE_NAME_FLOAT: &'static str = "float";
+    const TYPE_NAME_DOUBLE: &'static str = "double";
+    const TYPE_NAME_VOID: &'static str = "void";
+
+    pub fn base_type(&self) -> &Type {
+        match self {
+            Type::Char => &Type::Char,
+            Type::UChar => &Type::UChar,
+            Type::Short => &Type::Short,
+            Type::UShort => &Type::UShort,
+            Type::Int => &Type::Int,
+            Type::Int8 => &Type::Int8,
+            Type::Int64 => &Type::Int64,
+            Type::UInt64 => &Type::UInt64,
+            Type::Long => &Type::Long,
+            Type::ULong => &Type::ULong,
+            Type::Float => &Type::Float,
+            Type::Double => &Type::Double,
+            Type::Void => &Type::Void,
+            Type::Struct { .. } => &self,
+            Type::Pointer { base_type, size: _size } => base_type.base_type(),
+            Type::Array { base_type, length: _length } => base_type.base_type(),
+            Type::FunctionPointer => &FunctionPointer,
+        }
+    }
 
     pub fn size(&self) -> usize {
         Type::compute_size(self)
@@ -62,6 +100,7 @@ impl Type {
             Type::Struct { name: _, size } => *size,
             Type::Pointer { base_type: _, size } => *size,
             Type::Array { base_type, length } => length * Type::compute_size(base_type),
+            Type::FunctionPointer => 4 // FIXME: get correct pointer size.
         }
     }
 }
@@ -126,21 +165,58 @@ pub enum AnalyseError {
     #[error("A type with '{index}' does not exist!")]
     InvalidTypeIndex { index: usize },
 
+    #[error("A struct with '{index}' does not exist!")]
+    InvalidStructIndex { index: usize },
+
     #[error("Unknown type '{value}'!")]
     UnknownType { value: String },
+
+    #[error("Unknown struct '{value}'!")]
+    UnknownStruct { value: String },
 }
 
-pub fn analyse(file_header: FileHeader, file_blocks: Vec<FileBlock>, dna: Dna) -> Result<Structure> {
+pub fn analyse(file_header: &FileHeader, file_blocks: &Vec<FileBlock>, dna: &Dna) -> Result<Structure> {
 
-    // let dna_block = blend.blocks_by_identifier(Identifier::DNA).unwrap()[0];
-    // let location = dna_block.data_location();
-    // let start: usize = location.into();
-    // let _end: usize = start + dna_block.length;
+    let mut structs: HashMap<String, Struct> = HashMap::new();
 
-    // let data = read(dna_block, input);
-    //
-    // println!("x: {:?}", data);
-    Ok(Structure {})
+    for file_block in file_blocks {
+        let file_block_dna_struct = dna.find_struct_of(file_block)
+            .ok_or(AnalyseError::InvalidStructIndex { index: file_block.sdna })?;
+        let file_block_struct_dna_type = dna.find_type_of(file_block_dna_struct)
+            .ok_or(AnalyseError::InvalidTypeIndex { index: file_block_dna_struct.type_index })?;
+
+        if !structs.contains_key(&file_block_struct_dna_type.name) {
+
+            let file_block_struct = analyse_struct(&file_block_dna_struct, dna)?;
+
+            let mut remaining: Vec<String> = Vec::new();
+            remaining.push(Clone::clone(&file_block_struct.name));
+
+            while let Some(struct_name) = remaining.pop() {
+                let dna_struct = dna.find_struct_by_name(&struct_name)
+                    .ok_or(AnalyseError::UnknownStruct { value: struct_name })?;
+                let analysed_struct = analyse_struct(&dna_struct, &dna)?;
+
+                for field in &analysed_struct.fields {
+                    match &field.data_type.base_type() {
+                        Type::Struct { name, size: _size } => {
+                            if structs.contains_key(name.as_str()) {
+                                // remaining.push(Clone::clone(name))
+                            }
+                        },
+                        _ => {}
+                    }
+                }
+
+                structs.insert(Clone::clone(&analysed_struct.name), analysed_struct);
+            }
+        }
+    }
+
+    Ok(Structure {
+        endianness: file_header.endianness,
+        structs
+    })
 }
 
 pub fn analyse_type(dna_type: &DnaType, _: &Dna) -> Result<Type> {
@@ -149,55 +225,55 @@ pub fn analyse_type(dna_type: &DnaType, _: &Dna) -> Result<Type> {
         alt((
             value(
                 Type::Char,
-                all_consuming(tag("char"))
+                all_consuming(tag(Type::TYPE_NAME_CHAR))
             ),
             value(
                 Type::UChar,
-                all_consuming(tag("uchar"))
+                all_consuming(tag(Type::TYPE_NAME_UCHAR))
             ),
             value(
                 Type::Short,
-                all_consuming(tag("short"))
+                all_consuming(tag(Type::TYPE_NAME_SHORT))
             ),
             value(
                 Type::UShort,
-                all_consuming(tag("ushort"))
+                all_consuming(tag(Type::TYPE_NAME_USHORT))
             ),
             value(
                 Type::Int,
-                all_consuming(tag("int"))
+                all_consuming(tag(Type::TYPE_NAME_INT))
             ),
             value(
                 Type::Int8,
-                all_consuming(tag("int8_t"))
+                all_consuming(tag(Type::TYPE_NAME_INT8))
             ),
             value(
                 Type::Int64,
-                all_consuming(tag("int64_t"))
+                all_consuming(tag(Type::TYPE_NAME_INT64))
             ),
             value(
                 Type::UInt64,
-                all_consuming(tag("uint64_t"))
+                all_consuming(tag(Type::TYPE_NAME_UINT64))
             ),
             value(
                 Type::Long,
-                all_consuming(tag("long"))
+                all_consuming(tag(Type::TYPE_NAME_LONG))
             ),
             value(
                 Type::ULong,
-                all_consuming(tag("ulong"))
+                all_consuming(tag(Type::TYPE_NAME_ULONG))
             ),
             value(
                 Type::Float,
-                all_consuming(tag("float"))
+                all_consuming(tag(Type::TYPE_NAME_FLOAT))
             ),
             value(
                 Type::Double,
-                all_consuming(tag("double"))
+                all_consuming(tag(Type::TYPE_NAME_DOUBLE))
             ),
             value(
                 Type::Void,
-                all_consuming(tag("void"))
+                all_consuming(tag(Type::TYPE_NAME_VOID))
             )
         ))
     };
@@ -231,9 +307,9 @@ pub fn analyse_type(dna_type: &DnaType, _: &Dna) -> Result<Type> {
 }
 
 pub fn analyse_field(dna_field: &DnaField, dna: &Dna, offset: usize) -> Result<Field> {
-    let field_name = dna.field_name_of(dna_field)
+    let field_name = dna.find_field_name_of(dna_field)
         .ok_or(AnalyseError::InvalidFieldNameIndex { index: dna_field.name_index })?;
-    let base_type = dna.type_of(dna_field)
+    let base_type = dna.find_type_of(dna_field)
         .ok_or(AnalyseError::InvalidTypeIndex { index: dna_field.type_index })?;
 
     fn parse_field_name(input: &str, base_type: &Type, dna: &Dna) -> Result<(String, Type)> {
@@ -286,21 +362,30 @@ pub fn analyse_field(dna_field: &DnaField, dna: &Dna, offset: usize) -> Result<F
         }
     }
 
-    analyse_type(&base_type, dna).and_then(|base_type| {
-        parse_field_name(field_name, &base_type, dna)
-            .map(|(_parsed_name, parsed_type)| {
-                Field {
-                    data_type: parsed_type,
-                    name: String::from(field_name),
-                    offset
-                }
-            })
-    })
+    if field_name.ends_with("()") { // FIXME: parse function pointers.
+        Ok(Field {
+            data_type: Type::FunctionPointer,
+            name: Clone::clone(field_name),
+            offset
+        })
+    }
+    else {
+        analyse_type(&base_type, dna).and_then(|base_type| {
+            parse_field_name(field_name, &base_type, dna)
+                .map(|(_parsed_name, parsed_type)| {
+                    Field {
+                        data_type: parsed_type,
+                        name: String::from(field_name),
+                        offset
+                    }
+                })
+        })
+    }
 }
 
 pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
 
-    let (name, size) = dna.type_of(dna_struct)
+    let (name, size) = dna.find_type_of(dna_struct)
         .map(|dna_type| (Clone::clone(&dna_type.name), dna_type.size))
         .ok_or(AnalyseError::InvalidTypeIndex { index: dna_struct.type_index })?;
 
@@ -320,40 +405,18 @@ pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
 
 #[cfg(test)]
 mod test {
+    use crate::blend::analyse::analyse;
     use crate::blend::parse::parse;
 
     #[test]
-    fn test_analyse_dna() {
+    fn test_analyse() {
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-        let _blend = parse(blend_data.as_slice()).unwrap();
+        let (file_header, file_blocks, dna) = parse(blend_data.as_slice()).unwrap();
 
-        // let input = Input::new(blend, blend_file.as_slice());
-        // let dna = analyse_dna(input).ok().unwrap();
-        // analyse(blend, blend_file.as_slice());
+        let result = analyse(&file_header, &file_blocks, &dna).unwrap();
 
-        // let objects = blend.blocks_by_identifier(Identifier::OB).unwrap();
-        // objects.iter().for_each(|object| {
-        //     print_info(blend.dna(), object)
-        // });
-
-        // let meshes = blend.blocks_by_identifier(Identifier::ME).unwrap();
-        // meshes.iter().for_each(|mesh| {
-        //     print_info(blend.dna(), mesh)
-        // });
-        // TODO
-        // let scenes = blend.blocks_by_identifier(Identifier::ME).unwrap();
-        // scenes.iter().for_each(|scene| {
-        //     let dna = blend.dna();
-        //     let dna_struct = dna.struct_of(scene).unwrap();
-        //     let dna_type = dna.type_of(dna_struct).unwrap();
-        //
-        //     let s = Struct::from(dna_struct, dna).unwrap();
-        //
-        //     println!("field: {:?}", s.find_field_by_name("id"));
-        //
-        //
-        //     println!("{:#?}", s)
-        // });
+        println!("Count: {:?}", result.structs.len());
+        println!("{:#?}", result)
     }
 
     mod type_spec {

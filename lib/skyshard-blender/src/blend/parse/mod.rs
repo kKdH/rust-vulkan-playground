@@ -42,17 +42,25 @@ pub struct Dna {
 
 impl Dna {
 
-    pub fn field_name_of(&self, field: &DnaField) -> Option<&String> {
+    pub fn find_field_name_of(&self, field: &DnaField) -> Option<&String> {
         self.field_names.get(field.name_index)
     }
 
-    pub fn type_of<A>(&self, typed: A) -> Option<&DnaType>
+    pub fn find_type_of<A>(&self, typed: A) -> Option<&DnaType>
     where A: HasDnaTypeIndex {
         self.types.get(typed.type_index())
     }
 
-    pub fn struct_of(&self, block: &FileBlock) -> Option<&DnaStruct> {
+    pub fn find_struct_of(&self, block: &FileBlock) -> Option<&DnaStruct> {
         self.structs.get(block.sdna)
+    }
+
+    pub fn find_struct_by_name(&self, name: &str) -> Option<&DnaStruct> {
+        self.structs.iter().find(|dna_struct| {
+            self.find_type_of(*dna_struct)
+                .map(|dna_type| name == dna_type.name)
+                .unwrap_or(false)
+        })
     }
 }
 
