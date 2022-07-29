@@ -1257,10 +1257,10 @@ dependencies = [
  "log",
  "log4rs",
  "nalgebra",
- "nom",
  "png 0.17.5",
  "rand",
  "skyshard",
+ "skyshard-blender",
  "thiserror",
  "winit",
 ]
@@ -1374,6 +1374,7 @@ dependencies = [
  "chrono",
  "gltf",
  "gpu-allocator",
+ "hamcrest2",
  "log",
  "memoffset",
  "nalgebra",
@@ -1382,6 +1383,16 @@ dependencies = [
  "syn",
  "thiserror",
  "winit",
+]
+
+[[package]]
+name = "skyshard-blender"
+version = "0.1.0"
+dependencies = [
+ "hamcrest2",
+ "itertools",
+ "nom",
+ "thiserror",
 ]
 
 [[package]]

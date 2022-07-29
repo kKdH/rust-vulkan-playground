@@ -317,7 +317,6 @@ mod test {
     use std::process::id;
 
     use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is, ok, type_of};
-    use itertools::put_back;
     use nom::{Err, IResult, Parser};
     use nom::branch::alt;
     use nom::bytes::complete::tag;
@@ -333,7 +332,7 @@ mod test {
 
     #[test]
     fn test_analyse_dna() {
-        let blend_data = std::fs::read("assets/cube.blend").unwrap();
+        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
         let blend = parse(blend_data.as_slice()).unwrap();
 
         // let input = Input::new(blend, blend_file.as_slice());
@@ -692,7 +691,7 @@ mod test {
 
     #[test]
     fn test_read_block() {
-        let blend_data = std::fs::read("assets/cube.blend").unwrap();
+        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
         let blend = parse(blend_data.as_slice()).unwrap();
 
         let input = Input::new(&blend, &blend_data);

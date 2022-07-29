@@ -1,0 +1,13 @@
+[package]
+name = "skyshard-blender"
+version = "0.1.0"
+authors = ["Elmar Schug <elmar.schug@jayware.org>"]
+edition = "2021"
+
+[dependencies]
+itertools = "0.10.3"
+nom = "7.1.1"
+thiserror = "1.0.31"
+
+[dev-dependencies]
+hamcrest2 = "0.3.0"

@@ -9,7 +9,6 @@ use nom::branch::alt;
 use nom::error::{context, ErrorKind, make_error};
 use nom::multi::{count, length_count};
 use nom::sequence::{pair, preceded, terminated, tuple};
-use winit::event::VirtualKeyCode::P;
 use crate::blend::parse::{BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
 use crate::blend::Blend;
 use crate::blend::parse::input::Input;
