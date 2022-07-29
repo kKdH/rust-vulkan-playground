@@ -5,6 +5,7 @@ use std::num::NonZeroUsize;
 use nom::error::ErrorKind;
 
 use thiserror::Error;
+use crate::blend::Blend;
 
 use crate::blend::parse::input::Input;
 use crate::blend::parse::parsers::parse_blend;
@@ -12,35 +13,27 @@ use crate::blend::parse::parsers::parse_blend;
 mod parsers;
 mod input;
 
-pub type Data<'a> = &'a [u8];
 pub type Location = usize;
 
-#[derive(Debug)]
-pub struct Blend {
-    header: FileHeader,
-    blocks: Vec<FileBlock>,
-    blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>>,
-    blocks_by_address: HashMap<NonZeroUsize, Vec<FileBlock>>,
-    dna: Dna,
+pub fn parse(blend: &[u8]) -> Result<Blend, BlendParseError> {
+    let input = Input::new(blend, None, None);
+    parse_blend(input)
 }
 
-impl Blend {
+#[derive(Error, Debug)]
+pub enum BlendParseError {
 
-    pub fn header(&self) -> &FileHeader {
-        &self.header
-    }
+    #[error("Failed to parse header!")]
+    ParseHeaderError,
 
-    pub fn dna(&self) -> &Dna {
-        &self.dna
-    }
+    #[error("An error of kind '{kind}' occurred while parsing the dna!")]
+    ParseDnaError { kind: String },
 
-    pub fn blocks_by_address(&self, address: NonZeroUsize) -> Option<&Vec<FileBlock>> {
-        self.blocks_by_address.get(&address)
-    }
+    #[error("Failed to parse dna, due to missing input!")]
+    IncompleteDnaError,
 
-    pub fn blocks_by_identifier(&self, identifier: Identifier) -> Option<&Vec<FileBlock>> {
-        self.blocks_by_identifier.get(&identifier)
-    }
+    #[error("An error occurred parsing blend file!")]
+    ParseError,
 }
 
 #[derive(Debug)]
@@ -52,8 +45,8 @@ pub struct Dna {
 
 impl Dna {
 
-    pub fn field_name_of(&self, field: &DnaField) -> &String {
-        &self.field_names[field.name_index]
+    pub fn field_name_of(&self, field: &DnaField) -> Option<&String> {
+        self.field_names.get(field.name_index)
     }
 
     pub fn type_of<A>(&self, typed: A) -> Option<&DnaType>
@@ -62,7 +55,7 @@ impl Dna {
     }
 
     pub fn struct_of(&self, block: &FileBlock) -> Option<&DnaStruct> {
-        self.structs.get(block.dna)
+        self.structs.get(block.sdna)
     }
 }
 
@@ -74,6 +67,16 @@ pub trait HasDnaTypeIndex {
 pub struct DnaType {
     pub name: String,
     pub size: usize,
+}
+
+impl DnaType {
+
+    pub fn new(name: &'static str, size: usize) -> DnaType {
+        DnaType {
+            name: String::from(name),
+            size
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -146,7 +149,7 @@ pub struct FileBlock {
     pub identifier: Identifier,
     pub length: usize,
     pub address: Option<NonZeroUsize>,
-    pub dna: usize,
+    pub sdna: usize,
     pub count: usize,
     block_location: Location,
     data_location: Location,
@@ -224,25 +227,4 @@ impl Display for Identifier {
         };
         write!(formatter, "{}", text)
     }
-}
-
-#[derive(Error, Debug)]
-pub enum BlendParseError {
-
-    #[error("Failed to parse header!")]
-    ParseHeaderError,
-
-    #[error("An error of kind '{kind}' occurred while parsing the dna!")]
-    ParseDnaError { kind: String },
-
-    #[error("Failed to parse dna, due to missing input!")]
-    IncompleteDnaError,
-
-    #[error("An error occurred parsing blend file!")]
-    ParseError,
-}
-
-pub fn parse(blend: Data) -> Result<Blend, BlendParseError> {
-    let input = Input::new(blend, None, None);
-    parse_blend(input)
 }

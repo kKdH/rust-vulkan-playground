@@ -2,8 +2,9 @@ use std::iter::{Copied, Enumerate};
 use std::ops::RangeFrom;
 use std::slice::Iter;
 use nom::{AsBytes, Compare, CompareResult, FindSubstring, InputIter, InputLength, InputTake, Needed, Slice};
-use crate::blend::parse::{Data, Endianness, Location, PointerSize};
+use crate::blend::parse::{Endianness, Location, PointerSize};
 
+pub type Data<'a> = &'a [u8];
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Input<'a> {

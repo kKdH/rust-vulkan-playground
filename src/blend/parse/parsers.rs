@@ -10,8 +10,10 @@ use nom::error::{context, ErrorKind, make_error};
 use nom::multi::{count, length_count};
 use nom::sequence::{pair, preceded, terminated, tuple};
 use winit::event::VirtualKeyCode::P;
-use crate::blend::parse::{Blend, BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use crate::blend::parse::{BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use crate::blend::Blend;
 use crate::blend::parse::input::Input;
+
 
 /// Value: `BLENDER`
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
@@ -292,7 +294,7 @@ fn parse_file_block(input: Input) -> Result<FileBlock> {
     let (input, length) = parse_u32(input)?;
     let (input, address) = parse_pointer(input)?;
     let (input, _) = take(4usize)(input)?; //TODO: WTF? +4?
-    let (input, dna) = parse_u32(input)?;
+    let (input, sdna) = parse_u32(input)?;
     let (input, count) = parse_u32(input)?;
     let (input, _) = take(length)(input)?;
 
@@ -302,7 +304,7 @@ fn parse_file_block(input: Input) -> Result<FileBlock> {
             identifier,
             length: length as usize,
             address: NonZeroUsize::new(address),
-            dna: dna as usize,
+            sdna: sdna as usize,
             count: count as usize,
             block_location,
             data_location
@@ -500,7 +502,7 @@ mod test {
         let input = Input::new(blend_file.as_slice(), None, None);
         let blend = parse_blend(input).unwrap();
 
-        assert_that!(blend.blocks.len(), is(equal_to(1938)));
+        assert_that!(blend.blocks.len(), is(equal_to(1958)));
     }
 
     #[test]
@@ -538,7 +540,7 @@ mod test {
         assert_that!(file_block.length, is(equal_to(72)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(3165959472)));
         assert_that!(file_block.block_location(), is(equal_to(12)));
-        assert_that!(file_block.dna, is(equal_to(0)));
+        assert_that!(file_block.sdna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(108)));
 
@@ -547,9 +549,9 @@ mod test {
 
         assert_that!(file_block.identifier, is(equal_to(Identifier::TEST)));
         assert_that!(file_block.length, is(equal_to(65544)));
-        assert_that!(file_block.address.unwrap().get(), is(equal_to(324828872)));
+        assert_that!(file_block.address.unwrap().get(), is(equal_to(337039816)));
         assert_that!(file_block.block_location(), is(equal_to(108)));
-        assert_that!(file_block.dna, is(equal_to(0)));
+        assert_that!(file_block.sdna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(65676)));
 
@@ -560,7 +562,7 @@ mod test {
         assert_that!(file_block.length, is(equal_to(1104)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(3165959472)));
         assert_that!(file_block.block_location(), is(equal_to(65676)));
-        assert_that!(file_block.dna, is(equal_to(313)));
+        assert_that!(file_block.sdna, is(equal_to(313)));
         assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(66804)));
 
@@ -571,7 +573,7 @@ mod test {
         assert_that!(file_block.length, is(equal_to(1448)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(1089463304)));
         assert_that!(file_block.block_location(), is(equal_to(66804)));
-        assert_that!(file_block.dna, is(equal_to(630)));
+        assert_that!(file_block.sdna, is(equal_to(630)));
         assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(68276)));
 
@@ -582,7 +584,7 @@ mod test {
         assert_that!(file_block.length, is(equal_to(336)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(486540040)));
         assert_that!(file_block.block_location(), is(equal_to(68276)));
-        assert_that!(file_block.dna, is(equal_to(631)));
+        assert_that!(file_block.sdna, is(equal_to(631)));
         assert_that!(file_block.count, is(equal_to(1)));
         assert_that!(input.position, is(equal_to(68636)));
 
@@ -591,10 +593,10 @@ mod test {
         assert_that!(file_block.identifier, is(equal_to(Identifier::DNA)));
         assert_that!(file_block.length, is(equal_to(116004)));
         assert_that!(file_block.address.unwrap().get(), is(equal_to(216471668)));
-        assert_that!(file_block.block_location(), is(equal_to(713024)));
-        assert_that!(file_block.dna, is(equal_to(0)));
+        assert_that!(file_block.block_location(), is(equal_to(718624)));
+        assert_that!(file_block.sdna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(1)));
-        assert_that!(input.position, is(equal_to(829052)));
+        assert_that!(input.position, is(equal_to(834652)));
 
         // ENDB block
         let (input, file_block) = parse_file_block(input).finish().ok().unwrap();
@@ -602,10 +604,10 @@ mod test {
         assert_that!(file_block.identifier, is(equal_to(Identifier::ENDB)));
         assert_that!(file_block.length, is(equal_to(0)));
         assert_that!(file_block.address, is(equal_to(None)));
-        assert_that!(file_block.block_location(), is(equal_to(829052)));
-        assert_that!(file_block.dna, is(equal_to(0)));
+        assert_that!(file_block.block_location(), is(equal_to(834652)));
+        assert_that!(file_block.sdna, is(equal_to(0)));
         assert_that!(file_block.count, is(equal_to(0)));
-        assert_that!(input.position, is(equal_to(829076)));
+        assert_that!(input.position, is(equal_to(834676)));
     }
 
     #[test]
