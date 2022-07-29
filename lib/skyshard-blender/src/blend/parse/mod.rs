@@ -1,11 +1,7 @@
-use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
-use nom::error::ErrorKind;
 
 use thiserror::Error;
-use crate::blend::Blend;
 
 use crate::blend::parse::input::Input;
 use crate::blend::parse::parsers::parse_blend;
@@ -15,7 +11,7 @@ mod input;
 
 pub type Location = usize;
 
-pub fn parse(blend: &[u8]) -> Result<Blend, BlendParseError> {
+pub fn parse(blend: &[u8]) -> Result<(FileHeader, Vec<FileBlock>, Dna), BlendParseError> {
     let input = Input::new(blend, None, None);
     parse_blend(input)
 }
@@ -41,6 +37,7 @@ pub struct Dna {
     pub field_names: Vec<String>,
     pub types: Vec<DnaType>,
     pub structs: Vec<DnaStruct>,
+    pub pointer_size: usize,
 }
 
 impl Dna {

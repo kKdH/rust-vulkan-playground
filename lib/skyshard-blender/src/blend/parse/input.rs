@@ -1,7 +1,7 @@
 use std::iter::{Copied, Enumerate};
 use std::ops::RangeFrom;
 use std::slice::Iter;
-use nom::{AsBytes, Compare, CompareResult, FindSubstring, InputIter, InputLength, InputTake, Needed, Slice};
+use nom::{Compare, CompareResult, FindSubstring, InputIter, InputLength, InputTake, Needed, Slice};
 use crate::blend::parse::{Endianness, Location, PointerSize};
 
 pub type Data<'a> = &'a [u8];

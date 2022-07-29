@@ -1,18 +1,15 @@
-use std::collections::HashMap;
 use std::num::NonZeroUsize;
-use std::os::unix::raw::ino_t;
-use itertools::Itertools;
-use nom::bytes::complete::{tag, take, take_until, take_until1};
-use nom::combinator::{map, rest};
+
 use nom::{Err, InputIter, InputLength, IResult, Slice};
 use nom::branch::alt;
+use nom::bytes::complete::{tag, take, take_until, take_until1};
+use nom::combinator::map;
 use nom::error::{context, ErrorKind, make_error};
 use nom::multi::{count, length_count};
 use nom::sequence::{pair, preceded, terminated, tuple};
-use crate::blend::parse::{BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
-use crate::blend::Blend;
-use crate::blend::parse::input::Input;
 
+use crate::blend::parse::{BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use crate::blend::parse::input::Input;
 
 /// Value: `BLENDER`
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
@@ -48,22 +45,15 @@ const FILE_BLOCK_COUNT_SIZE: usize = 4;
 
 type Result<'a, A> = IResult<Input<'a>, A>;
 
-pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError> {
+pub fn parse_blend(input: Input) -> ::std::result::Result<(FileHeader, Vec<FileBlock>, Dna), BlendParseError> {
     match parse_file_header(input) {
         Ok((file_blocks_input, header)) => {
             match parse_file_blocks(file_blocks_input) {
                 Ok((_, blocks)) => {
-                    let blocks_by_address: HashMap<NonZeroUsize, Vec<FileBlock>> = blocks.iter()
-                        .cloned()
-                        .filter(|block| block.address.is_some())
-                        .into_group_map_by(|block| block.address.unwrap());
-                    let blocks_by_identifier: HashMap<Identifier, Vec<FileBlock>> = blocks.iter()
-                        .cloned()
-                        .into_group_map_by(|block| block.identifier);
                     let dna = {
-                        let block = blocks_by_identifier
-                            .get(&Identifier::DNA)
-                            .expect("Failed to get DNA block")[0];
+                        let block = blocks.iter()
+                            .find(|file_block| Identifier::DNA == file_block.identifier)
+                            .expect("Failed to get DNA block");
                         let (input, _) = Input::new(input.data, file_blocks_input.pointer_size, file_blocks_input.endianness)
                             .split(block.data_location);
                         match parse_dna(input) {
@@ -79,15 +69,7 @@ pub fn parse_blend(input: Input) -> ::std::result::Result<Blend, BlendParseError
                             }
                         }
                     }?;
-                    ::std::result::Result::Ok(
-                        Blend {
-                            header,
-                            blocks,
-                            blocks_by_identifier,
-                            blocks_by_address,
-                            dna,
-                        }
-                    )
+                    ::std::result::Result::Ok((header, blocks, dna))
                 }
                 Err(_) => ::std::result::Result::Err(BlendParseError::ParseError)
             }
@@ -114,7 +96,10 @@ fn parse_dna(input: Input) -> Result<Dna> {
     Ok((input, Dna {
         field_names,
         types,
-        structs
+        structs,
+        pointer_size: input.pointer_size
+            .map(|pointer_size| pointer_size.size())
+            .unwrap_or(4),
     }))
 }
 
@@ -469,15 +454,12 @@ fn parse_u64(input: Input) -> Result<u64> {
 
 #[cfg(test)]
 mod test {
-    use std::ops::{AddAssign, RangeFrom};
-    use std::sync::Arc;
-    use nom::{Err, Finish, Slice};
-    use hamcrest2::{assert_that, HamcrestMatcher, equal_to, is};
-    use nom::bytes::complete::take;
-    use nom::error::Error;
+    use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is};
+    use nom::Finish;
+
     use crate::blend::parse::{Endianness, FileBlock, Identifier, PointerSize, Version};
     use crate::blend::parse::input::Input;
-    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, parse_dna_id, parse_u16, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
+    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, parse_u16, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
     use crate::blend::parse::parsers::{parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer, parse_pointer_size, parse_u32, parse_u64, parse_version};
 
     fn advance_to_file_blocks(input: Input) -> Input {
@@ -497,17 +479,17 @@ mod test {
 
     #[test]
     fn test_parse_blend() {
-        let blend_file = std::fs::read("assets/cube.blend").unwrap();
+        let blend_file = std::fs::read("test/resources/cube.blend").unwrap();
         let input = Input::new(blend_file.as_slice(), None, None);
-        let blend = parse_blend(input).unwrap();
+        let (_, file_blocks, _) = parse_blend(input).unwrap();
 
-        assert_that!(blend.blocks.len(), is(equal_to(1958)));
+        assert_that!(file_blocks.len(), is(equal_to(1958)));
     }
 
     #[test]
     fn test_parse_file_header() {
 
-        let blend_file = std::fs::read("assets/cube.blend").unwrap();
+        let blend_file = std::fs::read("test/resources/cube.blend").unwrap();
         let input = Input::new(blend_file.as_slice(), None, None);
         let (remaining, file_header) = parse_file_header(input)
             .finish()
@@ -525,9 +507,9 @@ mod test {
     #[test]
     fn test_parse_file_blocks() {
 
-        let blend_file = std::fs::read("assets/cube.blend").unwrap();
+        let blend_file = std::fs::read("test/resources/cube.blend").unwrap();
         let input = Input::new(blend_file.as_slice(), None, None);
-        let (input, file_header) = parse_file_header(input)
+        let (input, _) = parse_file_header(input)
             .finish()
             .ok()
             .unwrap();
@@ -612,7 +594,7 @@ mod test {
     #[test]
     fn test_parse_dna() {
 
-        let blend_file = std::fs::read("assets/cube.blend").unwrap();
+        let blend_file = std::fs::read("test/resources/cube.blend").unwrap();
         let input = Input::new(blend_file.as_slice(), Some(PointerSize::Pointer4Bytes), Some(Endianness::Little));
         let (_, dna_block) = advance_to_dna_block(advance_to_file_blocks(input));
         let (input, _) = input.split(dna_block.data_location());
