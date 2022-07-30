@@ -5,9 +5,8 @@ authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 edition = "2021"
 
 [workspace]
-
 members = [
-    "lib/skyshard-blender",
+    "lib/blender-rs",
 ]
 
 [dependencies]
@@ -23,7 +22,7 @@ thiserror = "1.0.31"
 winit = "0.26.1"
 
 skyshard = { path = "lib/skyshard" }
-skyshard-blender = { path = "lib/skyshard-blender" }
+blender-rs = { path = "lib/blender-rs" }
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"

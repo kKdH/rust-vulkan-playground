@@ -48,7 +48,7 @@ impl Dna {
 
     pub fn find_type_of<A>(&self, typed: A) -> Option<&DnaType>
     where A: HasDnaTypeIndex {
-        self.types.get(typed.type_index())
+        self.types.get(typed.type_index(self))
     }
 
     pub fn find_struct_of(&self, block: &FileBlock) -> Option<&DnaStruct> {
@@ -62,10 +62,6 @@ impl Dna {
                 .unwrap_or(false)
         })
     }
-}
-
-pub trait HasDnaTypeIndex {
-    fn type_index(&self) -> usize;
 }
 
 #[derive(Debug)]
@@ -90,21 +86,33 @@ pub struct DnaStruct {
     pub fields: Vec<DnaField>,
 }
 
-impl HasDnaTypeIndex for &DnaStruct {
-    fn type_index(&self) -> usize {
-        self.type_index
-    }
-}
-
 #[derive(Debug)]
 pub struct DnaField {
     pub name_index: usize,
     pub type_index: usize,
 }
 
+pub trait HasDnaTypeIndex {
+    fn type_index(&self, dna: &Dna) -> usize;
+}
+
 impl HasDnaTypeIndex for &DnaField {
-    fn type_index(&self) -> usize {
+    fn type_index(&self, _: &Dna) -> usize {
         self.type_index
+    }
+}
+
+impl HasDnaTypeIndex for &DnaStruct {
+    fn type_index(&self, _: &Dna) -> usize {
+        self.type_index
+    }
+}
+
+impl HasDnaTypeIndex for &FileBlock {
+    fn type_index(&self, dna: &Dna) -> usize {
+        dna.find_struct_of(self)
+           .expect("Could not determine struct of FileBlock!")
+           .type_index
     }
 }
 
