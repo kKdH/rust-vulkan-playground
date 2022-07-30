@@ -8,7 +8,6 @@ use nom::sequence::{delimited, pair, tuple};
 use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::blend::analyse::Type::FunctionPointer;
 use crate::blend::parse::{Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader};
 
 pub type Result<A> = ::core::result::Result<A, AnalyseError>;
@@ -37,7 +36,12 @@ pub enum Type {
     Struct { name: String, size: usize },
     Pointer { base_type: Box<Type>, size: usize },
     Array { base_type: Box<Type>, length: usize },
-    FunctionPointer
+    FunctionPointer,
+
+    /// This [`Type`] designates types which do not have a backing struct.
+    /// If a type is recognized as a struct but its size is zero, then it
+    /// becomes a [`Type::Special`].
+    Special { name: String },
 }
 
 impl Type {
@@ -74,7 +78,8 @@ impl Type {
             Type::Struct { .. } => &self,
             Type::Pointer { base_type, size: _size } => base_type.base_type(),
             Type::Array { base_type, length: _length } => base_type.base_type(),
-            Type::FunctionPointer => &FunctionPointer,
+            Type::FunctionPointer => &Type::FunctionPointer,
+            Type::Special { .. } => &self
         }
     }
 
@@ -100,7 +105,8 @@ impl Type {
             Type::Struct { name: _, size } => *size,
             Type::Pointer { base_type: _, size } => *size,
             Type::Array { base_type, length } => length * Type::compute_size(base_type),
-            Type::FunctionPointer => 4 // FIXME: get correct pointer size.
+            Type::FunctionPointer => 4, // FIXME: get correct pointer size.
+            Type::Special { .. } => 0,
         }
     }
 }
@@ -200,8 +206,10 @@ pub fn analyse(file_header: &FileHeader, file_blocks: &Vec<FileBlock>, dna: &Dna
                 for field in &analysed_struct.fields {
                     match &field.data_type.base_type() {
                         Type::Struct { name, size: _size } => {
-                            if structs.contains_key(name.as_str()) {
-                                // remaining.push(Clone::clone(name))
+                            if !structs.contains_key(name.as_str()) {
+                                if !remaining.contains(&name) {
+                                    remaining.push(Clone::clone(name))
+                                }
                             }
                         },
                         _ => {}
@@ -288,9 +296,16 @@ pub fn analyse_type(dna_type: &DnaType, _: &Dna) -> Result<Type> {
                 ),
             ),
             | parsed_type: &str | {
-                Type::Struct {
-                    name: String::from(parsed_type),
-                    size: dna_type.size,
+                if dna_type.size > 0 {
+                    Type::Struct {
+                        name: String::from(parsed_type),
+                        size: dna_type.size,
+                    }
+                }
+                else {
+                    Type::Special {
+                        name: String::from(parsed_type),
+                    }
                 }
             })
     };
@@ -405,8 +420,9 @@ pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
 
 #[cfg(test)]
 mod test {
+    use hamcrest2::{assert_that, equal_to, is, HamcrestMatcher};
     use crate::blend::analyse::analyse;
-    use crate::blend::parse::parse;
+    use crate::blend::parse::{Endianness, parse};
 
     #[test]
     fn test_analyse() {
@@ -415,8 +431,8 @@ mod test {
 
         let result = analyse(&file_header, &file_blocks, &dna).unwrap();
 
-        println!("Count: {:?}", result.structs.len());
-        println!("{:#?}", result)
+        assert_that!(result.endianness, is(equal_to(Endianness::Little)));
+        assert_that!(result.structs.len(), is(equal_to(297)));
     }
 
     mod type_spec {
