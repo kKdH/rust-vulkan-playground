@@ -138,9 +138,9 @@ pub enum Endianness {
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct Version {
-    major: char,
-    minor: char,
-    patch: char,
+    pub major: char,
+    pub minor: char,
+    pub patch: char,
 }
 
 impl Version {
