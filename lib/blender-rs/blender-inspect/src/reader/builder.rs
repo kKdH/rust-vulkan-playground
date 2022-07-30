@@ -1,5 +1,5 @@
-use crate::blend::parse::Identifier;
-use crate::blend::reader::Reader;
+use crate::parse::Identifier;
+use crate::reader::Reader;
 
 pub struct NoIdentifier;
 
@@ -30,8 +30,8 @@ impl ReaderBuilder<Identifier> {
 
 #[cfg(test)]
 mod test {
-    use crate::blend::parse::Identifier;
-    use crate::blend::reader::builder::ReaderBuilder;
+    use crate::parse::Identifier;
+    use crate::reader::builder::ReaderBuilder;
 
     #[test]
     fn test_build() {

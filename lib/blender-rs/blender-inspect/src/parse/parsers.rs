@@ -8,8 +8,8 @@ use nom::error::{context, ErrorKind, make_error};
 use nom::multi::{count, length_count};
 use nom::sequence::{pair, preceded, terminated, tuple};
 
-use crate::blend::parse::{BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
-use crate::blend::parse::input::Input;
+use crate::parse::{BlendParseError, Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader, Identifier, Location, PointerSize, Version};
+use crate::parse::input::Input;
 
 /// Value: `BLENDER`
 const BLENDER_TAG: [u8; 7] = [0x42, 0x4c, 0x45, 0x4e, 0x44, 0x45, 0x52];
@@ -457,10 +457,10 @@ mod test {
     use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is};
     use nom::Finish;
 
-    use crate::blend::parse::{Endianness, FileBlock, Identifier, PointerSize, Version};
-    use crate::blend::parse::input::Input;
-    use crate::blend::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, parse_u16, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
-    use crate::blend::parse::parsers::{parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer, parse_pointer_size, parse_u32, parse_u64, parse_version};
+    use crate::parse::{Endianness, FileBlock, Identifier, PointerSize, Version};
+    use crate::parse::input::Input;
+    use crate::parse::parsers::{ENDIANNESS_BIG_TAG, ENDIANNESS_LITTLE_TAG, parse_dna, parse_u16, POINTER_SIZE_32_BIT_TAG, POINTER_SIZE_64_BIT_TAG};
+    use crate::parse::parsers::{parse_blend, parse_endianness, parse_file_block, parse_file_header, parse_pointer, parse_pointer_size, parse_u32, parse_u64, parse_version};
 
     fn advance_to_file_blocks(input: Input) -> Input {
         input.split(12usize).0

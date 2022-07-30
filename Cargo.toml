@@ -6,7 +6,9 @@ edition = "2021"
 
 [workspace]
 members = [
-    "lib/blender-rs",
+    "lib/blender-rs/blender-rs",
+    "lib/blender-rs/blender-inspect",
+    "lib/blender-rs/generator"
 ]
 
 [dependencies]
@@ -22,7 +24,7 @@ thiserror = "1.0.31"
 winit = "0.26.1"
 
 skyshard = { path = "lib/skyshard" }
-blender-rs = { path = "lib/blender-rs" }
+blender-rs = { path = "lib/blender-rs/blender-rs", features = ["blender3_0"]}
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"

@@ -1,22 +1,43 @@
-use nom::IResult;
+use std::collections::HashMap;
+use std::slice::Iter;
+
 use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{alpha1, alphanumeric1, digit1};
-use nom::combinator::{all_consuming, map, recognize, value};
+use nom::combinator::{all_consuming, map, opt, recognize, value};
+use nom::IResult;
 use nom::multi::{many0, many0_count};
 use nom::sequence::{delimited, pair, tuple};
-use std::collections::HashMap;
-use std::slice::Iter;
 use thiserror::Error;
 
-use crate::blend::parse::{Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader};
+use crate::parse::{Dna, DnaField, DnaStruct, DnaType, Endianness, FileBlock, FileHeader};
 
 pub type Result<A> = ::core::result::Result<A, AnalyseError>;
 
 #[derive(Debug)]
 pub struct Structure {
-    pub endianness: Endianness,
-    pub structs: HashMap<String, Struct>,
+    endianness: Endianness,
+    structs: Vec<Struct>,
+    struct_names: HashMap<String, usize>,
+}
+
+impl Structure {
+
+    fn new(endianness: Endianness, structs: Vec<Struct>) -> Structure {
+        let struct_names = structs.iter()
+            .enumerate()
+            .map(|(index, strct)| (String::from(&strct.name), index))
+            .collect();
+        Structure {
+            endianness,
+            structs,
+            struct_names
+        }
+    }
+
+    pub fn structs(&self) -> Iter<'_, Struct> {
+        self.structs.iter()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,7 +58,7 @@ pub enum Type {
     Struct { name: String, size: usize },
     Pointer { base_type: Box<Type>, size: usize },
     Array { base_type: Box<Type>, length: usize },
-    FunctionPointer,
+    Function { size: usize },
 
     /// This [`Type`] designates types which do not have a backing struct.
     /// If a type is recognized as a struct but its size is zero, then it
@@ -79,7 +100,7 @@ impl Type {
             Type::Struct { .. } => &self,
             Type::Pointer { base_type, size: _size } => base_type.base_type(),
             Type::Array { base_type, length: _length } => base_type.base_type(),
-            Type::FunctionPointer => &Type::FunctionPointer,
+            Type::Function { .. } => &self,
             Type::Special { .. } => &self
         }
     }
@@ -106,7 +127,7 @@ impl Type {
             Type::Struct { name: _, size } => *size,
             Type::Pointer { base_type: _, size } => *size,
             Type::Array { base_type, length } => length * Type::compute_size(base_type),
-            Type::FunctionPointer => 4, // FIXME: get correct pointer size.
+            Type::Function { size } => *size,
             Type::Special { .. } => 0,
         }
     }
@@ -116,7 +137,7 @@ impl Type {
 pub struct Field {
     name: String,
     data_type: Type,
-    offset: usize,
+    offset: usize, //TODO: Remove offset. Not used anymore.
 }
 
 impl Field {
@@ -261,10 +282,7 @@ pub fn analyse(file_header: &FileHeader, file_blocks: &Vec<FileBlock>, dna: &Dna
         structs.insert(Clone::clone(&analysed_struct.name), analysed_struct);
     }
 
-    Ok(Structure {
-        endianness: file_header.endianness,
-        structs
-    })
+    Ok(Structure::new(file_header.endianness, structs.into_iter().map(|(_, strct)| strct).collect()))
 }
 
 pub fn analyse_type(dna_type: &DnaType, _: &Dna) -> Result<Type> {
@@ -371,41 +389,52 @@ pub fn analyse_field(dna_field: &DnaField, dna: &Dna, offset: usize) -> Result<F
         let result: IResult<&str, (String, Type)> = {
             all_consuming(
                 map(
-                    tuple((
-                        many0_count(tag("*")),
-                        recognize(
-                            pair(
-                                alt((alpha1, tag("_"))),
-                                many0(alt((alphanumeric1, tag("_"))))
-                            )
+                    pair(
+                        delimited(
+                            opt(tag("(")),
+                            tuple((
+                                many0_count(tag("*")),
+                                recognize(
+                                    pair(
+                                        alt((alpha1, tag("_"))),
+                                        many0(alt((alphanumeric1, tag("_"))))
+                                    )
+                                ),
+                                many0(
+                                    delimited(
+                                        tag("["),
+                                        digit1,
+                                        tag("]")
+                                    )
+                                )
+                            )),
+                            opt(tag(")"))
                         ),
-                        many0(
-                            delimited(
-                                tag("["),
-                                digit1,
-                                tag("]")
-                            )
-                        )
-                    )),
-                    |(pointers, name, arrays): (usize, &str, Vec<&str>)| {
+                        opt(value(true, tag("()")))
+                    ),
+                    |((pointers, name, arrays), function): ((usize, &str, Vec<&str>), Option<bool>)| {
                         let result_type = Clone::clone(base_type);
-                        let result_type = if pointers > 0 {
-                            (0..pointers).fold(result_type, |result, _| {
-                                Type::Pointer { base_type: Box::new(result), size: dna.pointer_size }
-                            })
-                        } else {
-                            result_type
-                        };
-                        let result_type = if arrays.len() > 0 {
-                            arrays.iter()
-                                .rev()
-                                .fold(result_type, |result, array_size| {
-                                    Type::Array { base_type: Box::new(result), length: array_size.parse::<usize>().unwrap() }
+                        let result_type = if function.is_none() {
+                            let result_type = if pointers > 0 {
+                                (0..pointers).fold(result_type, |result, _| {
+                                    Type::Pointer { base_type: Box::new(result), size: dna.pointer_size }
                                 })
-                        } else {
+                            } else {
+                                result_type
+                            };
+                            let result_type = if arrays.len() > 0 {
+                                arrays.iter()
+                                    .rev()
+                                    .fold(result_type, |result, array_size| {
+                                        Type::Array { base_type: Box::new(result), length: array_size.parse::<usize>().unwrap() }
+                                    })
+                            } else {
+                                result_type
+                            };
                             result_type
+                        } else {
+                            Type::Function { size: dna.pointer_size }
                         };
-
                         (String::from(name), result_type)
                     }
                 )
@@ -417,25 +446,16 @@ pub fn analyse_field(dna_field: &DnaField, dna: &Dna, offset: usize) -> Result<F
         }
     }
 
-    if field_name.ends_with("()") { // FIXME: parse function pointers.
-        Ok(Field {
-            data_type: Type::FunctionPointer,
-            name: Clone::clone(field_name),
-            offset
-        })
-    }
-    else {
-        analyse_type(&base_type, dna).and_then(|base_type| {
-            parse_field_name(field_name, &base_type, dna)
-                .map(|(parsed_name, parsed_type)| {
-                    Field {
-                        data_type: parsed_type,
-                        name: String::from(parsed_name),
-                        offset
-                    }
-                })
-        })
-    }
+    analyse_type(&base_type, dna).and_then(|base_type| {
+        parse_field_name(field_name, &base_type, dna)
+            .map(|(parsed_name, parsed_type)| {
+                Field {
+                    data_type: parsed_type,
+                    name: String::from(parsed_name),
+                    offset
+                }
+            })
+    })
 }
 
 pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
@@ -445,7 +465,7 @@ pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
         .ok_or(AnalyseError::InvalidTypeIndex { index: dna_struct.type_index })?;
 
     let fields = {
-        let mut offset = 0usize;
+        let mut offset = 0usize;  //TODO: Remove offset. Not used anymore.
         dna_struct.fields.iter()
             .map(| dna_field| {
                 let result = analyse_field(dna_field, dna, offset);
@@ -460,9 +480,10 @@ pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
 
 #[cfg(test)]
 mod test {
-    use hamcrest2::{assert_that, equal_to, is, HamcrestMatcher};
-    use crate::blend::analyse::{analyse, Mode};
-    use crate::blend::parse::{Endianness, parse};
+    use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is};
+
+    use crate::analyse::{analyse, Mode};
+    use crate::parse::{Endianness, parse};
 
     #[test]
     fn test_analyse() {
@@ -478,8 +499,8 @@ mod test {
     mod type_spec {
         use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is};
 
-        use crate::blend::analyse::{AnalyseError, Type, analyse_type};
-        use crate::blend::parse::{Dna, DnaStruct, DnaType};
+        use crate::analyse::{analyse_type, AnalyseError, Type};
+        use crate::parse::{Dna, DnaStruct, DnaType};
 
         #[test]
         fn test_parse_type() {
@@ -539,8 +560,8 @@ mod test {
     mod field_spec {
         use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is};
 
-        use crate::blend::analyse::{Field, Type, analyse_field};
-        use crate::blend::parse::{Dna, DnaField, DnaType};
+        use crate::analyse::{analyse_field, Field, Type};
+        use crate::parse::{Dna, DnaField, DnaType};
 
         #[test]
         fn test_parse_primitive_field() {
@@ -734,6 +755,23 @@ mod test {
             });
         }
 
+        #[test]
+        fn test_parse_function_field() {
+            setup(|fixture| {
+                let field = DnaField {
+                    name_index: 12,
+                    type_index: 1
+                };
+                assert_that!(analyse_field(&field, &fixture.dna, 0), is(equal_to(Ok(
+                    Field {
+                        data_type: Type::Function { size: 4 },
+                        name: String::from("bind"),
+                        offset: 0,
+                    }
+                ))));
+            });
+        }
+
         struct Fixture {
             dna: Dna
         }
@@ -754,6 +792,7 @@ mod test {
                         "*ui_data",
                         "*_pad_1[4]",
                         "scale[4][3]",
+                        "(*bind)()",
                     ].into_iter().map(|name| String::from(name)).collect(),
                     types: vec![
                         DnaType::new("float", 4),
@@ -774,8 +813,8 @@ mod test {
     mod struct_spec {
         use hamcrest2::{assert_that, equal_to, HamcrestMatcher, is};
 
-        use crate::blend::analyse::{Field, Struct, Type, analyse_struct};
-        use crate::blend::parse::{Dna, DnaField, DnaStruct, DnaType};
+        use crate::analyse::{analyse_struct, Field, Struct, Type};
+        use crate::parse::{Dna, DnaField, DnaStruct, DnaType};
 
         #[test]
         fn test_parse_struct() {
@@ -786,12 +825,14 @@ mod test {
                     "name[24]",
                     "id",
                     "scale[3]",
+                    "(*function)()"
                 ].into_iter().map(|name| String::from(name)).collect(),
                 types: vec![
                     DnaType::new("ID", 42),
                     DnaType::new("char", 1),
                     DnaType::new("Mesh", 73),
                     DnaType::new("float", 4),
+                    DnaType::new("int", 4),
                 ],
                 structs: vec![
                     DnaStruct {
@@ -810,6 +851,7 @@ mod test {
                 fields: vec![
                     DnaField { name_index: 2, type_index: 0 },
                     DnaField { name_index: 3, type_index: 3 },
+                    DnaField { name_index: 4, type_index: 4 },
                 ]
             };
 
@@ -818,7 +860,8 @@ mod test {
                     String::from("Mesh"),
                     vec![
                         Field { name: String::from("id"), data_type: Type::Struct { name: String::from("ID"), size: 42 }, offset: 0 },
-                        Field { name: String::from("scale"), data_type: Type::Array { base_type: Box::new(Type::Float), length: 3 }, offset: 42 }
+                        Field { name: String::from("scale"), data_type: Type::Array { base_type: Box::new(Type::Float), length: 3 }, offset: 42 },
+                        Field { name: String::from("function"), data_type: Type::Function { size: 4 }, offset: 54 },
                     ],
                     73
                 )

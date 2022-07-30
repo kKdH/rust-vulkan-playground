@@ -1,5 +1,5 @@
 [package]
-name = "blender-rs"
+name = "blender-inspect"
 version = "0.1.0"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 edition = "2021"
@@ -7,7 +7,6 @@ edition = "2021"
 [dependencies]
 itertools = "0.10.3"
 nom = "7.1.1"
-quote = "1.0.20"
 thiserror = "1.0.31"
 
 [dev-dependencies]

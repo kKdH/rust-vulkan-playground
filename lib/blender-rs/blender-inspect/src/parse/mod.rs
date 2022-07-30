@@ -3,8 +3,8 @@ use std::num::NonZeroUsize;
 
 use thiserror::Error;
 
-use crate::blend::parse::input::Input;
-use crate::blend::parse::parsers::parse_blend;
+use crate::parse::input::Input;
+use crate::parse::parsers::parse_blend;
 
 mod parsers;
 mod input;

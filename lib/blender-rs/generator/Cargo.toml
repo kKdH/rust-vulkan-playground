@@ -1,0 +1,17 @@
+[package]
+name = "generator"
+version = "0.1.0"
+authors = ["Elmar Schug <elmar.schug@jayware.org>"]
+edition = "2021"
+
+[dependencies]
+itertools = "0.10.3"
+proc-macro2 = "1.0.42"
+quote = "1.0.20"
+syn = "1.0.98"
+
+blender-inspect = { path = "../blender-inspect" }
+
+
+[dev-dependencies]
+hamcrest2 = "0.3.0"

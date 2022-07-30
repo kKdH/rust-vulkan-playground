@@ -1,0 +1,22 @@
+[package]
+name = "blender-rs"
+version = "0.1.0"
+authors = ["Elmar Schug <elmar.schug@jayware.org>"]
+edition = "2021"
+
+[features]
+blender2_7 = []
+blender2_9 = []
+blender3_0 = []
+all = ["blender2_7", "blender2_9", "blender3_0"]
+
+[dependencies]
+blender-inspect = { path = "../blender-inspect" }
+
+
+[dev-dependencies]
+hamcrest2 = "0.3.0"
+
+[build-dependencies]
+glob = "0.3.0"
+generator = { path = "../generator" }

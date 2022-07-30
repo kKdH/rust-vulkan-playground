@@ -1,7 +1,7 @@
 mod builder;
 
-use crate::blend::{Blend, BlendSource};
-use crate::blend::reader::builder::{NoIdentifier, ReaderBuilder};
+use crate::{Blend, BlendSource};
+use crate::reader::builder::{NoIdentifier, ReaderBuilder};
 
 
 pub struct Reader {

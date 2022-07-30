@@ -39,6 +39,7 @@ use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEve
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{Window, WindowBuilder};
 use rand::Rng;
+use blender_rs::blender::Pointer;
 
 
 fn main() {
