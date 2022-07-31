@@ -38,6 +38,12 @@ impl Structure {
     pub fn structs(&self) -> Iter<'_, Struct> {
         self.structs.iter()
     }
+
+    pub fn find_struct_by_name(&self, name: &str) -> Option<&Struct> {
+        self.struct_names.get(name)
+            .map(|index| self.structs.get(*index))
+            .flatten()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -82,6 +88,44 @@ impl Type {
     const TYPE_NAME_DOUBLE: &'static str = "double";
     const TYPE_NAME_VOID: &'static str = "void";
 
+    pub const PRIMITIVES: [Type; 12] = [
+        Type::Char,
+        Type::UChar,
+        Type::Short,
+        Type::UShort,
+        Type::Int,
+        Type::Int8,
+        Type::Int64,
+        Type::UInt64,
+        Type::Long,
+        Type::ULong,
+        Type::Float,
+        Type::Double,
+    ];
+
+    pub fn name(&self) -> Option<&'static str> {
+        match self {
+            Type::Char => Some(Type::TYPE_NAME_CHAR),
+            Type::UChar => Some(Type::TYPE_NAME_UCHAR),
+            Type::Short => Some(Type::TYPE_NAME_SHORT),
+            Type::UShort => Some(Type::TYPE_NAME_USHORT),
+            Type::Int => Some(Type::TYPE_NAME_INT),
+            Type::Int8 => Some(Type::TYPE_NAME_INT8),
+            Type::Int64 => Some(Type::TYPE_NAME_INT64),
+            Type::UInt64 => Some(Type::TYPE_NAME_UINT64),
+            Type::Long => Some(Type::TYPE_NAME_LONG),
+            Type::ULong => Some(Type::TYPE_NAME_ULONG),
+            Type::Float => Some(Type::TYPE_NAME_FLOAT),
+            Type::Double => Some(Type::TYPE_NAME_DOUBLE),
+            Type::Void => Some(Type::TYPE_NAME_VOID),
+            Type::Struct { .. } => None,
+            Type::Pointer { .. } => None,
+            Type::Array { .. } => None,
+            Type::Function { .. } => None,
+            Type::Special { .. } => None,
+        }
+    }
+
     pub fn base_type(&self) -> &Type {
         match self {
             Type::Char => &Type::Char,
@@ -119,10 +163,10 @@ impl Type {
             Type::Int8 => 1,
             Type::Int64 => 8,
             Type::UInt64 => 8,
-            Type::Long => 8,
-            Type::ULong => 8,
+            Type::Long => 4,
+            Type::ULong => 4,
             Type::Float => 4,
-            Type::Double => 4,
+            Type::Double => 8,
             Type::Void => 0,
             Type::Struct { name: _, size } => *size,
             Type::Pointer { base_type: _, size } => *size,
@@ -188,6 +232,10 @@ impl Struct {
 
     pub fn fields(&self) -> Iter<'_, Field> {
         self.fields.iter()
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
     }
 
     pub fn find_field_by_name(&self, name: &str) -> Option<&Field> {
@@ -554,6 +602,23 @@ mod test {
                 };
                 assert_that!(analyse_type(&dna_type, &dna).as_ref(), is(equal_to(expected.as_ref())))
             });
+        }
+
+        #[test]
+        fn test_primitive_types_size() {
+            assert_that!(Type::Char.size(), is(equal_to(1)));
+            assert_that!(Type::UChar.size(), is(equal_to(1)));
+            assert_that!(Type::Short.size(), is(equal_to(2)));
+            assert_that!(Type::UShort.size(), is(equal_to(2)));
+            assert_that!(Type::Int.size(), is(equal_to(4)));
+            assert_that!(Type::Long.size(), is(equal_to(4)));
+            assert_that!(Type::ULong.size(), is(equal_to(4)));
+            assert_that!(Type::Float.size(), is(equal_to(4)));
+            assert_that!(Type::Double.size(), is(equal_to(8)));
+            assert_that!(Type::Int64.size(), is(equal_to(8)));
+            assert_that!(Type::UInt64.size(), is(equal_to(8)));
+            assert_that!(Type::Void.size(), is(equal_to(0)));
+            assert_that!(Type::Int8.size(), is(equal_to(1)));
         }
     }
 
