@@ -1,3 +1,5 @@
+extern crate core;
+
 pub mod blender;
 
 #[cfg(feature = "blender2_7")]

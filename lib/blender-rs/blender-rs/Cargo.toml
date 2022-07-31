@@ -11,6 +11,7 @@ blender3_0 = []
 all = ["blender2_7", "blender2_9", "blender3_0"]
 
 [dependencies]
+bytemuck = "1.11.0"
 blender-inspect = { path = "../blender-inspect" }
 
 

@@ -433,14 +433,14 @@ fn parse_u64(input: Input) -> Result<u64> {
         match input.endianness {
             None => Err(Err::Failure(make_error(input, ErrorKind::Fail))),
             Some(Endianness::Little) => {
-                for (index, byte) in  bytes {
-                    result += (byte as u64) << (8 * index);
+                for (index, byte) in bytes {
+                    result = result + ((byte as u64) << (8 * index));
                 }
                 Ok((input.slice(bound..), result))
             }
             Some(Endianness::Big) => {
                 for (_, byte) in bytes {
-                    result = (result << 8) + byte as u64;
+                    result = (result << 8) + (byte as u64);
                 }
                 Ok((input.slice(bound..), result))
             }

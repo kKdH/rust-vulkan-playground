@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
 
@@ -11,9 +12,42 @@ mod input;
 
 pub type Location = usize;
 
-pub fn parse(blend: &[u8]) -> Result<(FileHeader, Vec<FileBlock>, Dna), BlendParseError> {
-    let input = Input::new(blend, None, None);
-    parse_blend(input)
+#[derive(Debug)]
+pub struct BlendFile {
+    pub header: FileHeader,
+    pub blocks: Vec<FileBlock>,
+    pub dna: Dna,
+    address_table: AddressTable,
+}
+
+impl BlendFile {
+
+    pub fn look_up<T>(&self, address: T) -> Option<&FileBlock>
+    where T: AddressLike {
+        self.address_table
+            .get(&address.address())
+            .map(|index| self.blocks.get(*index))
+            .flatten()
+    }
+}
+
+pub type Address = NonZeroUsize;
+pub type AddressTable = HashMap<Address, usize>;
+
+pub trait AddressLike {
+    fn address(&self) -> Address;
+}
+
+impl AddressLike for NonZeroUsize {
+    fn address(&self) -> Address {
+        *self
+    }
+}
+
+impl AddressLike for &NonZeroUsize {
+    fn address(&self) -> Address {
+        **self
+    }
 }
 
 #[derive(Error, Debug)]
@@ -240,4 +274,23 @@ impl Display for Identifier {
         };
         write!(formatter, "{}", text)
     }
+}
+
+pub fn parse(blend: &[u8]) -> Result<BlendFile, BlendParseError> {
+    let input = Input::new(blend, None, None);
+    parse_blend(input).map(|(header, blocks, dna)| {
+        let address_table: AddressTable = blocks.iter()
+            .enumerate()
+            .filter_map(|(index, block)| match block.address {
+                None => None,
+                Some(address) => Some((address, index))
+            })
+            .collect();
+        BlendFile {
+            header,
+            blocks,
+            dna,
+            address_table
+        }
+    })
 }

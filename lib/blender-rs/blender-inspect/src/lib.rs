@@ -8,11 +8,9 @@ mod analyse;
 mod parse;
 mod reader;
 
-use crate::parse::{Dna, FileBlock, FileHeader, PointerSize, Version};
-
-
 pub use crate::analyse::{Struct, Structure, Type, Mode};
 pub use crate::analyse::analyse;
+pub use crate::parse::{BlendFile, Dna, FileBlock, FileHeader, Identifier, PointerSize, Version, Address, AddressLike, AddressTable};
 pub use crate::parse::parse;
 
 
@@ -20,16 +18,17 @@ pub type Data<'a> = &'a[u8];
 
 #[derive(Debug)]
 pub struct Blend {
-    header: FileHeader,
-    blocks: Vec<FileBlock>,
-    dna: Dna,
+    blend_file: BlendFile,
     structure: Structure,
 }
 
 impl Blend {
-
     pub fn version(&self) -> &Version {
-        &self.header.version
+        &self.blend_file.header.version
+    }
+
+    pub fn blocks(&self) -> Iter<'_, FileBlock> {
+        self.blend_file.blocks.iter()
     }
 
     pub fn structs(&self) -> Iter<'_, Struct> {
@@ -37,10 +36,14 @@ impl Blend {
     }
 
     pub fn pointer_size(&self) -> usize {
-        match self.header.pointer_size {
+        match self.blend_file.header.pointer_size {
             PointerSize::Pointer4Bytes => 4,
             PointerSize::Pointer8Bytes => 8
         }
+    }
+
+    pub fn find_struct_by_name(&self, name: &str) -> Option<&Struct> {
+        self.structure.find_struct_by_name(name)
     }
 }
 
@@ -71,20 +74,23 @@ pub struct BlendError {
 }
 
 pub fn inspect<A>(source: A) -> Result<Blend, BlendError>
-    where A: BlendSource {
-    let (header, blocks, dna) = parse(source.data())
+where A: BlendSource {
+    let blend_file = parse(source.data())
         .map_err(|cause| {
             BlendError {
                 message: String::from("Could not parse header, blocks and dna!"),
                 cause: Box::new(cause)
             }
         })?;
-    let structure = analyse(&header, &blocks, &dna, Mode::All)
+    let structure = analyse(&blend_file, Mode::All)
         .map_err(|cause| {
             BlendError {
                 message: String::from("Could not analyse the structure of the blender data!"),
                 cause: Box::new(cause)
             }
         })?;
-    Ok(Blend { header, blocks, dna, structure })
+    Ok(Blend {
+        blend_file,
+        structure
+    })
 }

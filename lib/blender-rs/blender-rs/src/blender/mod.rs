@@ -1,13 +1,17 @@
 use std::marker::PhantomData;
+use std::num::NonZeroUsize;
+use blender_inspect::{Address, AddressLike};
 
 pub struct Void;
 
+#[derive(Debug)]
 pub struct Pointer<T, const SIZE: usize> {
     pub value: [u8; SIZE],
     phantom: PhantomData<T>
 }
 
 impl <T, const SIZE: usize> Pointer<T, SIZE> {
+
     pub fn new(value: [u8; SIZE]) -> Self {
         Pointer {
             value,
@@ -16,6 +20,23 @@ impl <T, const SIZE: usize> Pointer<T, SIZE> {
     }
 }
 
+impl <T, const SIZE: usize> AddressLike for Pointer<T, SIZE> {
+    fn address(&self) -> Address {
+        (&self).address()
+    }
+}
+
+impl <T, const SIZE: usize> AddressLike for &Pointer<T, SIZE> {
+    fn address(&self) -> Address {
+        let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
+            result + ((*value as usize) << (8 * index))
+        });
+        NonZeroUsize::new(result)
+            .expect("Is not a valid address!")
+    }
+}
+
+#[derive(Debug)]
 pub struct Function<const SIZE: usize> {
     pub value: [u8; SIZE]
 }
@@ -31,39 +52,40 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use std::mem;
+    use std::{mem, str};
+    use std::ffi::CStr;
+    use bytemuck::cast_slice;
 
     use hamcrest2::{assert_that, equal_to, is};
     use hamcrest2::HamcrestMatcher;
 
-    use blender_inspect::{analyse, Mode, parse};
+    use blender_inspect::{analyse, Blend, BlendFile, Identifier, Mode, parse, AddressLike};
+    use blender_inspect::Type::Pointer;
+    use crate::blender;
+    use crate::blender3_0::Mesh;
 
     #[test]
     fn test() {
 
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-        let (file_header, file_blocks, dna) = parse(blend_data.as_slice()).unwrap();
-        let structure = analyse(&file_header, &file_blocks, &dna, Mode::All).unwrap();
+        let blend: BlendFile = blender_inspect::parse(blend_data.as_slice()).unwrap();
 
-        let mesh_struct_size = mem::size_of::<crate::blender::blender3_0::Mesh>();
-        let mesh_structure = structure.find_struct_by_name("Mesh").unwrap();
-        let mesh_dna_struct = dna.find_struct_by_name("Mesh").unwrap();
-        let mesh_dna_type = dna.find_type_of(mesh_dna_struct).unwrap();
+        let mesh_block = blend.blocks.iter()
+            .find(|block| Identifier::ME == block.identifier)
+            .unwrap();
 
-        // mesh_dna_struct.fields.iter()
-        //     .map(|dna_field| {
-        //         (dna.find_field_name_of(dna_field).unwrap(),
-        //         dna.find_type_of(dna_field).unwrap())
-        //     })
-        //     .for_each(|(name, ty)| {
-        //         println!("{}: {} ({})", name, ty.name, ty.size);
-        //     });
-        // dna.types.iter().for_each(|dna_type| {
-        //     println!("dna_type: {}, {}", dna_type.name, dna_type.size)
-        // });
+        let blend_data = blend_data.as_slice();
+        let mesh_data = &blend_data[mesh_block.data_location()..mesh_block.data_location() + mem::size_of::<Mesh>()];
+        let (_, body, _) = unsafe { mesh_data.align_to::<blender::blender3_0::Mesh>() };
+        let mesh = &body[0];
+        let mesh_name_data: &[u8] = cast_slice(mesh.id.name.as_slice());
+
+        let mesh_name = str::from_utf8(mesh_name_data).unwrap();
+        println!("Name: {}", mesh_name);
+        println!("MPoly.address: {}", mesh.mpoly.address());
+
+        let mpoly_block = blend.look_up(&mesh.mpoly).unwrap();
 
 
-        assert_that!(mesh_struct_size, is(equal_to(mesh_structure.size())));
-        assert_that!(mesh_struct_size, is(equal_to(mesh_dna_type.size)));
     }
 }
