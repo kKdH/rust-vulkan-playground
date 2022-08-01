@@ -2,13 +2,11 @@
 use std::fs::File;
 use std::io::Write;
 
-
 use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 
-use blender_inspect::{Blend, inspect, Type};
+use blend_inspect_rs::{Blend, inspect, Type};
 use itertools::Itertools;
-
 
 
 pub fn generate(source_file: &str, target_dir: &str) {
@@ -54,7 +52,7 @@ pub fn generate(source_file: &str, target_dir: &str) {
 
     let code = quote! {
         #![allow(non_snake_case)]
-        use crate::blender::*;
+        use crate::blend::*;
 
         #(#quoted_structs)*
 

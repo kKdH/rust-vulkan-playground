@@ -6,15 +6,15 @@ use std::process::Command;
 
 fn main() -> Result<(), Box<dyn Error>>{
 
-    for entry in glob("src/blender/blender*.rs")? {
+    for entry in glob("src/blend/blender*.rs")? {
         fs::remove_file(entry?)?
     }
 
     for entry in glob("resources/*.blend")? {
-        generator::generate(&format!("{}", entry?.display()), "src/blender/");
+        generator::generate(&format!("{}", entry?.display()), "src/blend/");
     }
 
-    for entry in glob("src/blender/blender*.rs")? {
+    for entry in glob("src/blend/blender*.rs")? {
         Command::new("rustfmt")
             .args(&["--edition", "2021"])
             .arg(&format!("{}", entry?.display()))

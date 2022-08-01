@@ -1,13 +1,17 @@
 [package]
-name = "blender-inspect"
+name = "generator"
 version = "0.1.0"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 edition = "2021"
 
 [dependencies]
 itertools = "0.10.3"
-nom = "7.1.1"
-thiserror = "1.0.31"
+proc-macro2 = "1.0.42"
+quote = "1.0.20"
+syn = "1.0.98"
+
+blend-inspect-rs = { path = "../blend-inspect-rs" }
+
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"

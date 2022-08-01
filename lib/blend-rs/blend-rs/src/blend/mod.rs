@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
-use blender_inspect::{Address, AddressLike};
+use blend_inspect_rs::{Address, AddressLike};
 
 pub struct Void;
 
@@ -59,16 +59,16 @@ mod test {
     use hamcrest2::{assert_that, equal_to, is};
     use hamcrest2::HamcrestMatcher;
 
-    use blender_inspect::{analyse, Blend, BlendFile, Identifier, Mode, parse, AddressLike};
-    use blender_inspect::Type::Pointer;
-    use crate::blender;
+    use blend_inspect_rs::{analyse, Blend, BlendFile, Identifier, Mode, parse, AddressLike};
+    use blend_inspect_rs::Type::Pointer;
     use crate::blender3_0::Mesh;
+    use crate::blend;
 
     #[test]
     fn test() {
 
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-        let blend: BlendFile = blender_inspect::parse(blend_data.as_slice()).unwrap();
+        let blend: BlendFile = parse(blend_data.as_slice()).unwrap();
 
         let mesh_block = blend.blocks.iter()
             .find(|block| Identifier::ME == block.identifier)
@@ -76,7 +76,7 @@ mod test {
 
         let blend_data = blend_data.as_slice();
         let mesh_data = &blend_data[mesh_block.data_location()..mesh_block.data_location() + mem::size_of::<Mesh>()];
-        let (_, body, _) = unsafe { mesh_data.align_to::<blender::blender3_0::Mesh>() };
+        let (_, body, _) = unsafe { mesh_data.align_to::<blend::blender3_0::Mesh>() };
         let mesh = &body[0];
         let mesh_name_data: &[u8] = cast_slice(mesh.id.name.as_slice());
 
