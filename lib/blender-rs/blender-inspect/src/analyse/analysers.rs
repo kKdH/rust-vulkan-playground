@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
+
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
@@ -10,7 +10,7 @@ use nom::multi::{many0, many0_count};
 use nom::sequence::{delimited, pair, tuple};
 
 use crate::analyse::{AnalyseError, Field, Mode, Result, Struct, Structure, Type};
-use crate::parse::{Dna, DnaField, DnaStruct, DnaType, FileBlock, FileHeader, AddressTable};
+use crate::parse::{Dna, DnaField, DnaStruct, DnaType, FileBlock, FileHeader};
 
 
 pub fn analyse(file_header: &FileHeader, file_blocks: &Vec<FileBlock>, dna: &Dna, mode: Mode) -> Result<Structure> {
@@ -279,9 +279,9 @@ mod test {
     #[test]
     fn test_analyse() {
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-        let (file_header, file_blocks, dna) = parse(blend_data.as_slice()).unwrap();
+        let blend_file = parse(blend_data.as_slice()).unwrap();
 
-        let result = analyse(&file_header, &file_blocks, &dna, Mode::RequiredOnly).unwrap();
+        let result = analyse(&blend_file.header, &blend_file.blocks, &blend_file.dna, Mode::RequiredOnly).unwrap();
 
         assert_that!(result.endianness, is(equal_to(Endianness::Little)));
         assert_that!(result.structs.len(), is(equal_to(297)));

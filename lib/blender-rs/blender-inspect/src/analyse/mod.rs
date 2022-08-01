@@ -1,12 +1,12 @@
 mod analysers;
 
 use std::collections::HashMap;
-use std::num::NonZeroUsize;
+
 use std::slice::Iter;
 
 use thiserror::Error;
 
-use crate::parse::{BlendFile, Endianness, FileBlock};
+use crate::parse::{BlendFile, Endianness};
 
 pub type Result<A> = ::core::result::Result<A, AnalyseError>;
 

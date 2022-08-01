@@ -6,7 +6,6 @@ use thiserror::Error;
 
 mod analyse;
 mod parse;
-mod reader;
 
 pub use crate::analyse::{Struct, Structure, Type, Mode};
 pub use crate::analyse::analyse;
