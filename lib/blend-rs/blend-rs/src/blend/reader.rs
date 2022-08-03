@@ -4,7 +4,7 @@ use std::mem;
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, parse};
 use thiserror::Error;
-use crate::blend::GeneratedBlendStruct;
+use crate::blend::{GeneratedBlendStruct, PointerLike};
 
 pub struct Reader<'a> {
     data: Data<'a>,
@@ -25,6 +25,13 @@ impl <'a> Reader<'a> {
                 }
             }).collect();
         StructIter::new(views)
+    }
+
+    pub fn deref<A,  B>(&self, pointer: A) -> Option<&B>
+    where A: PointerLike<B> {
+
+        let _block = &self.blend.look_up(pointer.address());
+        todo!()
     }
 }
 

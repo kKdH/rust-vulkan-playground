@@ -127,7 +127,6 @@ name = "blend-rs"
 version = "0.1.0"
 dependencies = [
  "blend-inspect-rs",
- "bytemuck",
  "generator",
  "glob",
  "hamcrest2",

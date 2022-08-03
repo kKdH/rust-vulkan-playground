@@ -11,7 +11,6 @@ blender3_0 = []
 all = ["blender2_7", "blender2_9", "blender3_0"]
 
 [dependencies]
-bytemuck = "1.11.0"
 thiserror = "1.0.31"
 
 blend-inspect-rs = { path = "../blend-inspect-rs" }

@@ -2,6 +2,7 @@ mod reader;
 
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
+use std::str::Utf8Error;
 use blend_inspect_rs::{Address, AddressLike, Version};
 
 pub use reader::{read, Reader, ReadError};
@@ -45,6 +46,33 @@ pub struct Function<const SIZE: usize> {
     pub value: [u8; SIZE]
 }
 
+pub trait PointerLike<A> {
+    fn address(&self) -> Address;
+}
+
+pub trait StringLike {
+    fn to_str(&self) -> Result<&str, Utf8Error>;
+    fn to_string(&self) -> Result<String, Utf8Error>;
+}
+
+impl StringLike for [i8] {
+
+    fn to_str(&self) -> Result<&str, Utf8Error> {
+        let slice: &[u8] = unsafe {
+            core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len())
+        };
+        let null = slice.iter()
+            .position(|element| *element == 0x00)
+            .unwrap_or(slice.len());
+
+        std::str::from_utf8(&slice[0..null])
+    }
+
+    fn to_string(&self) -> Result<String, Utf8Error> {
+        self.to_str().map(|value| String::from(value))
+    }
+}
+
 pub trait GeneratedBlendStruct {
     const BLEND_VERSION: Version;
     const STRUCT_NAME: &'static str;
@@ -62,28 +90,22 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use std::{str};
-
-    use bytemuck::cast_slice;
-    use blend_inspect_rs::{BlendFile, parse};
-    use crate::blend::read;
-
+    use crate::blend::{read, StringLike};
     use crate::blender3_0::{Object};
 
     #[test]
     fn test() {
 
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-        let _blend: BlendFile = parse(&blend_data).unwrap();
 
         let reader = read(&blend_data).unwrap();
 
-        let x = reader.structs::<Object>();
-        x.for_each(|object| {
-            let mesh_name_data: &[u8] = cast_slice(object.id.name.as_slice());
-            let mesh_name = str::from_utf8(mesh_name_data).unwrap();
-            println!("Name: {}", mesh_name);
+        reader.structs::<Object>().for_each(|object| {
+            println!("Name: {}", object.id.name.to_str().unwrap());
+            // let x = reader.deref(&object.mpoly);
         });
+
+
 
         // println!("MPoly.address: {}", mesh.mpoly.address());
         // let mpoly_block = blend.look_up(&mesh.mpoly).unwrap();
