@@ -12,7 +12,7 @@ use itertools::Itertools;
 pub fn generate(source_file: &str, target_dir: &str) {
 
     let data = std::fs::read(source_file).unwrap();
-    let blend = inspect(data).ok().unwrap();
+    let blend = inspect(&data).ok().unwrap();
 
     let module_name = format!("blender{}_{}", blend.version().major, blend.version().minor);
     let module_name_ident = format_ident!("{}", module_name);
@@ -38,10 +38,24 @@ pub fn generate(source_file: &str, target_dir: &str) {
                     }
                 })
                 .collect();
+            let major_version = Literal::character(blend.version().major);
+            let minor_version = Literal::character(blend.version().minor);
+            let patch_version = Literal::character(blend.version().patch);
+            let struct_name = Literal::string(structure.name());
+            let struct_index = Literal::usize_unsuffixed(structure.index());
             quote! {
-                #[repr(C)]
+                #[repr(C, packed(4))]
                 pub struct #name {
                     #(#fields),*
+                }
+                impl GeneratedBlendStruct for #name {
+                    const BLEND_VERSION: Version = Version {
+                        major: #major_version,
+                        minor: #minor_version,
+                        patch: #patch_version
+                    };
+                    const STRUCT_NAME: &'static str = #struct_name;
+                    const STRUCT_INDEX: usize = #struct_index;
                 }
             }
         })
@@ -52,6 +66,8 @@ pub fn generate(source_file: &str, target_dir: &str) {
 
     let code = quote! {
         #![allow(non_snake_case)]
+        #![allow(dead_code)]
+
         use crate::blend::*;
 
         #(#quoted_structs)*

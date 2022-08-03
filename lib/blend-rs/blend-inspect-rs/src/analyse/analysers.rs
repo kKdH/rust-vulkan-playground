@@ -49,9 +49,9 @@ pub fn analyse(file_header: &FileHeader, file_blocks: &Vec<FileBlock>, dna: &Dna
     let mut structs: HashMap<String, Struct> = HashMap::new();
 
     while let Some(struct_name) = remaining.pop() {
-        let dna_struct = dna.find_struct_by_name(&struct_name)
+        let (dna_struct_index, dna_struct) = dna.find_struct_by_name(&struct_name)
             .ok_or(AnalyseError::UnknownStruct { value: struct_name })?;
-        let analysed_struct = analyse_struct(&dna_struct, &dna)?;
+        let analysed_struct = analyse_struct(dna_struct_index, &dna_struct, &dna)?;
 
         for field in &analysed_struct.fields {
             match &field.data_type.base_type() {
@@ -248,7 +248,7 @@ pub fn analyse_field(dna_field: &DnaField, dna: &Dna, offset: usize) -> Result<F
     })
 }
 
-pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
+pub fn analyse_struct(index: usize, dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
 
     let (name, size) = dna.find_type_of(dna_struct)
         .map(|dna_type| (Clone::clone(&dna_type.name), dna_type.size))
@@ -265,7 +265,7 @@ pub fn analyse_struct(dna_struct: &DnaStruct, dna: &Dna) -> Result<Struct> {
             .collect::<Result<Vec<Field>>>()?
     };
 
-    Ok(Struct::new(name, fields, size))
+    Ok(Struct::new(index, name, fields, size))
 }
 
 #[cfg(test)]
@@ -666,15 +666,16 @@ mod test {
                 ]
             };
 
-            assert_that!(analyse_struct(&dna_struct, &dna), is(equal_to(Ok(
+            assert_that!(analyse_struct(1337, &dna_struct, &dna), is(equal_to(Ok(
                 Struct::new(
+                    1337,
                     String::from("Mesh"),
                     vec![
                         Field { name: String::from("id"), data_type: Type::Struct { name: String::from("ID"), size: 42 }, offset: 0 },
                         Field { name: String::from("scale"), data_type: Type::Array { base_type: Box::new(Type::Float), length: 3 }, offset: 42 },
                         Field { name: String::from("function"), data_type: Type::Function { size: 4 }, offset: 54 },
                     ],
-                    73
+                    73,
                 )
             ))));
         }

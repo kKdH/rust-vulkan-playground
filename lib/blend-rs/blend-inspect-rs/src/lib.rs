@@ -9,7 +9,7 @@ mod parse;
 
 pub use crate::analyse::{Struct, Structure, Type, Mode};
 pub use crate::analyse::analyse;
-pub use crate::parse::{BlendFile, Dna, FileBlock, FileHeader, Identifier, PointerSize, Version, Address, AddressLike, AddressTable};
+pub use crate::parse::{BlendFile, Dna, FileBlock, FileHeader, Identifier, PointerSize, Version, Address, AddressLike, AddressTable, HasDnaTypeIndex};
 pub use crate::parse::parse;
 
 
@@ -46,19 +46,19 @@ impl Blend {
     }
 }
 
-pub trait BlendSource {
-    fn data(&self) -> Data;
+pub trait BlendSource<'a> {
+    fn data(&self) -> Data<'a>;
 }
 
-impl BlendSource for &[u8] {
-    fn data(&self) -> Data {
+impl <'a> BlendSource<'a> for &'a[u8] {
+    fn data(&self) -> Data<'a> {
         self
     }
 }
 
-impl BlendSource for Vec<u8> {
-    fn data(&self) -> Data {
-        self.as_slice()
+impl <'a> BlendSource<'a> for &'a Vec<u8> {
+    fn data(&self) -> Data<'a> {
+        &self[..]
     }
 }
 
@@ -72,9 +72,9 @@ pub struct BlendError {
     cause: Box<dyn std::error::Error>,
 }
 
-pub fn inspect<A>(source: A) -> Result<Blend, BlendError>
-where A: BlendSource {
-    let blend_file = parse(source.data())
+pub fn inspect<'a, A>(source: A) -> Result<Blend, BlendError>
+where A: BlendSource<'a> {
+    let blend_file = parse(source)
         .map_err(|cause| {
             BlendError {
                 message: String::from("Could not parse header, blocks and dna!"),

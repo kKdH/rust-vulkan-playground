@@ -131,6 +131,7 @@ dependencies = [
  "generator",
  "glob",
  "hamcrest2",
+ "thiserror",
 ]
 
 [[package]]

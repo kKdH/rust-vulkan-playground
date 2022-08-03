@@ -3,6 +3,7 @@ use std::fmt::{Display, Formatter};
 use std::num::NonZeroUsize;
 
 use thiserror::Error;
+use crate::BlendSource;
 
 use crate::parse::input::Input;
 use crate::parse::parsers::parse_blend;
@@ -89,8 +90,8 @@ impl Dna {
         self.structs.get(block.sdna)
     }
 
-    pub fn find_struct_by_name(&self, name: &str) -> Option<&DnaStruct> {
-        self.structs.iter().find(|dna_struct| {
+    pub fn find_struct_by_name(&self, name: &str) -> Option<(usize, &DnaStruct)> {
+        self.structs.iter().enumerate().find(|(_index, dna_struct)| {
             self.find_type_of(*dna_struct)
                 .map(|dna_type| name == dna_type.name)
                 .unwrap_or(false)
@@ -276,8 +277,9 @@ impl Display for Identifier {
     }
 }
 
-pub fn parse(blend: &[u8]) -> Result<BlendFile, BlendParseError> {
-    let input = Input::new(blend, None, None);
+pub fn parse<'a, A>(source: A) -> Result<BlendFile, BlendParseError>
+where A: BlendSource<'a> {
+    let input = Input::new(source.data(), None, None);
     parse_blend(input).map(|(header, blocks, dna)| {
         let address_table: AddressTable = blocks.iter()
             .enumerate()

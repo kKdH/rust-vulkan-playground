@@ -1,6 +1,10 @@
+mod reader;
+
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
-use blend_inspect_rs::{Address, AddressLike};
+use blend_inspect_rs::{Address, AddressLike, Version};
+
+pub use reader::{read, Reader, ReadError};
 
 pub struct Void;
 
@@ -41,6 +45,12 @@ pub struct Function<const SIZE: usize> {
     pub value: [u8; SIZE]
 }
 
+pub trait GeneratedBlendStruct {
+    const BLEND_VERSION: Version;
+    const STRUCT_NAME: &'static str;
+    const STRUCT_INDEX: usize;
+}
+
 #[cfg(feature = "blender2_7")]
 pub mod blender2_7;
 
@@ -52,40 +62,30 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use std::{mem, str};
-    use std::ffi::CStr;
+    use std::{str};
+
     use bytemuck::cast_slice;
+    use blend_inspect_rs::{BlendFile, parse};
+    use crate::blend::read;
 
-    use hamcrest2::{assert_that, equal_to, is};
-    use hamcrest2::HamcrestMatcher;
-
-    use blend_inspect_rs::{analyse, Blend, BlendFile, Identifier, Mode, parse, AddressLike};
-    use blend_inspect_rs::Type::Pointer;
-    use crate::blender3_0::Mesh;
-    use crate::blend;
+    use crate::blender3_0::{Object};
 
     #[test]
     fn test() {
 
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-        let blend: BlendFile = parse(blend_data.as_slice()).unwrap();
+        let _blend: BlendFile = parse(&blend_data).unwrap();
 
-        let mesh_block = blend.blocks.iter()
-            .find(|block| Identifier::ME == block.identifier)
-            .unwrap();
+        let reader = read(&blend_data).unwrap();
 
-        let blend_data = blend_data.as_slice();
-        let mesh_data = &blend_data[mesh_block.data_location()..mesh_block.data_location() + mem::size_of::<Mesh>()];
-        let (_, body, _) = unsafe { mesh_data.align_to::<blend::blender3_0::Mesh>() };
-        let mesh = &body[0];
-        let mesh_name_data: &[u8] = cast_slice(mesh.id.name.as_slice());
+        let x = reader.structs::<Object>();
+        x.for_each(|object| {
+            let mesh_name_data: &[u8] = cast_slice(object.id.name.as_slice());
+            let mesh_name = str::from_utf8(mesh_name_data).unwrap();
+            println!("Name: {}", mesh_name);
+        });
 
-        let mesh_name = str::from_utf8(mesh_name_data).unwrap();
-        println!("Name: {}", mesh_name);
-        println!("MPoly.address: {}", mesh.mpoly.address());
-
-        let mpoly_block = blend.look_up(&mesh.mpoly).unwrap();
-
-
+        // println!("MPoly.address: {}", mesh.mpoly.address());
+        // let mpoly_block = blend.look_up(&mesh.mpoly).unwrap();
     }
 }
