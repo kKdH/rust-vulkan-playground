@@ -1,5 +1,6 @@
 mod reader;
 
+
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
 use std::str::Utf8Error;
@@ -55,11 +56,13 @@ pub trait StringLike {
     fn to_string(&self) -> Result<String, Utf8Error>;
 }
 
-impl StringLike for [i8] {
+impl <A> StringLike for A
+where A: AsRef<[i8]> {
 
     fn to_str(&self) -> Result<&str, Utf8Error> {
+        let self_ref = self.as_ref();
         let slice: &[u8] = unsafe {
-            core::slice::from_raw_parts(self.as_ptr() as *const u8, self.len())
+            core::slice::from_raw_parts(self_ref.as_ptr() as *const u8, self_ref.len())
         };
         let null = slice.iter()
             .position(|element| *element == 0x00)
@@ -70,6 +73,37 @@ impl StringLike for [i8] {
 
     fn to_string(&self) -> Result<String, Utf8Error> {
         self.to_str().map(|value| String::from(value))
+    }
+}
+
+const NAME_PREFIXES: [&str; 17] = [
+    "OB", "ME", "WM", "IM", "SN",
+    "WS", "BR", "SC", "PL", "OB",
+    "GR", "CA", "LA", "ME", "WO",
+    "LS", "MA",
+];
+
+pub trait NameLike {
+    fn to_name_str(&self) -> Result<&str, Utf8Error>;
+    fn to_name_string(&self) -> Result<String, Utf8Error>;
+}
+
+impl <A> NameLike for A
+where A: StringLike {
+
+    fn to_name_str(&self) -> Result<&str, Utf8Error> {
+        self.to_str().map(|value| {
+            if NAME_PREFIXES.contains(&&value[0..2]) {
+                &value[2..]
+            }
+            else {
+                &value
+            }
+        })
+    }
+
+    fn to_name_string(&self) -> Result<String, Utf8Error> {
+        self.to_name_str().map(|value| String::from(value))
     }
 }
 
@@ -90,8 +124,8 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, StringLike};
-    use crate::blender3_0::{Object};
+    use crate::blend::{read, NameLike};
+    use crate::blender3_0::{Mesh};
 
     #[test]
     fn test() {
@@ -100,12 +134,10 @@ mod test {
 
         let reader = read(&blend_data).unwrap();
 
-        reader.structs::<Object>().for_each(|object| {
-            println!("Name: {}", object.id.name.to_str().unwrap());
+        reader.structs::<Mesh>().for_each(|object| {
+            println!("Name: {}", object.id.name.to_name_str().unwrap());
             // let x = reader.deref(&object.mpoly);
         });
-
-
 
         // println!("MPoly.address: {}", mesh.mpoly.address());
         // let mpoly_block = blend.look_up(&mesh.mpoly).unwrap();
