@@ -26,19 +26,39 @@ impl <T, const SIZE: usize> Pointer<T, SIZE> {
     }
 }
 
-impl <T, const SIZE: usize> AddressLike for Pointer<T, SIZE> {
-    fn address(&self) -> Address {
-        (&self).address()
+pub trait PointerLike<A> {
+
+    fn address(&self) -> Option<Address>;
+
+    fn is_valid(&self) -> bool;
+
+    fn is_invalid(&self) -> bool {
+        !self.is_valid()
     }
 }
 
-impl <T, const SIZE: usize> AddressLike for &Pointer<T, SIZE> {
-    fn address(&self) -> Address {
+impl <B, const SIZE: usize> PointerLike<B> for Pointer<B, SIZE> {
+
+    fn address(&self) -> Option<Address> {
+        (&self).address()
+    }
+
+    fn is_valid(&self) -> bool {
+        (&self).is_valid()
+    }
+}
+
+impl <B, const SIZE: usize> PointerLike<B> for &Pointer<B, SIZE> {
+
+    fn address(&self) -> Option<Address> {
         let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
             result + ((*value as usize) << (8 * index))
         });
-        NonZeroUsize::new(result)
-            .expect("Is not a valid address!")
+        Address::new(result)
+    }
+
+    fn is_valid(&self) -> bool {
+        self.value.iter().sum::<u8>() > 0
     }
 }
 
@@ -47,13 +67,21 @@ pub struct Function<const SIZE: usize> {
     pub value: [u8; SIZE]
 }
 
-pub trait PointerLike<A> {
-    fn address(&self) -> Address;
-}
-
 pub trait StringLike {
+
     fn to_str(&self) -> Result<&str, Utf8Error>;
-    fn to_string(&self) -> Result<String, Utf8Error>;
+
+    fn to_str_unchecked(&self) -> &str {
+        self.to_str().expect("Failed to extract &str!")
+    }
+
+    fn to_string(&self) -> Result<String, Utf8Error> {
+        self.to_str().map(|value| String::from(value))
+    }
+
+    fn to_string_unchecked(&self) -> String {
+        self.to_string().expect("Failed to extract String!")
+    }
 }
 
 impl <A> StringLike for A
@@ -70,10 +98,6 @@ where A: AsRef<[i8]> {
 
         std::str::from_utf8(&slice[0..null])
     }
-
-    fn to_string(&self) -> Result<String, Utf8Error> {
-        self.to_str().map(|value| String::from(value))
-    }
 }
 
 const NAME_PREFIXES: [&str; 17] = [
@@ -84,8 +108,20 @@ const NAME_PREFIXES: [&str; 17] = [
 ];
 
 pub trait NameLike {
+
     fn to_name_str(&self) -> Result<&str, Utf8Error>;
-    fn to_name_string(&self) -> Result<String, Utf8Error>;
+
+    fn to_name_string(&self) -> Result<String, Utf8Error> {
+        self.to_name_str().map(|value| String::from(value))
+    }
+
+    fn to_name_str_unchecked(&self) -> &str {
+        self.to_name_str().expect("Failed to convert to name!")
+    }
+
+    fn to_name_string_unchecked(&self) -> String {
+        self.to_name_string().expect("Failed to convert to name!")
+    }
 }
 
 impl <A> NameLike for A
@@ -100,10 +136,6 @@ where A: StringLike {
                 &value
             }
         })
-    }
-
-    fn to_name_string(&self) -> Result<String, Utf8Error> {
-        self.to_name_str().map(|value| String::from(value))
     }
 }
 
@@ -124,8 +156,8 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, NameLike};
-    use crate::blender3_0::{Mesh};
+    use crate::blend::{read, NameLike, PointerLike};
+    use crate::blender3_0::{Mesh, Object};
 
     #[test]
     fn test() {
@@ -134,12 +166,17 @@ mod test {
 
         let reader = read(&blend_data).unwrap();
 
-        reader.structs::<Mesh>().for_each(|object| {
-            println!("Name: {}", object.id.name.to_name_str().unwrap());
-            // let x = reader.deref(&object.mpoly);
-        });
+        let objects: Vec<&Object> = reader.structs::<Object>().collect();
+        let cube = objects.iter()
+            .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
+            .unwrap();
 
-        // println!("MPoly.address: {}", mesh.mpoly.address());
-        // let mpoly_block = blend.look_up(&mesh.mpoly).unwrap();
+        reader.structs::<Mesh>().for_each(|mesh| {
+            println!("Name: {}", mesh.id.name.to_name_str().unwrap());
+
+            reader.deref(&mesh.mvert).enumerate().for_each(|(index, vert) | {
+                println!("{:?}: {:?}", index, vert.co)
+            });
+        });
     }
 }

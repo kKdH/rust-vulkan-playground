@@ -27,17 +27,26 @@ impl <'a> Reader<'a> {
         StructIter::new(views)
     }
 
-    pub fn deref<A,  B>(&self, pointer: A) -> Option<&B>
-    where A: PointerLike<B> {
+    pub fn deref<A,  B>(&self, pointer: A) -> StructIter<B>
+    where A: PointerLike<B>,
+          B: 'a + GeneratedBlendStruct {
+        let views = if let Some(address) = pointer.address(){
+            self.blend.look_up(address)
+                .iter()
+                .map(|block| FileBlockView::new(self.data, block))
+                .collect()
+        } else {
+            Vec::new()
+        };
 
-        let _block = &self.blend.look_up(pointer.address());
-        todo!()
+        StructIter::new(views)
     }
 }
 
 struct FileBlockView<'a, A> {
     data: Data<'a>,
     count: usize,
+    size: usize,
     phantom: PhantomData<&'a A>,
 }
 
@@ -50,15 +59,15 @@ where A: 'a + GeneratedBlendStruct {
         Self {
             data: &data[start_offset..end_offset],
             count: block.count,
+            size: mem::size_of::<A>(),
             phantom: PhantomData::default(),
         }
     }
 
     fn view(&self, index: usize) -> &'a A {
-        let start_offset = mem::size_of::<A>() * index;
-        let end_offset = start_offset + mem::size_of::<A>();
+        let offset = self.size * index;
         let (before, body, after) = unsafe {
-            self.data[start_offset..end_offset].align_to::<A>()
+            self.data[offset..(offset + self.size)].align_to::<A>()
         };
         if before.len() == 0 && body.len() == 1 && after.len() == 0 {
             &body[0]
