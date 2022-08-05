@@ -1,5 +1,5 @@
 mod reader;
-
+mod util;
 
 use std::marker::PhantomData;
 use std::num::NonZeroUsize;
@@ -7,6 +7,7 @@ use std::str::Utf8Error;
 use blend_inspect_rs::{Address, AddressLike, Version};
 
 pub use reader::{read, Reader, ReadError};
+pub use util::{StringLike, NameLike};
 
 pub struct Void;
 
@@ -24,6 +25,10 @@ impl <T, const SIZE: usize> Pointer<T, SIZE> {
             phantom: Default::default()
         }
     }
+
+    fn cast_to<B>(&self) -> Pointer<B, SIZE> {
+        Pointer::new(self.value)
+    }
 }
 
 pub trait PointerLike<A> {
@@ -37,7 +42,7 @@ pub trait PointerLike<A> {
     }
 }
 
-impl <B, const SIZE: usize> PointerLike<B> for Pointer<B, SIZE> {
+impl <A, const SIZE: usize> PointerLike<A> for Pointer<A, SIZE> {
 
     fn address(&self) -> Option<Address> {
         (&self).address()
@@ -48,7 +53,7 @@ impl <B, const SIZE: usize> PointerLike<B> for Pointer<B, SIZE> {
     }
 }
 
-impl <B, const SIZE: usize> PointerLike<B> for &Pointer<B, SIZE> {
+impl <A, const SIZE: usize> PointerLike<A> for &Pointer<A, SIZE> {
 
     fn address(&self) -> Option<Address> {
         let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
@@ -65,78 +70,6 @@ impl <B, const SIZE: usize> PointerLike<B> for &Pointer<B, SIZE> {
 #[derive(Debug)]
 pub struct Function<const SIZE: usize> {
     pub value: [u8; SIZE]
-}
-
-pub trait StringLike {
-
-    fn to_str(&self) -> Result<&str, Utf8Error>;
-
-    fn to_str_unchecked(&self) -> &str {
-        self.to_str().expect("Failed to extract &str!")
-    }
-
-    fn to_string(&self) -> Result<String, Utf8Error> {
-        self.to_str().map(|value| String::from(value))
-    }
-
-    fn to_string_unchecked(&self) -> String {
-        self.to_string().expect("Failed to extract String!")
-    }
-}
-
-impl <A> StringLike for A
-where A: AsRef<[i8]> {
-
-    fn to_str(&self) -> Result<&str, Utf8Error> {
-        let self_ref = self.as_ref();
-        let slice: &[u8] = unsafe {
-            core::slice::from_raw_parts(self_ref.as_ptr() as *const u8, self_ref.len())
-        };
-        let null = slice.iter()
-            .position(|element| *element == 0x00)
-            .unwrap_or(slice.len());
-
-        std::str::from_utf8(&slice[0..null])
-    }
-}
-
-const NAME_PREFIXES: [&str; 17] = [
-    "OB", "ME", "WM", "IM", "SN",
-    "WS", "BR", "SC", "PL", "OB",
-    "GR", "CA", "LA", "ME", "WO",
-    "LS", "MA",
-];
-
-pub trait NameLike {
-
-    fn to_name_str(&self) -> Result<&str, Utf8Error>;
-
-    fn to_name_string(&self) -> Result<String, Utf8Error> {
-        self.to_name_str().map(|value| String::from(value))
-    }
-
-    fn to_name_str_unchecked(&self) -> &str {
-        self.to_name_str().expect("Failed to convert to name!")
-    }
-
-    fn to_name_string_unchecked(&self) -> String {
-        self.to_name_string().expect("Failed to convert to name!")
-    }
-}
-
-impl <A> NameLike for A
-where A: StringLike {
-
-    fn to_name_str(&self) -> Result<&str, Utf8Error> {
-        self.to_str().map(|value| {
-            if NAME_PREFIXES.contains(&&value[0..2]) {
-                &value[2..]
-            }
-            else {
-                &value
-            }
-        })
-    }
 }
 
 pub trait GeneratedBlendStruct {
@@ -156,7 +89,7 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, NameLike, PointerLike};
+    use crate::blend::{read, NameLike, PointerLike, Void, Pointer};
     use crate::blender3_0::{Mesh, Object};
 
     #[test]
@@ -171,12 +104,13 @@ mod test {
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
-        reader.structs::<Mesh>().for_each(|mesh| {
-            println!("Name: {}", mesh.id.name.to_name_str().unwrap());
+        let parent = *reader.deref(&cube.parent).collect::<Vec<&Object>>().first().unwrap();
+        println!("Parent: {}", parent.id.name.to_name_str_unchecked());
 
-            reader.deref(&mesh.mvert).enumerate().for_each(|(index, vert) | {
-                println!("{:?}: {:?}", index, vert.co)
-            });
+        let mesh = *reader.deref(&cube.data.cast_to::<Mesh>()).collect::<Vec<&Mesh>>().first().unwrap();
+        println!("Name: {}", mesh.id.name.to_name_str().unwrap());
+        reader.deref(&mesh.mvert).enumerate().for_each(|(index, vert) | {
+            println!("{:?}: {:?}", index, vert.co)
         });
     }
 }
