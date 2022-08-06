@@ -8,7 +8,7 @@ edition = "2021"
 members = [
     "lib/blend-rs/blend-rs",
     "lib/blend-rs/blend-inspect-rs",
-    "lib/blend-rs/generator"
+    "lib/blend-rs/blend-bindgen-rs"
 ]
 
 [dependencies]

@@ -4,6 +4,8 @@ use std::fs;
 use glob::glob;
 use std::process::Command;
 
+use blend_bindgen_rs::generate;
+
 fn main() -> Result<(), Box<dyn Error>>{
 
     for entry in glob("src/blend/blender*.rs")? {
@@ -11,7 +13,7 @@ fn main() -> Result<(), Box<dyn Error>>{
     }
 
     for entry in glob("resources/*.blend")? {
-        generator::generate(&format!("{}", entry?.display()), "src/blend/");
+        generate(&format!("{}", entry?.display()), "src/blend/");
     }
 
     for entry in glob("src/blend/blender*.rs")? {

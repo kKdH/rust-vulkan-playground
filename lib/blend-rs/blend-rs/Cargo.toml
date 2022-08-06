@@ -23,4 +23,4 @@ hamcrest2 = "0.3.0"
 
 [build-dependencies]
 glob = "0.3.0"
-generator = { path = "../generator" }
+blend-bindgen-rs = { path = "../blend-bindgen-rs" }
