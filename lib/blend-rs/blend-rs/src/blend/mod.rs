@@ -1,17 +1,19 @@
 mod reader;
 mod util;
 
+use std::fmt::{Debug};
 use std::marker::PhantomData;
-use std::num::NonZeroUsize;
-use std::str::Utf8Error;
+
 use blend_inspect_rs::{Address, AddressLike, Version};
 
 pub use reader::{read, Reader, ReadError};
 pub use util::{StringLike, NameLike};
 
+
+#[derive(Debug, Copy, Clone)]
 pub struct Void;
 
-#[derive(Debug)]
+#[derive(Debug,  Copy, Clone)]
 pub struct Pointer<T, const SIZE: usize> {
     pub value: [u8; SIZE],
     phantom: PhantomData<T>
@@ -67,7 +69,7 @@ impl <A, const SIZE: usize> PointerLike<A> for &Pointer<A, SIZE> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Function<const SIZE: usize> {
     pub value: [u8; SIZE]
 }
@@ -89,27 +91,28 @@ pub mod blender3_0;
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, NameLike, PointerLike, Void, Pointer};
+    
+    use crate::blend::{read, NameLike};
     use crate::blender3_0::{Mesh, Object};
 
     #[test]
     fn test() {
 
         let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
-
         let reader = read(&blend_data).unwrap();
 
-        let objects: Vec<&Object> = reader.structs::<Object>().collect();
-        let cube = objects.iter()
+        let cube: &Object = reader.structs::<Object>().unwrap()
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
-        let parent = *reader.deref(&cube.parent).collect::<Vec<&Object>>().first().unwrap();
+        println!("Object: {}", cube.id.name.to_name_str_unchecked());
+
+        let parent = reader.deref(&cube.parent).unwrap().first().unwrap();
         println!("Parent: {}", parent.id.name.to_name_str_unchecked());
 
-        let mesh = *reader.deref(&cube.data.cast_to::<Mesh>()).collect::<Vec<&Mesh>>().first().unwrap();
-        println!("Name: {}", mesh.id.name.to_name_str().unwrap());
-        reader.deref(&mesh.mvert).enumerate().for_each(|(index, vert) | {
+        let mesh = reader.deref(&cube.data.cast_to::<Mesh>()).unwrap().first().unwrap();
+        println!("Mesh: {}", mesh.id.name.to_name_str().unwrap());
+        reader.deref(&mesh.mvert).unwrap().enumerate().for_each(|(index, vert) | {
             println!("{:?}: {:?}", index, vert.co)
         });
     }

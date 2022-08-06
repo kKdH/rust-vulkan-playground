@@ -192,6 +192,12 @@ impl Version {
     }
 }
 
+impl Display for Version {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct FileBlock {
     pub identifier: Identifier,
