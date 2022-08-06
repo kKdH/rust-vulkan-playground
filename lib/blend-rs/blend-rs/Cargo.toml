@@ -14,13 +14,12 @@ blender3_0 = []
 all = ["blender2_7", "blender2_9", "blender3_0"]
 
 [dependencies]
+blend-inspect-rs = "0.1.0"
 thiserror = "1.0.31"
-
-blend-inspect-rs = { path = "../blend-inspect-rs" }
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"
 
 [build-dependencies]
+blend-bindgen-rs = "0.1.0"
 glob = "0.3.0"
-blend-bindgen-rs = { path = "../blend-bindgen-rs" }

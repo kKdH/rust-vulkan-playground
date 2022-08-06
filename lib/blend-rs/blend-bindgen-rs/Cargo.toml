@@ -1,19 +1,19 @@
 [package]
 name = "blend-bindgen-rs"
 version = "0.1.0"
-description = "A crate to generate structs to read Blender's .blend files."
+description = "A crate to generate code to read Blender's .blend files."
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 keywords = ["blender", "blend", "generator", "gamedev", "game"]
 license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]
+blend-inspect-rs = "0.1.0"
 itertools = "0.10.3"
 proc-macro2 = "1.0.42"
 quote = "1.0.20"
 syn = "1.0.98"
 
-blend-inspect-rs = { path = "../blend-inspect-rs" }
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"
