@@ -1,6 +1,6 @@
 [package]
 name = "blend-bindgen-rs"
-version = "0.1.0"
+version = "0.2.0"
 description = "A crate to generate code to read Blender's .blend files."
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 keywords = ["blender", "blend", "generator", "gamedev", "game"]

@@ -9,7 +9,7 @@ use blend_inspect_rs::{Blend, inspect, Type};
 use itertools::Itertools;
 
 
-pub fn generate(source_file: &str, target_dir: &str) {
+pub fn generate(source_file: &str, target_dir: &str) -> String {
 
     let data = std::fs::read(source_file).unwrap();
     let blend = inspect(&data).ok().unwrap();
@@ -82,6 +82,8 @@ pub fn generate(source_file: &str, target_dir: &str) {
 
     let mut generated_file = File::create(&file_name).expect(&file_name);
     write!(&mut generated_file, "{:#}", code).expect("Unable to write generated.ts");
+
+    file_name
 }
 
 fn quote_type(ty: &Type) -> TokenStream {

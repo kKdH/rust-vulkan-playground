@@ -150,7 +150,7 @@ name = "blend-rs"
 version = "0.1.0"
 dependencies = [
  "blend-bindgen-rs",
- "blend-inspect-rs 0.1.0",
+ "blend-inspect-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "glob",
  "hamcrest2",
  "thiserror",
