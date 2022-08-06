@@ -1,7 +1,10 @@
 [package]
 name = "blend-rs"
 version = "0.1.0"
+description = "A crate to read Blender's .blend files."
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
+keywords = ["blender", "blend", "parsing", "gamedev", "game"]
+license = "Apache-2.0"
 edition = "2021"
 
 [features]

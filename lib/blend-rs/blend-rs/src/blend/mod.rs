@@ -112,6 +112,9 @@ mod test {
 
         let mesh = reader.deref(&cube.data.cast_to::<Mesh>()).unwrap().first().unwrap();
         println!("Mesh: {}", mesh.id.name.to_name_str().unwrap());
+        reader.deref(&mesh.mloop).unwrap().enumerate().for_each(|(index, mloop)| {
+            println!("{:?}: {}", index, mloop.v)
+        });
         reader.deref(&mesh.mvert).unwrap().enumerate().for_each(|(index, vert) | {
             println!("{:?}: {:?}", index, vert.co)
         });
