@@ -1,7 +1,7 @@
 [package]
 name = "blend-bindgen-rs"
 version = "0.3.0"
-description = "A crate to generate code to read Blender's .blend files."
+description = "A Rust library to generated Blender's data structures."
 readme = "README.md"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 keywords = ["blender", "blend", "generator", "gamedev", "game"]

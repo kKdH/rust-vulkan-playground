@@ -1,7 +1,7 @@
 [package]
 name = "blend-rs"
 version = "0.1.0"
-description = "A crate to read Blender's .blend files."
+description = "A Rust library to read Blender's .blend files."
 readme = "README.md"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 keywords = ["blender", "blend", "parsing", "gamedev", "game"]
