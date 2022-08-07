@@ -1,6 +1,6 @@
 [package]
 name = "blend-inspect-rs"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Rust library to parse and analyse Blender's .blend files."
 readme = "README.md"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]

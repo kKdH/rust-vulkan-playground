@@ -1,6 +1,6 @@
 [package]
 name = "blend-bindgen-rs"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Rust library to generated Blender's data structures."
 readme = "README.md"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
@@ -9,7 +9,7 @@ license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]
-blend-inspect-rs = "0.1.0"
+blend-inspect-rs = "0.2.0"
 itertools = "0.10.3"
 proc-macro2 = "1.0.42"
 quote = "1.0.20"

@@ -5,7 +5,7 @@ A Rust library to generated Blender's data structures.
 ## Description
 This library belongs to a set of three libraries which are all related to the topic of reading Blender's .blend files:
 
-![image info](../overview.svg)
+![image info](overview.svg)
 
 * [blend-inspect-rs](https://crates.io/crates/blend-inspect-rs):
   A Rust library to parse and analyse Blender's .blend files.
