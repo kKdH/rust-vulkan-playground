@@ -2,6 +2,7 @@
 name = "blend-inspect-rs"
 version = "0.1.0"
 description = "A crate to inspect the structure Blender's .blend files."
+readme = "README.md"
 authors = ["Elmar Schug <elmar.schug@jayware.org>"]
 keywords = ["blender", "blend", "parsing", "gamedev", "game"]
 license = "Apache-2.0"
