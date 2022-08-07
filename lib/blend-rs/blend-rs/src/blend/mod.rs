@@ -4,10 +4,11 @@ mod util;
 use std::fmt::{Debug};
 use std::marker::PhantomData;
 
-use blend_inspect_rs::{Address, AddressLike, Version};
+use blend_inspect_rs::Address;
 
 pub use reader::{read, Reader, ReadError};
 pub use util::{StringLike, NameLike};
+pub use blend_inspect_rs::Version;
 
 
 #[derive(Debug, Copy, Clone)]
@@ -79,15 +80,6 @@ pub trait GeneratedBlendStruct {
     const STRUCT_NAME: &'static str;
     const STRUCT_INDEX: usize;
 }
-
-#[cfg(feature = "blender2_7")]
-pub mod blender2_7;
-
-#[cfg(feature = "blender2_9")]
-pub mod blender2_9;
-
-#[cfg(feature = "blender3_0")]
-pub mod blender3_0;
 
 #[cfg(test)]
 mod test {

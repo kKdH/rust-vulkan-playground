@@ -4,6 +4,7 @@ use std::{fmt, mem};
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, parse, Version};
 use thiserror::Error;
+
 use crate::blend::{GeneratedBlendStruct, PointerLike};
 
 pub struct Reader<'a> {
@@ -225,7 +226,7 @@ pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>
 mod test {
     use hamcrest2::{assert_that, err, is, HamcrestMatcher};
     use crate::blend::{read, NameLike};
-    use crate::blender3_0::{Object};
+    use crate::blender3_0::Object;
 
     #[test]
     fn test_that_structs_should_fail_on_version_mismatch() {

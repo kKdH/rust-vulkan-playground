@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::result::Result::Ok;
-use std::{env, fs};
+use std::env;
 use glob::glob;
 use std::process::Command;
 
@@ -14,11 +14,12 @@ fn main() -> Result<(), Box<dyn Error>>{
         })
         .collect();
 
-    let out_dir = "src/blend/";
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let out_dir = format!("{}", out_dir.to_str().unwrap());
 
     let mut generated_files: Vec<String> = Vec::new();
     for file_path in &inputs {
-        let file = generate(&file_path, out_dir);
+        let file = generate(&file_path, &out_dir);
         generated_files.push(file);
     }
 

@@ -16,7 +16,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
 
     let module_name = format!("blender{}_{}", blend.version().major, blend.version().minor);
     let module_name_ident = format_ident!("{}", module_name);
-    let file_name = format!("{}{}.rs", target_dir, module_name);
+    let file_name = format!("{}/{}.rs", target_dir, module_name);
 
     let quoted_structs: Vec<TokenStream> = blend.structs()
         .sorted_by(|a, b| Ord::cmp(a.name(), b.name()))
@@ -65,18 +65,20 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
     let struct_verifications = quote_struct_verifications(&blend);
 
     let code = quote! {
-        #![allow(non_snake_case)]
-        #![allow(dead_code)]
+        pub mod #module_name_ident {
+            #![allow(non_snake_case)]
+            #![allow(dead_code)]
 
-        use crate::blend::*;
+            use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Void};
 
-        #(#quoted_structs)*
+            #(#quoted_structs)*
 
-        #[cfg(test)]
-        mod verifications {
-            use crate::#module_name_ident::*;
-            #primitive_types_verifications
-            #struct_verifications
+            #[cfg(test)]
+            mod verifications {
+                use super::*;
+                #primitive_types_verifications
+                #struct_verifications
+            }
         }
     };
 
