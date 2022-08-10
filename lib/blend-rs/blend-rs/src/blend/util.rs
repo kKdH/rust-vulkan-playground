@@ -19,18 +19,22 @@ pub trait StringLike {
 }
 
 impl <A> StringLike for A
-    where A: AsRef<[i8]> {
+where A: AsRef<[i8]> {
 
     fn to_str(&self) -> Result<&str, Utf8Error> {
         let self_ref = self.as_ref();
-        let slice: &[u8] = unsafe {
-            core::slice::from_raw_parts(self_ref.as_ptr() as *const u8, self_ref.len())
-        };
-        let null = slice.iter()
-            .position(|element| *element == 0x00)
-            .unwrap_or(slice.len());
-
-        std::str::from_utf8(&slice[0..null])
+        if !self_ref.is_empty() {
+            let slice: &[u8] = unsafe {
+                core::slice::from_raw_parts(self_ref.as_ptr() as *const u8, self_ref.len())
+            };
+            let null = slice.iter()
+                .position(|element| *element == 0x00)
+                .unwrap_or(slice.len());
+            std::str::from_utf8(&slice[0..null])
+        }
+        else {
+            Ok("")
+        }
     }
 }
 

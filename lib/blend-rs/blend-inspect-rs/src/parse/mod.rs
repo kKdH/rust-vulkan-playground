@@ -99,7 +99,7 @@ impl Dna {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DnaType {
     pub name: String,
     pub size: usize,
@@ -148,6 +148,12 @@ impl HasDnaTypeIndex for &FileBlock {
         dna.find_struct_of(self)
            .expect("Could not determine struct of FileBlock!")
            .type_index
+    }
+}
+
+impl HasDnaTypeIndex for usize {
+    fn type_index(&self, _: &Dna) -> usize {
+        *self
     }
 }
 

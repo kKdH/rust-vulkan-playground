@@ -265,7 +265,7 @@ pub fn analyse_struct(index: usize, dna_struct: &DnaStruct, dna: &Dna) -> Result
             .collect::<Result<Vec<Field>>>()?
     };
 
-    Ok(Struct::new(index, name, fields, size))
+    Ok(Struct::new(index, dna_struct.type_index, name, fields, size))
 }
 
 #[cfg(test)]
@@ -669,6 +669,7 @@ mod test {
             assert_that!(analyse_struct(1337, &dna_struct, &dna), is(equal_to(Ok(
                 Struct::new(
                     1337,
+                    2,
                     String::from("Mesh"),
                     vec![
                         Field { name: String::from("id"), data_type: Type::Struct { name: String::from("ID"), size: 42 }, offset: 0 },

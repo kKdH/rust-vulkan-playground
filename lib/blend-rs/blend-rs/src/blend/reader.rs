@@ -2,56 +2,74 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::{fmt, mem};
 
-use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, parse, Version};
+use blend_inspect_rs::{BlendFile, BlendSource, Data, DnaType, FileBlock, parse, Version};
 use thiserror::Error;
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
 
 pub struct Reader<'a> {
     data: Data<'a>,
-    blend: BlendFile,
+    pub blend: BlendFile,
 }
 
 impl <'a> Reader<'a> {
 
     pub fn structs<A>(&self) -> Result<StructIter<A>, ReadError>
     where A: 'a + GeneratedBlendStruct {
-        self.assert_version(A::BLEND_VERSION, || {
-            let views: Vec<FileBlockView<'a, A>> = self.blend.blocks.iter()
-                .filter_map(|block| {
-                    if block.sdna == A::STRUCT_INDEX {
-                        Some(FileBlockView::new(self.data, &block))
-                    } else {
-                        None
-                    }
-                }).collect();
-            StructIter::new(views)
-        })
+        self.assert_version(A::BLEND_VERSION)?;
+        let views: Vec<FileBlockView<'a, A>> = self.blend.blocks.iter()
+            .filter_map(|block| {
+                if block.sdna == A::STRUCT_INDEX {
+                    Some(FileBlockView::new(self.data, &block))
+                } else {
+                    None
+                }
+            }).collect();
+        Ok(StructIter::new(views))
     }
 
     pub fn deref<A,  B>(&self, pointer: A) -> Result<StructIter<B>, ReadError>
     where A: PointerLike<B>,
           B: 'a + GeneratedBlendStruct {
-        let lookup = pointer.address().map(|address| self.blend.look_up(address)).flatten();
+        let address = pointer.address();
+        let lookup = address.map(|address| self.blend.look_up(address)).flatten();
         match lookup {
-            None => Err(ReadError::InvalidPointerError),
+            None => {
+                let address = address.map(|value| value.get()).unwrap_or(0usize);
+                Err(ReadError::InvalidPointerAddressError { address })
+            },
             Some(block) => {
-                self.assert_version(B::BLEND_VERSION, || {
-                    StructIter::new(vec![FileBlockView::new(self.data, block)])
-                })
+                self.assert_version(B::BLEND_VERSION)?;
+                let expected_type = self.blend.dna.find_type_of(B::STRUCT_TYPE_INDEX)
+                    .expect("Failed to resolve DnaType of Struct!");
+                let actual_type = self.blend.dna.find_type_of(block)
+                    .expect("Failed to resolve DnaType of FileBlock!");
+                self.assert_pointer_type(expected_type, actual_type)?;
+                Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
             }
         }
     }
 
-    fn assert_version<F, R>(&self, version: Version, function: F) -> Result<R, ReadError>
-    where F: Fn() -> R {
+    fn assert_version(&self, version: Version) -> Result<(), ReadError> {
         if self.blend.header.version == version {
-            Ok(function())
+            Ok(())
         }
         else {
             Err(ReadError::VersionMismatchError {
                 expected_version: version,
                 actual_version: self.blend.header.version,
+            })
+        }
+    }
+
+    fn assert_pointer_type(&self, expected_type: &DnaType, actual_type: &DnaType) -> Result<(), ReadError> {
+        if expected_type == actual_type {
+            Ok(())
+        }
+        else {
+            Err(ReadError::InvalidPointerTypeError {
+                expected: Clone::clone(&expected_type.name),
+                actual: Clone::clone(&actual_type.name)
             })
         }
     }
@@ -209,8 +227,11 @@ pub enum ReadError {
         actual_version: Version
     },
 
-    #[error("Invalid pointer address!")]
-    InvalidPointerError,
+    #[error("Invalid pointer address '{address}'!")]
+    InvalidPointerAddressError { address: usize },
+
+    #[error("Invalid pointer type!")]
+    InvalidPointerTypeError { expected: String, actual: String },
 }
 
 pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>

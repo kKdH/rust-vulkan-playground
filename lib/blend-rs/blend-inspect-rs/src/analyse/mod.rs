@@ -201,7 +201,8 @@ impl Field {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Struct {
-    index: usize,
+    struct_index: usize,
+    type_index: usize,
     name: String,
     fields: Vec<Field>,
     fields_by_name: HashMap<String, usize>,
@@ -210,13 +211,14 @@ pub struct Struct {
 
 impl Struct {
 
-    fn new(index: usize, name: String, fields: Vec<Field>, size: usize) -> Struct {
+    fn new(struct_index: usize, type_index: usize, name: String, fields: Vec<Field>, size: usize) -> Struct {
         let fields_by_name = fields.iter()
             .enumerate()
             .map(|(index, field)| (Clone::clone(&field.name), index))
             .collect::<HashMap<String, usize>>();
         Struct {
-            index,
+            struct_index,
+            type_index,
             name,
             fields,
             fields_by_name,
@@ -224,8 +226,12 @@ impl Struct {
         }
     }
 
-    pub fn index(&self) -> usize {
-        self.index
+    pub fn struct_index(&self) -> usize {
+        self.struct_index
+    }
+
+    pub fn struct_type_index(&self) -> usize {
+        self.type_index
     }
 
     pub fn name(&self) -> &str {

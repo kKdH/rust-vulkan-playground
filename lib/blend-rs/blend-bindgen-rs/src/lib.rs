@@ -42,7 +42,8 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             let minor_version = Literal::character(blend.version().minor);
             let patch_version = Literal::character(blend.version().patch);
             let struct_name = Literal::string(structure.name());
-            let struct_index = Literal::usize_unsuffixed(structure.index());
+            let struct_index = Literal::usize_unsuffixed(structure.struct_index());
+            let struct_type_index = Literal::usize_unsuffixed(structure.struct_type_index());
             quote! {
                 #[repr(C, packed(4))]
                 pub struct #name {
@@ -56,6 +57,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     };
                     const STRUCT_NAME: &'static str = #struct_name;
                     const STRUCT_INDEX: usize = #struct_index;
+                    const STRUCT_TYPE_INDEX: usize = #struct_type_index;
                 }
             }
         })

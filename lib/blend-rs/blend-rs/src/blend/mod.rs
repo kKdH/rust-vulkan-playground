@@ -79,13 +79,14 @@ pub trait GeneratedBlendStruct {
     const BLEND_VERSION: Version;
     const STRUCT_NAME: &'static str;
     const STRUCT_INDEX: usize;
+    const STRUCT_TYPE_INDEX: usize;
 }
 
 #[cfg(test)]
 mod test {
     
-    use crate::blend::{read, NameLike};
-    use crate::blender3_0::{Mesh, Object};
+    use crate::blend::{read, NameLike, StringLike, PointerLike};
+    use crate::blender3_0::{Link, LinkData, Material, Mesh, Object};
 
     #[test]
     fn test() {
@@ -110,5 +111,37 @@ mod test {
         reader.deref(&mesh.mvert).unwrap().enumerate().for_each(|(index, vert) | {
             println!("{:?}: {:?}", index, vert.co)
         });
+
+        let mat = reader.deref(&mesh.mat.cast_to::<Link>())
+            .map(|links| {
+                let link = links.first().unwrap();
+                reader.deref(link.next.cast_to::<Material>()).unwrap()
+            })
+            .unwrap()
+            .first()
+            .unwrap();
+
+        println!("Material: {}, use_nodes: {}", mat.id.name.to_name_str_unchecked(), &mat.use_nodes);
+
+        let tree = reader.deref(&mat.nodetree)
+            .unwrap()
+            .first()
+            .unwrap();
+
+        println!("tree: {}", tree.id.name.to_name_str_unchecked());
+
+        let x = reader.deref(&tree.nodes.last.cast_to::<crate::blender3_0::bNode>())
+            .unwrap()
+            .for_each(|node| {
+                println!("Node: {}", node.name.to_name_str_unchecked())
+            });
+
+        // let image = reader.deref(&tex.ima)
+        //     .unwrap()
+        //     .first()
+        //     .unwrap();
+        //
+        // println!("Image: {}", image.name.to_str_unchecked())
+        // let tex = reader.deref(&material.texpaintslot).unwrap().first().unwrap();
     }
 }

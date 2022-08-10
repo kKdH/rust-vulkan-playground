@@ -9,7 +9,7 @@ mod parse;
 
 pub use crate::analyse::{Struct, Structure, Type, Mode};
 pub use crate::analyse::analyse;
-pub use crate::parse::{BlendFile, Dna, FileBlock, FileHeader, Identifier, PointerSize, Version, Address, AddressLike, AddressTable, HasDnaTypeIndex};
+pub use crate::parse::{BlendFile, Dna, DnaType, DnaStruct, DnaField, FileBlock, FileHeader, Identifier, PointerSize, Version, Address, AddressLike, AddressTable, HasDnaTypeIndex};
 pub use crate::parse::parse;
 
 
