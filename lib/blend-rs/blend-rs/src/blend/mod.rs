@@ -86,7 +86,7 @@ pub trait GeneratedBlendStruct {
 mod test {
     
     use crate::blend::{read, NameLike, StringLike, PointerLike};
-    use crate::blender3_0::{Link, LinkData, Material, Mesh, Object};
+    use crate::blender3_0::{bNode, bNodeSocket, Image, Link, LinkData, Material, Mesh, NodeTexImage, Object};
 
     #[test]
     fn test() {
@@ -130,11 +130,25 @@ mod test {
 
         println!("tree: {}", tree.id.name.to_name_str_unchecked());
 
-        let x = reader.deref(&tree.nodes.last.cast_to::<crate::blender3_0::bNode>())
+        let x = reader.deref(&tree.nodes.last.cast_to::<bNode>())
             .unwrap()
             .for_each(|node| {
-                println!("Node: {}", node.name.to_name_str_unchecked())
+                println!("Node: {}", node.name.to_name_str_unchecked());
+                let tex_image_node = reader.deref(&node.storage.cast_to::<NodeTexImage>())
+                    .unwrap()
+                    .first()
+                    .unwrap();
+
+                let x = reader.deref(&tex_image_node.iuser).unwrap().first().unwrap();
+
+                println!("x: {}", x.id.name.to_name_str_unchecked());
+
+                // let x = reader.deref(&tex_image_node.base.tex_mapping.).unwrap();
             });
+
+        let image = reader.structs::<Image>().unwrap().for_each(|image| {
+            println!("Image: {}, {}", image.id.name.to_name_str_unchecked(), image.name.to_name_str_unchecked())
+        });
 
         // let image = reader.deref(&tex.ima)
         //     .unwrap()

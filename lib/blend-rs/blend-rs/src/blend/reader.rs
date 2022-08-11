@@ -36,7 +36,12 @@ impl <'a> Reader<'a> {
         match lookup {
             None => {
                 let address = address.map(|value| value.get()).unwrap_or(0usize);
-                Err(ReadError::InvalidPointerAddressError { address })
+                if address != 0 {
+                    Err(ReadError::InvalidPointerAddressError { address })
+                }
+                else {
+                    Err(ReadError::NullPointerError)
+                }
             },
             Some(block) => {
                 self.assert_version(B::BLEND_VERSION)?;
@@ -233,6 +238,9 @@ pub enum ReadError {
         expected_version: Version,
         actual_version: Version
     },
+
+    #[error("Pointer address is null!")]
+    NullPointerError,
 
     #[error("Invalid pointer address '{address}'!")]
     InvalidPointerAddressError { address: usize },
