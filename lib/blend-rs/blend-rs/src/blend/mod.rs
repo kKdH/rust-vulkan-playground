@@ -86,7 +86,7 @@ pub trait GeneratedBlendStruct {
 mod test {
     
     use crate::blend::{read, NameLike, StringLike, PointerLike};
-    use crate::blender3_0::{bNode, bNodeSocket, Image, Link, LinkData, Material, Mesh, NodeTexImage, Object};
+    use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, LinkData, Material, Mesh, NodeTexImage, Object};
 
     #[test]
     fn test() {
@@ -130,31 +130,40 @@ mod test {
 
         println!("tree: {}", tree.id.name.to_name_str_unchecked());
 
-        let x = reader.deref(&tree.nodes.last.cast_to::<bNode>())
+        let node = reader.deref(&tree.nodes.last.cast_to::<bNode>()) // FIXME: `last` is improper.
             .unwrap()
-            .for_each(|node| {
-                println!("Node: {}", node.name.to_name_str_unchecked());
-                let tex_image_node = reader.deref(&node.storage.cast_to::<NodeTexImage>())
-                    .unwrap()
-                    .first()
-                    .unwrap();
+            .find(|node| node.name.to_name_str_unchecked() == "Principled BSDF")
+            .unwrap();
 
-                // let x = reader.deref(&tex_image_node.iuser).unwrap().first().unwrap();
-                // println!("x: {}", x.id.name.to_name_str_unchecked());
+        let base_color_socket = reader.deref(node.inputs.first.cast_to::<bNodeSocket>())
+            .unwrap()
+            .find(|socket| socket.name.to_name_str_unchecked() == "Base Color")
+            .unwrap();
 
-                // let x = reader.deref(&tex_image_node.base.tex_mapping.).unwrap();
-            });
+        let link = reader.deref(&base_color_socket.link)
+            .unwrap()
+            .first()
+            .unwrap();
 
-        let image = reader.structs::<Image>().unwrap().for_each(|image| {
-            println!("Image: {}, {}", image.id.name.to_name_str_unchecked(), image.name.to_name_str_unchecked())
-        });
+        let tex_node = reader.deref(&link.fromnode)
+            .unwrap()
+            .first()
+            .unwrap();
 
-        // let image = reader.deref(&tex.ima)
-        //     .unwrap()
-        //     .first()
-        //     .unwrap();
-        //
-        // println!("Image: {}", image.name.to_str_unchecked())
-        // let tex = reader.deref(&material.texpaintslot).unwrap().first().unwrap();
+        let tex_image = reader.deref(&tex_node.id.cast_to::<Image>())
+            .unwrap()
+            .first()
+            .unwrap();
+
+        let image_packed_file = reader.deref(&tex_image.packedfile)
+            .unwrap()
+            .first()
+            .unwrap();
+
+        let data = reader.deref_raw(&image_packed_file.data)
+            .unwrap();
+
+        std::fs::write("/tmp/texture.jpg", &data[0..image_packed_file.size as usize])
+            .unwrap();
     }
 }

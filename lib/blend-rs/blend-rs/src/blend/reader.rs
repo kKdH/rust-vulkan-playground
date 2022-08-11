@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::{fmt, mem};
 
-use blend_inspect_rs::{BlendFile, BlendSource, Data, DnaType, FileBlock, parse, Version};
+use blend_inspect_rs::{BlendFile, BlendSource, Data, DnaType, FileBlock, HasDnaTypeIndex, parse, Version};
 use thiserror::Error;
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
@@ -31,8 +31,24 @@ impl <'a> Reader<'a> {
     pub fn deref<A,  B>(&self, pointer: A) -> Result<StructIter<B>, ReadError>
     where A: PointerLike<B>,
           B: 'a + GeneratedBlendStruct {
+        let block = self.look_up(pointer)?;
+        self.assert_version(B::BLEND_VERSION)?;
+        self.assert_same_type(B::STRUCT_TYPE_INDEX, block)?;
+        Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
+    }
+
+    pub fn deref_raw<A, B>(&self, pointer: A) -> Result<Data<'a>, ReadError>
+    where A: PointerLike<B> {
+        let block = self.look_up(pointer)?;
+        Ok(&self.data[block.data_location()..block.data_location() + block.length])
+    }
+
+    fn look_up<A, B>(&self, pointer: A) -> Result<&FileBlock, ReadError>
+    where A: PointerLike<B> {
         let address = pointer.address();
-        let lookup = address.map(|address| self.blend.look_up(address)).flatten();
+        let lookup = address
+            .map(|address| self.blend.look_up(address))
+            .flatten();
         match lookup {
             None => {
                 let address = address.map(|value| value.get()).unwrap_or(0usize);
@@ -44,13 +60,7 @@ impl <'a> Reader<'a> {
                 }
             },
             Some(block) => {
-                self.assert_version(B::BLEND_VERSION)?;
-                let expected_type = self.blend.dna.find_type_of(B::STRUCT_TYPE_INDEX)
-                    .expect("Failed to resolve DnaType of Struct!");
-                let actual_type = self.blend.dna.find_type_of(block)
-                    .expect("Failed to resolve DnaType of FileBlock!");
-                self.assert_pointer_type(expected_type, actual_type)?;
-                Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
+                Ok(block)
             }
         }
     }
@@ -67,7 +77,13 @@ impl <'a> Reader<'a> {
         }
     }
 
-    fn assert_pointer_type(&self, expected_type: &DnaType, actual_type: &DnaType) -> Result<(), ReadError> {
+    fn assert_same_type<A, B>(&self, expected: A, actual: B) -> Result<(), ReadError>
+    where A: HasDnaTypeIndex,
+          B: HasDnaTypeIndex {
+        let expected_type = self.blend.dna.find_type_of(expected)
+            .expect("Failed to resolve DnaType!");
+        let actual_type = self.blend.dna.find_type_of(actual)
+            .expect("Failed to resolve DnaType!");
         if expected_type == actual_type {
             Ok(())
         }
