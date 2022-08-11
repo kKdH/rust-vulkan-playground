@@ -80,6 +80,7 @@ where A: GeneratedBlendStruct {
     views: Vec<FileBlockView<'a, A>>,
     view_index: RefCell<usize>,
     struct_index: RefCell<usize>,
+    length: usize,
     phantom: PhantomData<&'a A>,
 }
 
@@ -87,10 +88,12 @@ impl <'a, A> StructIter<'a, A>
 where A: GeneratedBlendStruct {
 
     fn new(views: Vec<FileBlockView<'a, A>>) -> StructIter<'a, A>{
+        let length = views.iter().map(|view| view.count).sum();
         StructIter {
             views,
             view_index: RefCell::new(0),
             struct_index: RefCell::new(0),
+            length,
             phantom: PhantomData::default(),
         }
     }
@@ -124,6 +127,10 @@ where A: GeneratedBlendStruct {
         else {
             None
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.length
     }
 }
 
@@ -245,7 +252,7 @@ pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>
 
 #[cfg(test)]
 mod test {
-    use hamcrest2::{assert_that, err, is, HamcrestMatcher};
+    use hamcrest2::{assert_that, err, is, HamcrestMatcher, equal_to};
     use crate::blend::{read, NameLike};
     use crate::blender3_0::Object;
 
@@ -301,5 +308,15 @@ mod test {
         let result = reader.structs::<Object>().unwrap().first();
 
         assert_that!(result.is_some(), is(true))
+    }
+
+    #[test]
+    fn test_that_len_returns_the_number_of_struct() {
+        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let reader = read(&blend_data).unwrap();
+
+        let result = reader.structs::<Object>().unwrap();
+
+        assert_that!(result.len(), is(equal_to(2)))
     }
 }
