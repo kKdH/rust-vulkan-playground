@@ -29,7 +29,7 @@ impl <T, const SIZE: usize> Pointer<T, SIZE> {
         }
     }
 
-    fn cast_to<B>(&self) -> Pointer<B, SIZE> {
+    pub fn cast_to<B>(&self) -> Pointer<B, SIZE> {
         Pointer::new(self.value)
     }
 }
@@ -139,9 +139,8 @@ mod test {
                     .first()
                     .unwrap();
 
-                let x = reader.deref(&tex_image_node.iuser).unwrap().first().unwrap();
-
-                println!("x: {}", x.id.name.to_name_str_unchecked());
+                // let x = reader.deref(&tex_image_node.iuser).unwrap().first().unwrap();
+                // println!("x: {}", x.id.name.to_name_str_unchecked());
 
                 // let x = reader.deref(&tex_image_node.base.tex_mapping.).unwrap();
             });

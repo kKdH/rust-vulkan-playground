@@ -9,6 +9,7 @@ license = "Apache-2.0"
 edition = "2021"
 
 [features]
+default = ["blender3_0"]
 blender2_7 = []
 blender2_9 = []
 blender3_0 = []
