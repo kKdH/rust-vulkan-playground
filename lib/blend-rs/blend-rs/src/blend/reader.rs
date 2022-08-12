@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::{fmt, mem};
 use std::ops::Range;
 
-use blend_inspect_rs::{BlendFile, BlendSource, Data, DnaType, FileBlock, HasDnaTypeIndex, parse, Version};
+use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex, parse, Version};
 use thiserror::Error;
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
@@ -36,6 +36,20 @@ impl <'a> Reader<'a> {
         self.assert_version(B::BLEND_VERSION)?;
         self.assert_same_type(B::STRUCT_TYPE_INDEX, block)?;
         Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
+    }
+
+    pub fn deref_single<A, B>(&self, pointer: A) -> Result<&'a B, ReadError>
+    where A: PointerLike<B>,
+          B: 'a + GeneratedBlendStruct {
+        let block = self.look_up(pointer)?;
+        self.assert_version(B::BLEND_VERSION)?;
+        self.assert_same_type(B::STRUCT_TYPE_INDEX, block)?;
+        let file_block_view: FileBlockView<B> = FileBlockView::new(self.data, block);
+        match file_block_view.len() {
+            1 => Ok(file_block_view.view(0)),
+            0 => Err(ReadError::NoSuchElementError),
+            _ => Err(ReadError::MoreThanOneElementError)
+        }
     }
 
     pub fn deref_raw<A, B>(&self, pointer: A) -> Result<Data<'a>, ReadError>
@@ -117,7 +131,7 @@ impl <'a, A> StructIter<'a, A>
 where A: GeneratedBlendStruct {
 
     fn new(views: Vec<FileBlockView<'a, A>>) -> StructIter<'a, A>{
-        let length = views.iter().map(|view| view.count).sum();
+        let length = views.iter().map(|view| view.len()).sum();
         StructIter {
             views,
             view_index: RefCell::new(0),
@@ -132,7 +146,7 @@ where A: GeneratedBlendStruct {
         let mut view_index = 0;
         let mut struct_index = 0;
         while view_index < self.views.len() {
-            if struct_index < self.views[view_index].count {
+            if struct_index < self.views[view_index].len() {
                 let viewed_struct = self.views[view_index].view(struct_index);
                 if predicate(viewed_struct) {
                     return Some(viewed_struct)
@@ -150,7 +164,7 @@ where A: GeneratedBlendStruct {
     }
 
     pub fn first(&self) -> Option<&'a A> {
-        if self.views.len() > 0 && self.views[0].count > 0 {
+        if self.views.len() > 0 && self.views[0].len() > 0 {
             Some(self.views[0].view(0))
         }
         else {
@@ -164,7 +178,7 @@ where A: GeneratedBlendStruct {
 }
 
 impl <'a, A> Iterator for &StructIter<'a, A>
-    where A: 'a + GeneratedBlendStruct {
+where A: 'a + GeneratedBlendStruct {
 
     type Item = &'a A;
 
@@ -172,7 +186,7 @@ impl <'a, A> Iterator for &StructIter<'a, A>
         let mut view_index = self.view_index.borrow_mut();
         let mut struct_index = self.struct_index.borrow_mut();
         if *view_index < self.views.len() {
-            if *struct_index < self.views[*view_index].count {
+            if *struct_index < self.views[*view_index].len() {
                 let result = self.views[*view_index].view(*struct_index);
                 *struct_index += 1;
                 Some(result)
@@ -181,7 +195,7 @@ impl <'a, A> Iterator for &StructIter<'a, A>
                 *view_index += 1;
                 *struct_index = 0;
 
-                if *view_index < self.views.len() && self.views[*view_index].count > 0 {
+                if *view_index < self.views.len() && self.views[*view_index].len() > 0 {
                     let result = self.views[*view_index].view(*struct_index);
                     *struct_index += 1;
                     Some(result)
@@ -227,7 +241,7 @@ impl <'a, A> fmt::Debug for FileBlockView<'a, A>
 }
 
 impl <'a, A> FileBlockView<'a, A>
-    where A: 'a + GeneratedBlendStruct {
+where A: 'a + GeneratedBlendStruct {
 
     fn new(data: Data<'a>, block: &FileBlock) -> FileBlockView<'a, A> {
         let start_offset = block.data_location();
@@ -252,6 +266,10 @@ impl <'a, A> FileBlockView<'a, A>
             panic!("Failed to align struct '{}' (prefix={}, suffix={}, alignments={})! ", A::STRUCT_NAME, before.len(), after.len(), body.len())
         }
     }
+
+    fn len(&self) -> usize {
+        self.count
+    }
 }
 
 #[derive(Error, Debug)]
@@ -271,6 +289,12 @@ pub enum ReadError {
 
     #[error("Invalid pointer type!")]
     InvalidPointerTypeError { expected: String, actual: String },
+
+    #[error("Contains no elements!")]
+    NoSuchElementError,
+
+    #[error("Contains more than one matching element!")]
+    MoreThanOneElementError,
 }
 
 pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>

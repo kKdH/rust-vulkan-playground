@@ -85,8 +85,8 @@ pub trait GeneratedBlendStruct {
 #[cfg(test)]
 mod test {
     
-    use crate::blend::{read, NameLike, StringLike, PointerLike};
-    use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, LinkData, Material, Mesh, NodeTexImage, Object};
+    use crate::blend::{read, NameLike};
+    use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, Object};
 
     #[test]
     fn test() {
@@ -123,41 +123,25 @@ mod test {
 
         println!("Material: {}, use_nodes: {}", mat.id.name.to_name_str_unchecked(), &mat.use_nodes);
 
-        let tree = reader.deref(&mat.nodetree)
-            .unwrap()
-            .first()
+        let tree: &bNodeTree = reader.deref_single(&mat.nodetree)
             .unwrap();
 
-        println!("tree: {}", tree.id.name.to_name_str_unchecked());
-
-        let node = reader.deref(&tree.nodes.last.cast_to::<bNode>()) // FIXME: `last` is improper.
-            .unwrap()
-            .find(|node| node.name.to_name_str_unchecked() == "Principled BSDF")
+        let node = reader.deref_single(&tree.nodes.last.cast_to::<bNode>()) // FIXME: `last` is improper.
             .unwrap();
 
-        let base_color_socket = reader.deref(node.inputs.first.cast_to::<bNodeSocket>())
-            .unwrap()
-            .find(|socket| socket.name.to_name_str_unchecked() == "Base Color")
+        let base_color_socket = reader.deref_single(node.inputs.first.cast_to::<bNodeSocket>())
             .unwrap();
 
-        let link = reader.deref(&base_color_socket.link)
-            .unwrap()
-            .first()
+        let link = reader.deref_single(&base_color_socket.link)
             .unwrap();
 
-        let tex_node = reader.deref(&link.fromnode)
-            .unwrap()
-            .first()
+        let tex_node = reader.deref_single(&link.fromnode)
             .unwrap();
 
-        let tex_image = reader.deref(&tex_node.id.cast_to::<Image>())
-            .unwrap()
-            .first()
+        let tex_image = reader.deref_single(&tex_node.id.cast_to::<Image>())
             .unwrap();
 
-        let image_packed_file = reader.deref(&tex_image.packedfile)
-            .unwrap()
-            .first()
+        let image_packed_file = reader.deref_single(&tex_image.packedfile)
             .unwrap();
 
         let data = reader.deref_raw_range(&image_packed_file.data, 0..image_packed_file.size as usize)

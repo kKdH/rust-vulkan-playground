@@ -114,9 +114,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "blend-bindgen-rs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
- "blend-inspect-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "blend-inspect-rs",
  "hamcrest2",
  "itertools",
  "proc-macro2",
@@ -125,34 +125,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "blend-bindgen-rs"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d2b21b62c39c9d7c308a5acdf8077a9e209bf88886d0561b48d9829193955b5"
-dependencies = [
- "blend-inspect-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "itertools",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "blend-inspect-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hamcrest2",
- "itertools",
- "nom",
- "thiserror",
-]
-
-[[package]]
-name = "blend-inspect-rs"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09c2179f28fa4b72ae81b83a488cdfcb9c8052f912ce513bc18c659bd056ddff"
-dependencies = [
  "itertools",
  "nom",
  "thiserror",
@@ -160,10 +136,10 @@ dependencies = [
 
 [[package]]
 name = "blend-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
- "blend-bindgen-rs 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "blend-inspect-rs 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "blend-bindgen-rs",
+ "blend-inspect-rs",
  "glob",
  "hamcrest2",
  "sha2",
