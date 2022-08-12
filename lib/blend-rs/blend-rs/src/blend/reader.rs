@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::{fmt, mem};
+use std::error::Error;
 use std::ops::Range;
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex, parse, Version};
@@ -275,6 +276,12 @@ where A: 'a + GeneratedBlendStruct {
 #[derive(Error, Debug)]
 pub enum ReadError {
 
+    #[error("Failed to parse blender data.")]
+    ParseError {
+        #[source]
+        cause: Box<dyn Error>
+    },
+
     #[error("Expected blend version {expected_version} but actual version is {actual_version}!")]
     VersionMismatchError {
         expected_version: Version,
@@ -298,12 +305,12 @@ pub enum ReadError {
 }
 
 pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>
-    where A: BlendSource<'a> {
+where A: BlendSource<'a> {
 
     let data = source.data();
-    let blend: BlendFile = parse(source.data()).unwrap();
-
-    Ok(Reader { data, blend })
+    parse(source.data())
+        .map(|blend| Reader { data, blend } )
+        .map_err(|cause| { ReadError::ParseError { cause: Box::new(cause) } })
 }
 
 #[cfg(test)]
