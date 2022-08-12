@@ -160,10 +160,10 @@ mod test {
             .first()
             .unwrap();
 
-        let data = reader.deref_raw(&image_packed_file.data)
+        let data = reader.deref_raw_range(&image_packed_file.data, 0..image_packed_file.size as usize)
             .unwrap();
 
-        std::fs::write("/tmp/texture.jpg", &data[0..image_packed_file.size as usize])
+        std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
     }
 }

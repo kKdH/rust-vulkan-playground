@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::{fmt, mem};
+use std::ops::Range;
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, DnaType, FileBlock, HasDnaTypeIndex, parse, Version};
 use thiserror::Error;
@@ -41,6 +42,13 @@ impl <'a> Reader<'a> {
     where A: PointerLike<B> {
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
+    }
+
+    pub fn deref_raw_range<A, B>(&self, pointer: A, range: Range<usize>) -> Result<Data<'a>, ReadError>
+    where A: PointerLike<B> {
+        self.deref_raw(pointer).map(|data| {
+            &data[range.start..range.end]
+        })
     }
 
     fn look_up<A, B>(&self, pointer: A) -> Result<&FileBlock, ReadError>
