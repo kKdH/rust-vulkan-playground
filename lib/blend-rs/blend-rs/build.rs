@@ -8,7 +8,7 @@ use blend_bindgen_rs::generate;
 
 fn main() -> Result<(), Box<dyn Error>>{
 
-    let inputs: Vec<String> = glob("resources/*.blend")?
+    let inputs: Vec<String> = glob("gen/*.blend")?
         .map(|result| {
             format!("{}", result.unwrap().display())
         })

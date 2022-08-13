@@ -322,7 +322,7 @@ mod test {
     #[test]
     fn test_that_structs_should_fail_on_version_mismatch() {
 
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         assert_that!(reader.structs::<crate::blender2_7::Object>(), is(err()))
@@ -331,7 +331,7 @@ mod test {
     #[test]
     fn test_that_deref_should_fail_on_version_mismatch() {
 
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         let cube: &Object = reader.structs::<Object>().unwrap()
@@ -343,7 +343,7 @@ mod test {
 
     #[test]
     fn test_that_find_returns_the_first_struct_matching_the_specified_predicate() {
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         let iter = reader.structs::<Object>().unwrap();
@@ -354,7 +354,7 @@ mod test {
 
     #[test]
     fn test_that_find_returns_none_if_no_struct_matches_the_specified_predicate() {
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         let iter = reader.structs::<Object>().unwrap();
@@ -365,7 +365,7 @@ mod test {
 
     #[test]
     fn test_that_first_returns_the_first_struct() {
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         let result = reader.structs::<Object>().unwrap().first();
@@ -375,11 +375,11 @@ mod test {
 
     #[test]
     fn test_that_len_returns_the_number_of_struct() {
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         let result = reader.structs::<Object>().unwrap();
 
-        assert_that!(result.len(), is(equal_to(2)))
+        assert_that!(result.len(), is(equal_to(3)))
     }
 }

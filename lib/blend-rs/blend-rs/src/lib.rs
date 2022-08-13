@@ -19,7 +19,7 @@
 //! }
 //!
 //! fn main() {
-//!     let blend_data = std::fs::read("test/resources/cube.blend")
+//!     let blend_data = std::fs::read("examples/example-3.2.blend")
 //!         .expect("Failed to open file!");
 //!
 //!     let reader = read(&blend_data)

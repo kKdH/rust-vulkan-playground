@@ -86,12 +86,12 @@ pub trait GeneratedBlendStruct {
 mod test {
     
     use crate::blend::{read, NameLike};
-    use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, Object};
+    use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
     #[test]
     fn test() {
 
-        let blend_data = std::fs::read("test/resources/cube.blend").unwrap();
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         let cube: &Object = reader.structs::<Object>().unwrap()
@@ -101,16 +101,29 @@ mod test {
         println!("Object: {}", cube.id.name.to_name_str_unchecked());
 
         let parent = reader.deref(&cube.parent).unwrap().first().unwrap();
+
         println!("Parent: {}", parent.id.name.to_name_str_unchecked());
 
-        let mesh = reader.deref(&cube.data.cast_to::<Mesh>()).unwrap().first().unwrap();
+        let mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
+            .unwrap();
+
         println!("Mesh: {}", mesh.id.name.to_name_str().unwrap());
-        reader.deref(&mesh.mloop).unwrap().enumerate().for_each(|(index, mloop)| {
-            println!("{:?}: {}", index, mloop.v)
-        });
-        reader.deref(&mesh.mvert).unwrap().enumerate().for_each(|(index, vert) | {
-            println!("{:?}: {:?}", index, vert.co)
-        });
+
+        let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
+        let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();
+
+        let mesh_uv_loop = reader.deref(&mesh.mloopuv).unwrap();
+        let mesh_polygon = reader.deref(&mesh.mpoly).unwrap();
+        let vertices = mesh_polygon
+            .map(|polygon| {
+                (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter().map(|loop_index| {
+                    mesh_vertices[mesh_loop[loop_index as usize].v as usize].co
+                })
+            })
+            .flatten()
+            .collect::<Vec<[f32; 3]>>();
+
+        vertices.iter().for_each(|vert| println!("Vert: {:?}", vert));
 
         let mat = reader.deref(&mesh.mat.cast_to::<Link>())
             .map(|links| {
