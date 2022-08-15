@@ -25,7 +25,7 @@
 //!     let reader = read(&blend_data)
 //!         .expect("Failed to read blend data!");
 //!
-//!     let cube: &Object = reader.structs::<Object>()
+//!     let cube: &Object = reader.iter::<Object>()
 //!         .expect("Failed to create a StructIter for Object!")
 //!         .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
 //!         .expect("Cube could not be found!");

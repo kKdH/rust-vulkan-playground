@@ -16,7 +16,7 @@ fn main() {
     let reader = read(&blend_data)
         .expect("Failed to read blend data!");
 
-    let plane: &Object = reader.structs::<Object>().unwrap()
+    let plane: &Object = reader.iter::<Object>().unwrap()
         .find(|object| object.id.name.to_name_str_unchecked() == "Plane")
         .unwrap();
 

@@ -16,7 +16,7 @@ pub struct Reader<'a> {
 
 impl <'a> Reader<'a> {
 
-    pub fn structs<A>(&self) -> Result<StructIter<A>, ReadError>
+    pub fn iter<A>(&self) -> Result<StructIter<A>, ReadError>
     where A: 'a + GeneratedBlendStruct {
         self.assert_version(A::BLEND_VERSION)?;
         let views: Vec<FileBlockView<'a, A>> = self.blend.blocks.iter()
@@ -325,7 +325,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        assert_that!(reader.structs::<crate::blender2_7::Object>(), is(err()))
+        assert_that!(reader.iter::<crate::blender2_7::Object>(), is(err()))
     }
 
     #[test]
@@ -334,7 +334,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        let cube: &Object = reader.structs::<Object>().unwrap()
+        let cube: &Object = reader.iter::<Object>().unwrap()
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
@@ -346,7 +346,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        let iter = reader.structs::<Object>().unwrap();
+        let iter = reader.iter::<Object>().unwrap();
         let result = iter.find(|object| object.id.name.to_name_str_unchecked() == "Cube");
 
         assert_that!(result.is_some(), is(true))
@@ -357,7 +357,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        let iter = reader.structs::<Object>().unwrap();
+        let iter = reader.iter::<Object>().unwrap();
         let result = iter.find(|object| object.id.name.to_name_str_unchecked() == "Fubar");
 
         assert_that!(result.is_none(), is(true))
@@ -368,7 +368,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        let result = reader.structs::<Object>().unwrap().first();
+        let result = reader.iter::<Object>().unwrap().first();
 
         assert_that!(result.is_some(), is(true))
     }
@@ -378,7 +378,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        let result = reader.structs::<Object>().unwrap();
+        let result = reader.iter::<Object>().unwrap();
 
         assert_that!(result.len(), is(equal_to(3)))
     }

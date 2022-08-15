@@ -94,7 +94,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        let cube: &Object = reader.structs::<Object>().unwrap()
+        let cube: &Object = reader.iter::<Object>().unwrap()
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
@@ -162,5 +162,9 @@ mod test {
 
         std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
+    }
+
+    fn x(name: &str, start: &bNode) -> Option<bNode> {
+        todo!()
     }
 }
