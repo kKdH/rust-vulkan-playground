@@ -1,11 +1,11 @@
-
 use std::fs::File;
 use std::io::Write;
+use std::ops::Deref;
 
 use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 
-use blend_inspect_rs::{Blend, inspect, Type};
+use blend_inspect_rs::{Blend, inspect, Struct, Type};
 use itertools::Itertools;
 
 
@@ -38,6 +38,24 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     }
                 })
                 .collect();
+            let double_linked = {
+                if is_struct_double_linked(structure) {
+                    let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
+                    quote! {
+                        impl DoubleLinked<Pointer<#name, #pointer_size>, #name> for #name {
+                            fn next(&self) -> &Pointer<Self, #pointer_size> {
+                                &self.next
+                            }
+                            fn prev(&self) -> &Pointer<Self, #pointer_size> {
+                                &self.prev
+                            }
+                        }
+                    }
+                }
+                else {
+                    quote!()
+                }
+            };
             let major_version = Literal::character(blend.version().major);
             let minor_version = Literal::character(blend.version().minor);
             let patch_version = Literal::character(blend.version().patch);
@@ -59,6 +77,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     const STRUCT_INDEX: usize = #struct_index;
                     const STRUCT_TYPE_INDEX: usize = #struct_type_index;
                 }
+                #double_linked
             }
         })
         .collect();
@@ -72,6 +91,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             #![allow(dead_code)]
 
             use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Void};
+            use crate::blend::traverse::{DoubleLinked};
 
             #(#quoted_structs)*
 
@@ -207,4 +227,29 @@ fn quote_struct_verifications(blend: &Blend) -> TokenStream {
     quote! {
         #(#verifications)*
     }
+}
+
+fn is_struct_double_linked(structure: &Struct) -> bool {
+    let (has_next, has_prev) = structure.fields().fold((false, false), |(has_next, has_prev), field| {
+        match field.data_type() {
+            Type::Pointer { base_type, size: _pointer_size } => {
+                match base_type.deref() {
+                    Type::Struct { name, size: _struct_size } => {
+                        if name == structure.name() {
+                            match field.name() {
+                                "next" => (true, has_prev),
+                                "prev" => (has_next, true),
+                                _ => (has_next, has_prev)
+                            }
+                        } else {
+                            (has_next, has_prev)
+                        }
+                    }
+                    _ => (has_next, has_prev)
+                }
+            }
+            _ => (has_next, has_prev)
+        }
+    });
+    has_next && has_prev
 }

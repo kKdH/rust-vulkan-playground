@@ -1,6 +1,8 @@
 mod reader;
 mod util;
 
+pub mod traverse;
+
 use std::fmt::{Debug};
 use std::marker::PhantomData;
 
@@ -107,7 +109,7 @@ mod test {
         let mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
             .unwrap();
 
-        println!("Mesh: {}", mesh.id.name.to_name_str().unwrap());
+        println!("Mesh: {}", mesh.id.name.to_name_str_unchecked());
 
         let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
         let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();
@@ -162,6 +164,15 @@ mod test {
 
         std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
+
+        let x = reader.traverse(&tree.nodes.first.cast_to::<bNode>())
+            .unwrap();
+
+        x.for_each(|node| {
+
+        });
+
+
     }
 
     fn x(name: &str, start: &bNode) -> Option<bNode> {

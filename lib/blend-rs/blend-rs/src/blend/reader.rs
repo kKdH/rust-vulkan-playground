@@ -8,6 +8,7 @@ use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex,
 use thiserror::Error;
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
+use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
 pub struct Reader<'a> {
     data: Data<'a>,
@@ -63,6 +64,17 @@ impl <'a> Reader<'a> {
     where A: PointerLike<B> {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
+        })
+    }
+
+    pub fn traverse<PD, D, PT, T>(&self, pointer: PD) -> Result<DoubleLinkedIter<D, PT, T>, ReadError>
+    where PD: PointerLike<D>,
+          D: 'a + DoubleLinked<PT, T> + GeneratedBlendStruct,
+          PT: PointerLike<T>,
+          T: 'a + GeneratedBlendStruct {
+
+        self.deref_single(pointer).map(|first| {
+            DoubleLinkedIter::new(self, first)
         })
     }
 
