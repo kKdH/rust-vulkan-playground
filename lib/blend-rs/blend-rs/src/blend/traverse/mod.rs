@@ -1,28 +1,25 @@
 use std::marker::PhantomData;
 use crate::blend::{GeneratedBlendStruct, Pointer, PointerLike, Reader};
 
-pub trait DoubleLinked<P, T>
-where P: PointerLike<T> {
+pub trait DoubleLinked<P, const SIZE: usize> : Sized
+where P: PointerLike<Self, SIZE> {
     fn next(&self) -> &P;
     fn prev(&self) -> &P;
 }
 
-pub struct DoubleLinkedIter<'a, D, P, T>
-where D: DoubleLinked<P, T>,
-      P: PointerLike<T>,
-      T: 'a + GeneratedBlendStruct {
+pub struct DoubleLinkedIter<'a, D, P, const SIZE: usize>
+where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
+      P: PointerLike<D, SIZE> {
     reader: &'a Reader<'a>,
     first: &'a D,
     next: Option<&'a D>,
     d_phantom: PhantomData<&'a D>,
     p_phantom: PhantomData<&'a P>,
-    t_phantom: PhantomData<&'a T>,
 }
 
-impl<'a, D, P, T> DoubleLinkedIter<'a, D, P, T>
-where D: DoubleLinked<P, T>,
-      P: PointerLike<T>,
-      T: 'a + GeneratedBlendStruct {
+impl<'a, D, P, const SIZE: usize> DoubleLinkedIter<'a, D, P, SIZE>
+where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
+      P: PointerLike<D, SIZE> {
 
     pub fn new(reader: &'a Reader<'a>, first: &'a D) -> Self {
         DoubleLinkedIter {
@@ -31,19 +28,23 @@ where D: DoubleLinked<P, T>,
             next: Some(first),
             d_phantom: Default::default(),
             p_phantom: Default::default(),
-            t_phantom: Default::default(),
         }
     }
 }
 
-impl <'a, D, P, T> Iterator for &DoubleLinkedIter<'a, D, P, T>
-where D: DoubleLinked<P, T>,
-      P: PointerLike<T>,
-      T: 'a + GeneratedBlendStruct  {
+impl <'a, D, P, const SIZE: usize> Iterator for DoubleLinkedIter<'a, D, P, SIZE>
+where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
+      P: PointerLike<D, SIZE> {
 
-    type Item = &'a T;
+    type Item = &'a D;
 
     fn next(&mut self) -> Option<Self::Item> {
-        todo!()
+        let result = self.next;
+        self.next = self.next
+            .map(|current| {
+                self.reader.deref_single(&current.next().cast_to::<D>()).ok()
+            })
+            .flatten();
+        result
     }
 }

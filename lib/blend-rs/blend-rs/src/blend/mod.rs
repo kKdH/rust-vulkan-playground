@@ -1,6 +1,11 @@
 mod reader;
 mod util;
 
+
+///
+/// # Traverse
+///
+/// This module contains utilities for traversing the structs of a blend file.
 pub mod traverse;
 
 use std::fmt::{Debug};
@@ -16,7 +21,7 @@ pub use blend_inspect_rs::Version;
 #[derive(Debug, Copy, Clone)]
 pub struct Void;
 
-#[derive(Debug,  Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct Pointer<T, const SIZE: usize> {
     pub value: [u8; SIZE],
     phantom: PhantomData<T>
@@ -30,13 +35,11 @@ impl <T, const SIZE: usize> Pointer<T, SIZE> {
             phantom: Default::default()
         }
     }
-
-    pub fn cast_to<B>(&self) -> Pointer<B, SIZE> {
-        Pointer::new(self.value)
-    }
 }
 
-pub trait PointerLike<A> {
+pub trait PointerLike<A, const SIZE: usize> : Sized {
+
+    fn cast_to<B>(&self) -> Pointer<B, SIZE>;
 
     fn address(&self) -> Option<Address>;
 
@@ -47,18 +50,11 @@ pub trait PointerLike<A> {
     }
 }
 
-impl <A, const SIZE: usize> PointerLike<A> for Pointer<A, SIZE> {
+impl <A, const SIZE: usize> PointerLike<A, SIZE> for Pointer<A, SIZE> {
 
-    fn address(&self) -> Option<Address> {
-        (&self).address()
+    fn cast_to<B>(&self) -> Pointer<B, SIZE> {
+        Pointer::new(self.value)
     }
-
-    fn is_valid(&self) -> bool {
-        (&self).is_valid()
-    }
-}
-
-impl <A, const SIZE: usize> PointerLike<A> for &Pointer<A, SIZE> {
 
     fn address(&self) -> Option<Address> {
         let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
@@ -87,7 +83,7 @@ pub trait GeneratedBlendStruct {
 #[cfg(test)]
 mod test {
     
-    use crate::blend::{read, NameLike};
+    use crate::blend::{read, NameLike, PointerLike};
     use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
     #[test]
@@ -109,6 +105,8 @@ mod test {
         let mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
             .unwrap();
 
+        let x = mesh.mloopuv.cast_to::<MVert>();
+
         println!("Mesh: {}", mesh.id.name.to_name_str_unchecked());
 
         let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
@@ -125,12 +123,12 @@ mod test {
             .flatten()
             .collect::<Vec<[f32; 3]>>();
 
-        vertices.iter().for_each(|vert| println!("Vert: {:?}", vert));
+        // vertices.iter().for_each(|vert| println!("Vert: {:?}", vert));
 
         let mat = reader.deref(&mesh.mat.cast_to::<Link>())
             .map(|links| {
                 let link = links.first().unwrap();
-                reader.deref(link.next.cast_to::<Material>()).unwrap()
+                reader.deref(&link.next.cast_to::<Material>()).unwrap()
             })
             .unwrap()
             .first()
@@ -144,7 +142,7 @@ mod test {
         let node = reader.deref_single(&tree.nodes.last.cast_to::<bNode>()) // FIXME: `last` is improper.
             .unwrap();
 
-        let base_color_socket = reader.deref_single(node.inputs.first.cast_to::<bNodeSocket>())
+        let base_color_socket = reader.deref_single(&node.inputs.first.cast_to::<bNodeSocket>())
             .unwrap();
 
         let link = reader.deref_single(&base_color_socket.link)
@@ -169,13 +167,7 @@ mod test {
             .unwrap();
 
         x.for_each(|node| {
-
+            println!("Node: {}", node.name.to_name_str_unchecked());
         });
-
-
-    }
-
-    fn x(name: &str, start: &bNode) -> Option<bNode> {
-        todo!()
     }
 }

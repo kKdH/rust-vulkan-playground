@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::{fmt, mem};
 use std::error::Error;
-use std::ops::Range;
+use std::fmt::Pointer;
+use std::ops::{Deref, Range};
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex, parse, Version};
 use thiserror::Error;
@@ -31,8 +32,8 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(views))
     }
 
-    pub fn deref<A,  B>(&self, pointer: A) -> Result<StructIter<B>, ReadError>
-    where A: PointerLike<B>,
+    pub fn deref<A,  B, const SIZE: usize>(&self, pointer: &A) -> Result<StructIter<B>, ReadError>
+    where A: PointerLike<B, SIZE>,
           B: 'a + GeneratedBlendStruct {
         let block = self.look_up(pointer)?;
         self.assert_version(B::BLEND_VERSION)?;
@@ -40,8 +41,8 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
     }
 
-    pub fn deref_single<A, B>(&self, pointer: A) -> Result<&'a B, ReadError>
-    where A: PointerLike<B>,
+    pub fn deref_single<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<&'a B, ReadError>
+    where A: PointerLike<B, SIZE>,
           B: 'a + GeneratedBlendStruct {
         let block = self.look_up(pointer)?;
         self.assert_version(B::BLEND_VERSION)?;
@@ -54,32 +55,31 @@ impl <'a> Reader<'a> {
         }
     }
 
-    pub fn deref_raw<A, B>(&self, pointer: A) -> Result<Data<'a>, ReadError>
-    where A: PointerLike<B> {
+    pub fn deref_raw<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<Data<'a>, ReadError>
+    where A: PointerLike<B, SIZE> {
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
 
-    pub fn deref_raw_range<A, B>(&self, pointer: A, range: Range<usize>) -> Result<Data<'a>, ReadError>
-    where A: PointerLike<B> {
+    pub fn deref_raw_range<A, B, const SIZE: usize>(&self, pointer: &A, range: Range<usize>) -> Result<Data<'a>, ReadError>
+    where A: PointerLike<B, SIZE> {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })
     }
 
-    pub fn traverse<PD, D, PT, T>(&self, pointer: PD) -> Result<DoubleLinkedIter<D, PT, T>, ReadError>
-    where PD: PointerLike<D>,
-          D: 'a + DoubleLinked<PT, T> + GeneratedBlendStruct,
-          PT: PointerLike<T>,
-          T: 'a + GeneratedBlendStruct {
+    pub fn traverse<PD, D, PT, const SIZE: usize>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT, SIZE>, ReadError>
+    where PD: PointerLike<D, SIZE>,
+          D: 'a + DoubleLinked<PT, SIZE> + GeneratedBlendStruct,
+          PT: PointerLike<D, SIZE> {
 
         self.deref_single(pointer).map(|first| {
             DoubleLinkedIter::new(self, first)
         })
     }
 
-    fn look_up<A, B>(&self, pointer: A) -> Result<&FileBlock, ReadError>
-    where A: PointerLike<B> {
+    fn look_up<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<&FileBlock, ReadError>
+    where A: PointerLike<B, SIZE> {
         let address = pointer.address();
         let lookup = address
             .map(|address| self.blend.look_up(address))
@@ -134,8 +134,8 @@ impl <'a> Reader<'a> {
 pub struct StructIter<'a, A>
 where A: GeneratedBlendStruct {
     views: Vec<FileBlockView<'a, A>>,
-    view_index: RefCell<usize>,
-    struct_index: RefCell<usize>,
+    view_index: usize,
+    struct_index: usize,
     length: usize,
     phantom: PhantomData<&'a A>,
 }
@@ -147,8 +147,8 @@ where A: GeneratedBlendStruct {
         let length = views.iter().map(|view| view.len()).sum();
         StructIter {
             views,
-            view_index: RefCell::new(0),
-            struct_index: RefCell::new(0),
+            view_index: 0,
+            struct_index: 0,
             length,
             phantom: PhantomData::default(),
         }
@@ -184,33 +184,27 @@ where A: GeneratedBlendStruct {
             None
         }
     }
-
-    pub fn len(&self) -> usize {
-        self.length
-    }
 }
 
-impl <'a, A> Iterator for &StructIter<'a, A>
+impl <'a, A> Iterator for StructIter<'a, A>
 where A: 'a + GeneratedBlendStruct {
 
     type Item = &'a A;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut view_index = self.view_index.borrow_mut();
-        let mut struct_index = self.struct_index.borrow_mut();
-        if *view_index < self.views.len() {
-            if *struct_index < self.views[*view_index].len() {
-                let result = self.views[*view_index].view(*struct_index);
-                *struct_index += 1;
+        if self.view_index < self.views.len() {
+            if self.struct_index < self.views[self.view_index].len() {
+                let result = self.views[self.view_index].view(self.struct_index);
+                self.struct_index += 1;
                 Some(result)
             }
             else {
-                *view_index += 1;
-                *struct_index = 0;
+                self.view_index += 1;
+                self.struct_index = 0;
 
-                if *view_index < self.views.len() && self.views[*view_index].len() > 0 {
-                    let result = self.views[*view_index].view(*struct_index);
-                    *struct_index += 1;
+                if self.view_index < self.views.len() && self.views[self.view_index].len() > 0 {
+                    let result = self.views[self.view_index].view(self.struct_index);
+                    self.struct_index += 1;
                     Some(result)
                 }
                 else {
@@ -222,7 +216,14 @@ where A: 'a + GeneratedBlendStruct {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.length, Some(self.length))
+    }
 }
+
+impl <'a, A> ExactSizeIterator for StructIter<'a, A>
+where A: 'a + GeneratedBlendStruct {}
 
 impl <'a, A> fmt::Debug for StructIter<'a, A>
 where A: 'a + GeneratedBlendStruct {
@@ -327,8 +328,9 @@ where A: BlendSource<'a> {
 
 #[cfg(test)]
 mod test {
+
     use hamcrest2::{assert_that, err, is, HamcrestMatcher, equal_to};
-    use crate::blend::{read, NameLike};
+    use crate::blend::{read, NameLike, PointerLike};
     use crate::blender3_0::Object;
 
     #[test]

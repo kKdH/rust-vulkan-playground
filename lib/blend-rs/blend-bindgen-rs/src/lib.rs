@@ -42,7 +42,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                 if is_struct_double_linked(structure) {
                     let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
                     quote! {
-                        impl DoubleLinked<Pointer<#name, #pointer_size>, #name> for #name {
+                        impl DoubleLinked<Pointer<#name, #pointer_size>, #pointer_size> for #name {
                             fn next(&self) -> &Pointer<Self, #pointer_size> {
                                 &self.next
                             }
