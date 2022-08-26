@@ -36,23 +36,24 @@ fn main() {
 
     let polygon_count = mesh_polygon.len();
 
-    let vertices: Vec<Vertex> = mesh_polygon
+    let vertices_per_polygon: Vec<Vec<Vertex>> = mesh_polygon
         .map(|polygon| {
-            (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter().map(|loop_index| {
-                Vertex {
-                    position: mesh_vertices[mesh_loop[loop_index as usize].v as usize].co,
-                }
-            })
+            (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter()
+                .map(|loop_index| {
+                    Vertex {
+                        position: mesh_vertices[mesh_loop[loop_index as usize].v as usize].co,
+                    }
+                })
+                .collect()
         })
-        .flatten()
         .collect();
 
-    println!("\nTriangles ({:?}) of '{}':", polygon_count, plane.id.name.to_name_str_unchecked());
-    vertices.iter().enumerate().for_each(|(index, vertex)| {
-        if index % 3 == 0 {
-            println!()
-        }
-        println!("{:?}", vertex)
+    println!("\nPolygons ({:?}) of '{}':", polygon_count, plane.id.name.to_name_str_unchecked());
+    vertices_per_polygon.iter().enumerate().for_each(|(index, vertices)| {
+        println!();
+        vertices.iter().for_each(|vertex| {
+            println!("{:?}", vertex)
+        });
     });
 
     println!()

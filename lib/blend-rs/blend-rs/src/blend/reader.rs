@@ -1,9 +1,7 @@
 use std::{fmt, mem};
-use std::cell::RefCell;
 use std::error::Error;
-use std::fmt::Pointer;
 use std::marker::PhantomData;
-use std::ops::{Deref, Range};
+use std::ops::Range;
 
 use thiserror::Error;
 

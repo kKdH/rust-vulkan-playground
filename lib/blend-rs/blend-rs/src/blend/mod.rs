@@ -5,12 +5,8 @@ use std::str::Utf8Error;
 use blend_inspect_rs::Address;
 
 pub use blend_inspect_rs::Version;
-pub use reader::{read, Reader, ReadError};
+pub use reader::{read, Reader, ReadError, StructIter};
 
-///
-/// # Traverse
-///
-/// The Traverse module contains utilities for traversing the structs of a blend file.
 pub mod traverse;
 
 mod reader;
@@ -177,16 +173,13 @@ mod test {
         let mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
             .unwrap();
 
-        let x = mesh.mloopuv.cast_to::<MVert>();
-
         println!("Mesh: {}", mesh.id.name.to_name_str_unchecked());
 
         let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
         let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();
 
-        let mesh_uv_loop = reader.deref(&mesh.mloopuv).unwrap();
         let mesh_polygon = reader.deref(&mesh.mpoly).unwrap();
-        let vertices = mesh_polygon
+        let _vertices = mesh_polygon
             .map(|polygon| {
                 (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter().map(|loop_index| {
                     mesh_vertices[mesh_loop[loop_index as usize].v as usize].co

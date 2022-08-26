@@ -14,7 +14,12 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
     let data = std::fs::read(source_file).unwrap();
     let blend = inspect(&data).ok().unwrap();
 
-    let module_name = format!("blender{}_{}", blend.version().major, blend.version().minor);
+    let module_name = match blend.pointer_size() {
+        4 => format!("blender{}_{}x86", blend.version().major, blend.version().minor),
+        8 => format!("blender{}_{}", blend.version().major, blend.version().minor),
+        _ => panic!("Illegal pointer size '{}'! Possible values are 4 and 8.", blend.pointer_size())
+    };
+
     let module_name_ident = format_ident!("{}", module_name);
     let file_name = format!("{}/{}.rs", target_dir, module_name);
 
