@@ -1,22 +1,19 @@
-mod reader;
-mod util;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::str::Utf8Error;
 
+use blend_inspect_rs::Address;
+
+pub use blend_inspect_rs::Version;
+pub use reader::{read, Reader, ReadError};
 
 ///
 /// # Traverse
 ///
-/// This module contains utilities for traversing the structs of a blend file.
+/// The Traverse module contains utilities for traversing the structs of a blend file.
 pub mod traverse;
 
-use std::fmt::{Debug};
-use std::marker::PhantomData;
-
-use blend_inspect_rs::Address;
-
-pub use reader::{read, Reader, ReadError};
-pub use util::{StringLike, NameLike};
-pub use blend_inspect_rs::Version;
-
+mod reader;
 
 #[derive(Debug, Copy, Clone)]
 pub struct Void;
@@ -35,6 +32,18 @@ impl <T, const SIZE: usize> Pointer<T, SIZE> {
             phantom: Default::default()
         }
     }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Function<const SIZE: usize> {
+    pub value: [u8; SIZE]
+}
+
+pub trait GeneratedBlendStruct {
+    const BLEND_VERSION: Version;
+    const STRUCT_NAME: &'static str;
+    const STRUCT_INDEX: usize;
+    const STRUCT_TYPE_INDEX: usize;
 }
 
 pub trait PointerLike<A, const SIZE: usize> : Sized {
@@ -68,22 +77,85 @@ impl <A, const SIZE: usize> PointerLike<A, SIZE> for Pointer<A, SIZE> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-pub struct Function<const SIZE: usize> {
-    pub value: [u8; SIZE]
+pub trait StringLike {
+
+    fn to_str(&self) -> Result<&str, Utf8Error>;
+
+    fn to_str_unchecked(&self) -> &str {
+        self.to_str().expect("Failed to extract &str!")
+    }
+
+    fn to_string(&self) -> Result<String, Utf8Error> {
+        self.to_str().map(|value| String::from(value))
+    }
+
+    fn to_string_unchecked(&self) -> String {
+        self.to_string().expect("Failed to extract String!")
+    }
 }
 
-pub trait GeneratedBlendStruct {
-    const BLEND_VERSION: Version;
-    const STRUCT_NAME: &'static str;
-    const STRUCT_INDEX: usize;
-    const STRUCT_TYPE_INDEX: usize;
+impl <A> StringLike for A
+where A: AsRef<[i8]> {
+
+    fn to_str(&self) -> Result<&str, Utf8Error> {
+        let self_ref = self.as_ref();
+        if !self_ref.is_empty() {
+            let slice: &[u8] = unsafe {
+                core::slice::from_raw_parts(self_ref.as_ptr() as *const u8, self_ref.len())
+            };
+            let null = slice.iter()
+                .position(|element| *element == 0x00)
+                .unwrap_or(slice.len());
+            std::str::from_utf8(&slice[0..null])
+        }
+        else {
+            Ok("")
+        }
+    }
+}
+
+pub trait NameLike {
+
+    const NAME_PREFIXES: [&'static str; 17] = [
+        "OB", "ME", "WM", "IM", "SN",
+        "WS", "BR", "SC", "PL", "OB",
+        "GR", "CA", "LA", "ME", "WO",
+        "LS", "MA",
+    ];
+
+    fn to_name_str(&self) -> Result<&str, Utf8Error>;
+
+    fn to_name_string(&self) -> Result<String, Utf8Error> {
+        self.to_name_str().map(|value| String::from(value))
+    }
+
+    fn to_name_str_unchecked(&self) -> &str {
+        self.to_name_str().expect("Failed to convert to name!")
+    }
+
+    fn to_name_string_unchecked(&self) -> String {
+        self.to_name_string().expect("Failed to convert to name!")
+    }
+}
+
+impl <A> NameLike for A
+where A: StringLike {
+
+    fn to_name_str(&self) -> Result<&str, Utf8Error> {
+        self.to_str().map(|value| {
+            if Self::NAME_PREFIXES.contains(&&value[0..2]) {
+                &value[2..]
+            }
+            else {
+                &value
+            }
+        })
+    }
 }
 
 #[cfg(test)]
 mod test {
-    
-    use crate::blend::{read, NameLike, PointerLike};
+    use crate::blend::{read, PointerLike, NameLike};
     use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
     #[test]
@@ -163,10 +235,10 @@ mod test {
         std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
 
-        let x = reader.traverse(&tree.nodes.first.cast_to::<bNode>())
+        let nodes = reader.traverse(&tree.nodes.first.cast_to::<bNode>())
             .unwrap();
 
-        x.for_each(|node| {
+        nodes.for_each(|node| {
             println!("Node: {}", node.name.to_name_str_unchecked());
         });
     }

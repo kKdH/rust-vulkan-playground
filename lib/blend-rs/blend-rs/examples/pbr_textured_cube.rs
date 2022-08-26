@@ -1,6 +1,6 @@
 extern crate blend_rs;
 
-use blend_rs::blend::{read, NameLike};
+use blend_rs::blend::{read, PointerLike, NameLike};
 use blend_rs::blender3_0::{Object, Mesh, MLoop, MVert, MLoopUV};
 
 #[derive(Debug)]
@@ -22,10 +22,8 @@ fn main() {
          .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
          .expect("Cube could not be found!");
 
-    let mesh: &Mesh = reader.deref(&cube.data.cast_to::<Mesh>())
-         .expect("Failed to deref 'data' pointer!")
-         .first()
-         .expect("Expected at least one element!");
+    let mesh: &Mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
+         .expect("Could not get mesh from object!");
 
     let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
     let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();

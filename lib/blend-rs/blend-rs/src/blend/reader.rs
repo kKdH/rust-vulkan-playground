@@ -1,12 +1,13 @@
-use std::cell::RefCell;
-use std::marker::PhantomData;
 use std::{fmt, mem};
+use std::cell::RefCell;
 use std::error::Error;
 use std::fmt::Pointer;
+use std::marker::PhantomData;
 use std::ops::{Deref, Range};
 
-use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex, parse, Version};
 use thiserror::Error;
+
+use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex, parse, Version};
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
 use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
@@ -328,9 +329,9 @@ where A: BlendSource<'a> {
 
 #[cfg(test)]
 mod test {
+    use hamcrest2::{assert_that, equal_to, err, HamcrestMatcher, is};
 
-    use hamcrest2::{assert_that, err, is, HamcrestMatcher, equal_to};
-    use crate::blend::{read, NameLike, PointerLike};
+    use crate::blend::{NameLike, PointerLike, read};
     use crate::blender3_0::Object;
 
     #[test]

@@ -1,6 +1,6 @@
 extern crate blend_rs;
 
-use blend_rs::blend::{read, NameLike};
+use blend_rs::blend::{read, PointerLike, NameLike};
 use blend_rs::blender3_0::{Object, Mesh, MLoop, MVert};
 
 #[derive(Debug)]
@@ -20,11 +20,21 @@ fn main() {
         .find(|object| object.id.name.to_name_str_unchecked() == "Plane")
         .unwrap();
 
-    let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>()).unwrap();
+    let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>())
+        .expect("Could not get mesh from object!");
 
-    let mesh_polygon = reader.deref(&mesh.mpoly).unwrap();
-    let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
-    let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();
+    let mesh_polygon = reader.deref(&mesh.mpoly)
+        .expect("Could not get polygons from mesh!");
+
+    let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop)
+        .expect("Could not get loops from mesh!")
+        .collect();
+
+    let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert)
+        .expect("Could not get vertices from mesh!")
+        .collect();
+
+    let polygon_count = mesh_polygon.len();
 
     let vertices: Vec<Vertex> = mesh_polygon
         .map(|polygon| {
@@ -37,7 +47,7 @@ fn main() {
         .flatten()
         .collect();
 
-    println!("\nTriangles ({:?}) of '{}':", mesh_polygon.len(), plane.id.name.to_name_str_unchecked());
+    println!("\nTriangles ({:?}) of '{}':", polygon_count, plane.id.name.to_name_str_unchecked());
     vertices.iter().enumerate().for_each(|(index, vertex)| {
         if index % 3 == 0 {
             println!()
