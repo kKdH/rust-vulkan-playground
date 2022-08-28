@@ -330,7 +330,7 @@ mod test {
     use hamcrest2::{assert_that, equal_to, err, HamcrestMatcher, is};
 
     use crate::blend::{NameLike, PointerLike, read};
-    use crate::blender3_0::Object;
+    use crate::blender3_2::Object;
 
     #[test]
     fn test_that_structs_should_fail_on_version_mismatch() {
@@ -338,7 +338,7 @@ mod test {
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
-        assert_that!(reader.iter::<crate::blender2_7::Object>(), is(err()))
+        assert_that!(reader.iter::<crate::blender2_79::Object>(), is(err()))
     }
 
     #[test]
@@ -351,7 +351,7 @@ mod test {
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
-        assert_that!(reader.deref(&cube.data.cast_to::<crate::blender2_7::Mesh>()), is(err()))
+        assert_that!(reader.deref(&cube.data.cast_to::<crate::blender2_79::Mesh>()), is(err()))
     }
 
     #[test]

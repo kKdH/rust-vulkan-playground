@@ -1,6 +1,8 @@
 # blend-rs
 
-A Rust library to read Blender's .blend files.
+A Rust library to read Blender's .blend files without the hassle of byte parsing.
+
+**Note:** For more details see the documentation.
 
 ## Description
 This library belongs to a set of three libraries which are all related to the topic of reading Blender's .blend files:

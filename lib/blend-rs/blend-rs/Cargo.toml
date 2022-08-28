@@ -9,13 +9,14 @@ license = "Apache-2.0"
 edition = "2021"
 
 [features]
-default = ["blender3_0"]
-blender2_7 = []
-blender2_8 = []
-blender2_8x86 = []
-blender2_9 = []
-blender3_0 = []
-all = ["blender2_7", "blender2_8", "blender2_8x86", "blender2_9", "blender3_0"]
+default = ["blender3_2"]
+blender2_79 = []
+blender2_80 = []
+blender2_80x86 = []
+blender2_93 = []
+blender3_2 = []
+blender3_3 = []
+all = ["blender2_79", "blender2_80", "blender2_80x86", "blender2_93", "blender3_2", "blender3_3"]
 
 [dependencies]
 blend-inspect-rs = { path = "../blend-inspect-rs" }

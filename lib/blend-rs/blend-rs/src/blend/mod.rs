@@ -152,7 +152,7 @@ where A: StringLike {
 #[cfg(test)]
 mod test {
     use crate::blend::{read, PointerLike, NameLike};
-    use crate::blender3_0::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
+    use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
     #[test]
     fn test() {

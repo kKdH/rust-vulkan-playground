@@ -2,6 +2,8 @@
 
 A Rust library to generated Blender's data structures.
 
+**Note:** This crate in its current state is only usable for the [blend-rs](https://crates.io/crates/blend-rs) library and not meant to be used directly.
+
 ## Description
 This library belongs to a set of three libraries which are all related to the topic of reading Blender's .blend files:
 

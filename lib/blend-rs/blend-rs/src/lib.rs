@@ -6,13 +6,16 @@
 //!
 //! # blender-rs
 //!
-//! A Rust library to read Blender's .blend files.
+//! A Rust library to read Blender's .blend files without the hassle of byte parsing.
+//!
+//! **Note:** Due to the functioning of this library not all blender version are supported.
+//! The table about [Crate Features](#crate-features) lists the supported blender version.
 //!
 //! ## Example
 //! The example below illustrates how to extract the coordinates of each vertex of an object's mesh.
 //! ```rust
 //! use blend_rs::blend::{read, StructIter, PointerLike, NameLike};
-//! use blend_rs::blender3_0::{Object, Mesh, MPoly, MVert, MLoop};
+//! use blend_rs::blender3_2::{Object, Mesh, MPoly, MVert, MLoop};
 //!
 //! pub struct Vertex {
 //!     pub position: [f32; 3],
@@ -61,20 +64,27 @@
 //! ## Crate Features
 //! Enable or disable features according to your needs and in order to optimize compile time.
 //!
-//! | Feature           | Default  | Description                                                   |
-//! | ----------------- |:--------:| ------------------------------------------------------------- |
-//! | blender2_7        | &#x2717; | Generate and include code for blender 2.70.x.                 |
-//! | blender2_8        | &#x2717; | Generate and include code for blender 2.80.x.                 |
-//! | blender2_8x86     | &#x2717; | Generate and include code for blender 2.80.x. (32 Bit)        |
-//! | blender2_9        | &#x2717; | Generate and include code for blender 2.90.x.                 |
-//! | blender3_0        | &#x2714; | Generate and include code for blender 3.x.                    |
-//! | all               | &#x2717; | Generate and include code for all supported blender versions. |
+//! | Feature           | Default  | Description                                                        |
+//! | ----------------- |:--------:| ------------------------------------------------------------------ |
+//! | blender2_79       | &#x2717; | Generate and include code for blender 2.79 (64 Bit, big endian)    |
+//! | blender2_80       | &#x2717; | Generate and include code for blender 2.80 (64 Bit, big endian)    |
+//! | blender2_80x86    | &#x2717; | Generate and include code for blender 2.80 (32 Bit, big endian)    |
+//! | blender2_93       | &#x2717; | Generate and include code for blender 2.93 (64 Bit, big endian)    |
+//! | blender3_2        | &#x2714; | Generate and include code for blender 3.2 (64 Bit, big endian)     |
+//! | blender3_3        | &#x2717; | Generate and include code for blender 3.3 (64 Bit, big endian)     |
+//! | all               | &#x2717; | Generate and include code for all above blender versions.          |
 //!
 //! <sup>&#x2714; enabled, &#x2717; disabled</sup>
 //!
 //! ## Details
 //!
-//! This library belongs to a set of three libraries which are all related to the topic of reading Blender's .blend files:
+//! blend-rs depends heavily on code generated from the Blender DNA. The Blender DNA is a part of
+//! each `*.blend` file and contains a description for all structs, types and names within the file.
+//! Blender uses the DNA for forward- and backward compatibility. blend-rs uses the DNA to generate
+//! rust code.
+//!
+//! This library belongs to a set of three libraries which are all related to the topic of reading
+//! Blender's .blend files:
 //!
 //! <p style="text-align: center;">
         #![doc=include_str!("../overview.svg")]
@@ -87,21 +97,25 @@
 //! * [blend-rs](https://docs.rs/blend-rs):
 //! A Rust library to read Blender's .blend files.
 //!
+//!
 extern crate core;
 
 pub mod blend;
 
-#[cfg(feature = "blender2_7")]
-include!(concat!(env!("OUT_DIR"), "/blender2_7.rs"));
+#[cfg(feature = "blender3_3")]
+include!(concat!(env!("OUT_DIR"), "/blender3_3.rs"));
 
-#[cfg(feature = "blender2_8")]
-include!(concat!(env!("OUT_DIR"), "/blender2_8.rs"));
+#[cfg(feature = "blender3_2")]
+include!(concat!(env!("OUT_DIR"), "/blender3_2.rs"));
 
-#[cfg(feature = "blender2_8x86")]
-include!(concat!(env!("OUT_DIR"), "/blender2_8x86.rs"));
+#[cfg(feature = "blender2_93")]
+include!(concat!(env!("OUT_DIR"), "/blender2_93.rs"));
 
-#[cfg(feature = "blender2_9")]
-include!(concat!(env!("OUT_DIR"), "/blender2_9.rs"));
+#[cfg(feature = "blender2_80")]
+include!(concat!(env!("OUT_DIR"), "/blender2_80.rs"));
 
-#[cfg(feature = "blender3_0")]
-include!(concat!(env!("OUT_DIR"), "/blender3_0.rs"));
+#[cfg(feature = "blender2_80x86")]
+include!(concat!(env!("OUT_DIR"), "/blender2_80x86.rs"));
+
+#[cfg(feature = "blender2_79")]
+include!(concat!(env!("OUT_DIR"), "/blender2_79.rs"));

@@ -1,7 +1,7 @@
 extern crate blend_rs;
 
 use blend_rs::blend::{read, PointerLike, NameLike};
-use blend_rs::blender3_0::{Object, Mesh, MLoop, MVert};
+use blend_rs::blender3_2::{Object, Mesh, MLoop, MVert};
 
 #[derive(Debug)]
 pub struct Vertex {
