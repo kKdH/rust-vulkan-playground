@@ -15,11 +15,27 @@ use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
 pub struct Reader<'a> {
     data: Data<'a>,
-    pub blend: BlendFile,
+    blend: BlendFile,
 }
 
 impl <'a> Reader<'a> {
 
+    /// Returns an iterator over all structs of the specified type.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blend_rs::blend::{read, StructIter};
+    /// use blend_rs::blender3_2::Mesh;
+    ///
+    /// let blend_data = std::fs::read("examples/example-3.2.blend")
+    ///     .expect("Failed to open blend file!");
+    ///
+    /// let reader = read(&blend_data)
+    ///     .expect("Failed to read blend file!");
+    ///
+    /// let meshes: StructIter<Mesh> = reader.iter::<Mesh>().expect("Failed to create an iterator!");
+    /// ```
     pub fn iter<S>(&self) -> Result<StructIter<S>, ReadError>
     where S: 'a + GeneratedBlendStruct {
         check_blend::<S>(&self.blend)?;
@@ -34,6 +50,28 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(views))
     }
 
+    /// Dereferences the specified [PointerLike] and returns an iterator over the structs.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blend_rs::blend::{read, PointerLike, NameLike, StructIter};
+    /// use blend_rs::blender3_2::{Mesh, MLoop, MPoly};
+    ///
+    /// let blend_data = std::fs::read("examples/example-3.2.blend")
+    ///     .expect("Failed to open blend file!");
+    ///
+    /// let reader = read(&blend_data)
+    ///     .expect("Failed to read blend file!");
+    ///
+    /// let mesh: &Mesh = reader.iter::<Mesh>()
+    ///    .expect("Failed to create an iterator!")
+    ///    .find(|mesh| mesh.id.name.to_name_str_unchecked() == "Cube")
+    ///    .expect("Failed to find 'Cube'!");
+    ///
+    /// let polygons: StructIter<MPoly> = reader.deref(&mesh.mpoly)
+    ///     .expect("Failed to deref the mesh's polygons!");
+    /// ```
     pub fn deref<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<StructIter<S>, ReadError>
     where P: PointerLike<S, SIZE>,
           S: 'a + GeneratedBlendStruct {
@@ -43,6 +81,28 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
     }
 
+    /// Dereferences the specified [PointerLike] and returns the struct.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blend_rs::blend::{read, PointerLike, NameLike};
+    /// use blend_rs::blender3_2::{Object, Mesh};
+    ///
+    /// let blend_data = std::fs::read("examples/example-3.2.blend")
+    ///     .expect("Failed to open blend file!");
+    ///
+    /// let reader = read(&blend_data)
+    ///     .expect("Failed to read blend file!");
+    ///
+    /// let cube: &Object = reader.iter::<Object>()
+    ///    .expect("Failed to create an iterator!")
+    ///    .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
+    ///    .expect("Failed to find 'Cube'!");
+    ///
+    /// let mesh: &Mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
+    ///     .expect("Failed to deref the object's mesh!");
+    /// ```
     pub fn deref_single<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<&'a S, ReadError>
     where P: PointerLike<S, SIZE>,
           S: 'a + GeneratedBlendStruct {
@@ -57,12 +117,54 @@ impl <'a> Reader<'a> {
         }
     }
 
+    /// Dereferences the specified [PointerLike] and returns a slice of the raw data.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blend_rs::blend::{read, PointerLike, NameLike};
+    /// use blend_rs::blender3_2::{PackedFile};
+    ///
+    /// let blend_data = std::fs::read("examples/example-3.2.blend")
+    ///     .expect("Failed to open blend file!");
+    /// let reader = read(&blend_data)
+    ///     .expect("Failed to read blend file!");
+    ///
+    /// let packed_file: &PackedFile = reader.iter::<PackedFile>()
+    ///    .expect("Failed to create an iterator!")
+    ///    .first()
+    ///    .expect("No packed file!");
+    ///
+    /// let data = reader.deref_raw(&packed_file.data)
+    ///     .expect("Failed to deref raw data!");
+    /// ```
     pub fn deref_raw<P, T, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
     where P: PointerLike<T, SIZE> {
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
 
+    /// Dereferences the specified [PointerLike] and returns a sub-slice of the raw data.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use blend_rs::blend::{read, PointerLike, NameLike};
+    /// use blend_rs::blender3_2::{PackedFile};
+    ///
+    /// let blend_data = std::fs::read("examples/example-3.2.blend")
+    ///     .expect("Failed to open blend file!");
+    /// let reader = read(&blend_data)
+    ///     .expect("Failed to read blend file!");
+    ///
+    /// let packed_file: &PackedFile = reader.iter::<PackedFile>()
+    ///    .expect("Failed to create an iterator!")
+    ///    .first()
+    ///    .expect("No packed file!");
+    ///
+    /// let magic_number = reader.deref_raw_range(&packed_file.data, 0..4 as usize)
+    ///     .expect("Failed to deref raw data!");
+    /// ```
     pub fn deref_raw_range<P, T, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
     where P: PointerLike<T, SIZE> {
         self.deref_raw(pointer).map(|data| {
