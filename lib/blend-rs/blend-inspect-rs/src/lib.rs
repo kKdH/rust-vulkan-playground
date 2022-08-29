@@ -22,9 +22,6 @@ pub struct Blend {
 }
 
 impl Blend {
-    pub fn version(&self) -> &Version {
-        &self.blend_file.header.version
-    }
 
     pub fn blocks(&self) -> Iter<'_, FileBlock> {
         self.blend_file.blocks.iter()
@@ -34,6 +31,10 @@ impl Blend {
         self.structure.structs()
     }
 
+    pub fn version(&self) -> &Version {
+        &self.blend_file.header.version
+    }
+
     pub fn pointer_size(&self) -> usize {
         match self.blend_file.header.pointer_size {
             PointerSize::Pointer4Bytes => 4,
@@ -41,8 +42,8 @@ impl Blend {
         }
     }
 
-    pub fn endianness(&self) -> Endianness {
-        self.blend_file.header.endianness
+    pub fn endianness(&self) -> &Endianness {
+        &self.blend_file.header.endianness
     }
 
     pub fn find_struct_by_name(&self, name: &str) -> Option<&Struct> {

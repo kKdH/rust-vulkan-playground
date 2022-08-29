@@ -1,3 +1,5 @@
+mod check;
+
 use std::{fmt, mem};
 use std::error::Error;
 use std::marker::PhantomData;
@@ -5,9 +7,10 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-use blend_inspect_rs::{BlendFile, BlendSource, Data, Endianness, FileBlock, HasDnaTypeIndex, parse, Version};
+use blend_inspect_rs::{BlendFile, BlendSource, Data, Endianness, FileBlock, parse, Version};
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
+use crate::blend::reader::check::{check_blend, check_same_type};
 use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
 pub struct Reader<'a> {
@@ -17,12 +20,12 @@ pub struct Reader<'a> {
 
 impl <'a> Reader<'a> {
 
-    pub fn iter<A>(&self) -> Result<StructIter<A>, ReadError>
-    where A: 'a + GeneratedBlendStruct {
-        self.check_blend::<A>()?;
-        let views: Vec<FileBlockView<'a, A>> = self.blend.blocks.iter()
+    pub fn iter<S>(&self) -> Result<StructIter<S>, ReadError>
+    where S: 'a + GeneratedBlendStruct {
+        check_blend::<S>(&self.blend)?;
+        let views: Vec<FileBlockView<'a, S>> = self.blend.blocks.iter()
             .filter_map(|block| {
-                if block.sdna == A::STRUCT_INDEX {
+                if block.sdna == S::STRUCT_INDEX {
                     Some(FileBlockView::new(self.data, &block))
                 } else {
                     None
@@ -31,22 +34,22 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(views))
     }
 
-    pub fn deref<A,  B, const SIZE: usize>(&self, pointer: &A) -> Result<StructIter<B>, ReadError>
-    where A: PointerLike<B, SIZE>,
-          B: 'a + GeneratedBlendStruct {
+    pub fn deref<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<StructIter<S>, ReadError>
+    where P: PointerLike<S, SIZE>,
+          S: 'a + GeneratedBlendStruct {
         let block = self.look_up(pointer)?;
-        self.check_blend::<B>()?;
-        self.check_same_type(B::STRUCT_TYPE_INDEX, block)?;
+        check_blend::<S>(&self.blend)?;
+        check_same_type(&self.blend, S::STRUCT_TYPE_INDEX, block)?;
         Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
     }
 
-    pub fn deref_single<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<&'a B, ReadError>
-    where A: PointerLike<B, SIZE>,
-          B: 'a + GeneratedBlendStruct {
+    pub fn deref_single<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<&'a S, ReadError>
+    where P: PointerLike<S, SIZE>,
+          S: 'a + GeneratedBlendStruct {
         let block = self.look_up(pointer)?;
-        self.check_blend::<B>()?;
-        self.check_same_type(B::STRUCT_TYPE_INDEX, block)?;
-        let file_block_view: FileBlockView<B> = FileBlockView::new(self.data, block);
+        check_blend::<S>(&self.blend)?;
+        check_same_type(&self.blend, S::STRUCT_TYPE_INDEX, block)?;
+        let file_block_view: FileBlockView<S> = FileBlockView::new(self.data, block);
         match file_block_view.len() {
             1 => Ok(file_block_view.view(0)),
             0 => Err(ReadError::NoSuchElementError),
@@ -54,14 +57,14 @@ impl <'a> Reader<'a> {
         }
     }
 
-    pub fn deref_raw<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<Data<'a>, ReadError>
-    where A: PointerLike<B, SIZE> {
+    pub fn deref_raw<P, T, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
+    where P: PointerLike<T, SIZE> {
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
 
-    pub fn deref_raw_range<A, B, const SIZE: usize>(&self, pointer: &A, range: Range<usize>) -> Result<Data<'a>, ReadError>
-    where A: PointerLike<B, SIZE> {
+    pub fn deref_raw_range<P, T, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
+    where P: PointerLike<T, SIZE> {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })
@@ -96,67 +99,6 @@ impl <'a> Reader<'a> {
             Some(block) => {
                 Ok(block)
             }
-        }
-    }
-
-    fn check_blend<A>(&self) -> Result<(), ReadError>
-    where A: GeneratedBlendStruct {
-        self.check_version(A::BLEND_VERSION)?;
-        self.check_pointer_size(A::BLEND_POINTER_SIZE)?;
-        self.check_endianness(A::BLEND_ENDIANNESS)
-    }
-
-    fn check_version(&self, version: Version) -> Result<(), ReadError> {
-        if self.blend.header.version == version {
-            Ok(())
-        }
-        else {
-            Err(ReadError::VersionMismatchError {
-                expected: version,
-                actual: self.blend.header.version,
-            })
-        }
-    }
-
-    fn check_pointer_size(&self, pointer_size: usize) -> Result<(), ReadError> {
-        if self.blend.header.pointer_size.size() == pointer_size {
-            Ok(())
-        }
-        else {
-            Err(ReadError::PointerSizeMismatchError {
-                expected: pointer_size,
-                actual: self.blend.header.pointer_size.size(),
-            })
-        }
-    }
-
-    fn check_endianness(&self, endianness: Endianness) -> Result<(), ReadError> {
-        if self.blend.header.endianness == endianness {
-            Ok(())
-        }
-        else {
-            Err(ReadError::EndiannessMismatchError {
-                expected: endianness,
-                actual: self.blend.header.endianness,
-            })
-        }
-    }
-
-    fn check_same_type<A, B>(&self, expected: A, actual: B) -> Result<(), ReadError>
-    where A: HasDnaTypeIndex,
-          B: HasDnaTypeIndex {
-        let expected_type = self.blend.dna.find_type_of(expected)
-            .expect("Failed to resolve DnaType!");
-        let actual_type = self.blend.dna.find_type_of(actual)
-            .expect("Failed to resolve DnaType!");
-        if expected_type == actual_type {
-            Ok(())
-        }
-        else {
-            Err(ReadError::InvalidPointerTypeError {
-                expected: Clone::clone(&expected_type.name),
-                actual: Clone::clone(&actual_type.name)
-            })
         }
     }
 }
@@ -274,7 +216,7 @@ struct FileBlockView<'a, A> {
 }
 
 impl <'a, A> fmt::Debug for FileBlockView<'a, A>
-    where A: 'a + GeneratedBlendStruct {
+where A: 'a + GeneratedBlendStruct {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.debug_struct("FileBlockView")
             .field("data", &self.data)
@@ -360,7 +302,7 @@ pub enum ReadError {
 }
 
 pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>
-where A: BlendSource<'a> {
+    where A: BlendSource<'a> {
 
     let data = source.data();
     parse(source.data())
