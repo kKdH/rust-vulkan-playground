@@ -5,7 +5,7 @@ use std::ops::Deref;
 use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 
-use blend_inspect_rs::{Blend, inspect, Struct, Type};
+use blend_inspect_rs::{Blend, Endianness, inspect, Struct, Type};
 use itertools::Itertools;
 
 
@@ -68,6 +68,11 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             let major_version = Literal::character(blend.version().major);
             let minor_version = Literal::character(blend.version().minor);
             let patch_version = Literal::character(blend.version().patch);
+            let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
+            let endianness = match blend.endianness() {
+                Endianness::Little => quote!(Endianness::Little),
+                Endianness::Big => quote!(Endianness::Big),
+            };
             let struct_name = Literal::string(structure.name());
             let struct_index = Literal::usize_unsuffixed(structure.struct_index());
             let struct_type_index = Literal::usize_unsuffixed(structure.struct_type_index());
@@ -82,6 +87,8 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                         minor: #minor_version,
                         patch: #patch_version
                     };
+                    const BLEND_POINTER_SIZE: usize = #pointer_size;
+                    const BLEND_ENDIANNESS: Endianness = #endianness;
                     const STRUCT_NAME: &'static str = #struct_name;
                     const STRUCT_INDEX: usize = #struct_index;
                     const STRUCT_TYPE_INDEX: usize = #struct_type_index;
@@ -99,7 +106,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             #![allow(non_snake_case)]
             #![allow(dead_code)]
 
-            use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Void};
+            use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Endianness, Void};
             use crate::blend::traverse::{DoubleLinked};
 
             #(#quoted_structs)*

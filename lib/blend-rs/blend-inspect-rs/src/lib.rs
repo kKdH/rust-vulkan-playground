@@ -9,7 +9,7 @@ mod parse;
 
 pub use crate::analyse::{Struct, Structure, Type, Mode};
 pub use crate::analyse::analyse;
-pub use crate::parse::{BlendFile, Dna, DnaType, DnaStruct, DnaField, FileBlock, FileHeader, Identifier, PointerSize, Version, Address, AddressLike, AddressTable, HasDnaTypeIndex};
+pub use crate::parse::{BlendFile, Dna, DnaType, DnaStruct, DnaField, FileBlock, FileHeader, Identifier, PointerSize, Version, Endianness, Address, AddressLike, AddressTable, HasDnaTypeIndex};
 pub use crate::parse::parse;
 
 
@@ -39,6 +39,10 @@ impl Blend {
             PointerSize::Pointer4Bytes => 4,
             PointerSize::Pointer8Bytes => 8
         }
+    }
+
+    pub fn endianness(&self) -> Endianness {
+        self.blend_file.header.endianness
     }
 
     pub fn find_struct_by_name(&self, name: &str) -> Option<&Struct> {

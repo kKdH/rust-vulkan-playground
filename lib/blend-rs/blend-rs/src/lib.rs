@@ -66,12 +66,12 @@
 //!
 //! | Feature           | Default  | Description                                                        |
 //! | ----------------- |:--------:| ------------------------------------------------------------------ |
-//! | blender2_79       | &#x2717; | Generate and include code for blender 2.79 (64 Bit, big endian)    |
-//! | blender2_80       | &#x2717; | Generate and include code for blender 2.80 (64 Bit, big endian)    |
-//! | blender2_80x86    | &#x2717; | Generate and include code for blender 2.80 (32 Bit, big endian)    |
-//! | blender2_93       | &#x2717; | Generate and include code for blender 2.93 (64 Bit, big endian)    |
-//! | blender3_2        | &#x2714; | Generate and include code for blender 3.2 (64 Bit, big endian)     |
-//! | blender3_3        | &#x2717; | Generate and include code for blender 3.3 (64 Bit, big endian)     |
+//! | blender2_79       | &#x2717; | Generate and include code for blender 2.79 (64 Bit, little endian) |
+//! | blender2_80       | &#x2717; | Generate and include code for blender 2.80 (64 Bit, little endian) |
+//! | blender2_80x86    | &#x2717; | Generate and include code for blender 2.80 (32 Bit, little endian) |
+//! | blender2_93       | &#x2717; | Generate and include code for blender 2.93 (64 Bit, little endian) |
+//! | blender3_2        | &#x2714; | Generate and include code for blender 3.2 (64 Bit, little endian)  |
+//! | blender3_3        | &#x2717; | Generate and include code for blender 3.3 (64 Bit, little endian)  |
 //! | all               | &#x2717; | Generate and include code for all above blender versions.          |
 //!
 //! <sup>&#x2714; enabled, &#x2717; disabled</sup>

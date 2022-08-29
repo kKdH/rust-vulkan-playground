@@ -4,7 +4,7 @@ use std::str::Utf8Error;
 
 use blend_inspect_rs::Address;
 
-pub use blend_inspect_rs::Version;
+pub use blend_inspect_rs::{Version, Endianness};
 pub use reader::{read, Reader, ReadError, StructIter};
 
 pub mod traverse;
@@ -37,6 +37,8 @@ pub struct Function<const SIZE: usize> {
 
 pub trait GeneratedBlendStruct {
     const BLEND_VERSION: Version;
+    const BLEND_POINTER_SIZE: usize;
+    const BLEND_ENDIANNESS: Endianness;
     const STRUCT_NAME: &'static str;
     const STRUCT_INDEX: usize;
     const STRUCT_TYPE_INDEX: usize;

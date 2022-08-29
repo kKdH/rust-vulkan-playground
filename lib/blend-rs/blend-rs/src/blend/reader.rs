@@ -5,7 +5,7 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-use blend_inspect_rs::{BlendFile, BlendSource, Data, FileBlock, HasDnaTypeIndex, parse, Version};
+use blend_inspect_rs::{BlendFile, BlendSource, Data, Endianness, FileBlock, HasDnaTypeIndex, parse, Version};
 
 use crate::blend::{GeneratedBlendStruct, PointerLike};
 use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
@@ -19,7 +19,7 @@ impl <'a> Reader<'a> {
 
     pub fn iter<A>(&self) -> Result<StructIter<A>, ReadError>
     where A: 'a + GeneratedBlendStruct {
-        self.assert_version(A::BLEND_VERSION)?;
+        self.check_blend::<A>()?;
         let views: Vec<FileBlockView<'a, A>> = self.blend.blocks.iter()
             .filter_map(|block| {
                 if block.sdna == A::STRUCT_INDEX {
@@ -35,8 +35,8 @@ impl <'a> Reader<'a> {
     where A: PointerLike<B, SIZE>,
           B: 'a + GeneratedBlendStruct {
         let block = self.look_up(pointer)?;
-        self.assert_version(B::BLEND_VERSION)?;
-        self.assert_same_type(B::STRUCT_TYPE_INDEX, block)?;
+        self.check_blend::<B>()?;
+        self.check_same_type(B::STRUCT_TYPE_INDEX, block)?;
         Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
     }
 
@@ -44,8 +44,8 @@ impl <'a> Reader<'a> {
     where A: PointerLike<B, SIZE>,
           B: 'a + GeneratedBlendStruct {
         let block = self.look_up(pointer)?;
-        self.assert_version(B::BLEND_VERSION)?;
-        self.assert_same_type(B::STRUCT_TYPE_INDEX, block)?;
+        self.check_blend::<B>()?;
+        self.check_same_type(B::STRUCT_TYPE_INDEX, block)?;
         let file_block_view: FileBlockView<B> = FileBlockView::new(self.data, block);
         match file_block_view.len() {
             1 => Ok(file_block_view.view(0)),
@@ -99,19 +99,50 @@ impl <'a> Reader<'a> {
         }
     }
 
-    fn assert_version(&self, version: Version) -> Result<(), ReadError> {
+    fn check_blend<A>(&self) -> Result<(), ReadError>
+    where A: GeneratedBlendStruct {
+        self.check_version(A::BLEND_VERSION)?;
+        self.check_pointer_size(A::BLEND_POINTER_SIZE)?;
+        self.check_endianness(A::BLEND_ENDIANNESS)
+    }
+
+    fn check_version(&self, version: Version) -> Result<(), ReadError> {
         if self.blend.header.version == version {
             Ok(())
         }
         else {
             Err(ReadError::VersionMismatchError {
-                expected_version: version,
-                actual_version: self.blend.header.version,
+                expected: version,
+                actual: self.blend.header.version,
             })
         }
     }
 
-    fn assert_same_type<A, B>(&self, expected: A, actual: B) -> Result<(), ReadError>
+    fn check_pointer_size(&self, pointer_size: usize) -> Result<(), ReadError> {
+        if self.blend.header.pointer_size.size() == pointer_size {
+            Ok(())
+        }
+        else {
+            Err(ReadError::PointerSizeMismatchError {
+                expected: pointer_size,
+                actual: self.blend.header.pointer_size.size(),
+            })
+        }
+    }
+
+    fn check_endianness(&self, endianness: Endianness) -> Result<(), ReadError> {
+        if self.blend.header.endianness == endianness {
+            Ok(())
+        }
+        else {
+            Err(ReadError::EndiannessMismatchError {
+                expected: endianness,
+                actual: self.blend.header.endianness,
+            })
+        }
+    }
+
+    fn check_same_type<A, B>(&self, expected: A, actual: B) -> Result<(), ReadError>
     where A: HasDnaTypeIndex,
           B: HasDnaTypeIndex {
         let expected_type = self.blend.dna.find_type_of(expected)
@@ -294,10 +325,22 @@ pub enum ReadError {
         cause: Box<dyn Error>
     },
 
-    #[error("Expected blend version {expected_version} but actual version is {actual_version}!")]
+    #[error("Expected blend version {expected} but actual version is {actual}!")]
     VersionMismatchError {
-        expected_version: Version,
-        actual_version: Version
+        expected: Version,
+        actual: Version
+    },
+
+    #[error("Expected pointer size {expected} but actual pointer size is {actual}!")]
+    PointerSizeMismatchError {
+        expected: usize,
+        actual: usize
+    },
+
+    #[error("Expected endianness {expected} but actual endianness is {actual}!")]
+    EndiannessMismatchError {
+        expected: Endianness,
+        actual: Endianness
     },
 
     #[error("Pointer address is null!")]
@@ -333,12 +376,21 @@ mod test {
     use crate::blender3_2::Object;
 
     #[test]
-    fn test_that_structs_should_fail_on_version_mismatch() {
+    fn test_that_iter_should_fail_on_version_mismatch() {
 
         let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
         let reader = read(&blend_data).unwrap();
 
         assert_that!(reader.iter::<crate::blender2_79::Object>(), is(err()))
+    }
+
+    #[test]
+    fn test_that_iter_should_fail_on_pointer_size_mismatch() {
+
+        let blend_data = std::fs::read("gen/blender2_80.blend").unwrap();
+        let reader = read(&blend_data).unwrap();
+
+        assert_that!(reader.iter::<crate::blender2_80x86::Object>(), is(err()))
     }
 
     #[test]

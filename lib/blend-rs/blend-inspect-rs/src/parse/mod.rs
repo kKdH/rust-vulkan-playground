@@ -171,7 +171,7 @@ pub enum PointerSize {
 }
 
 impl PointerSize {
-    fn size(&self) -> usize {
+    pub fn size(&self) -> usize {
         match self {
             PointerSize::Pointer4Bytes => 4,
             PointerSize::Pointer8Bytes => 8,
@@ -183,6 +183,16 @@ impl PointerSize {
 pub enum Endianness {
     Little,
     Big
+}
+
+impl Display for Endianness {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            Endianness::Little => "Little",
+            Endianness::Big => "Big"
+        };
+        write!(formatter, "{}", value)
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
