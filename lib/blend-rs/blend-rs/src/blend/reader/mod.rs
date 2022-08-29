@@ -13,6 +13,20 @@ use crate::blend::{GeneratedBlendStruct, PointerLike};
 use crate::blend::reader::check::{check_blend, check_same_type};
 use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
+/// Core struct for reading `.blend` files.
+///
+/// This struct can be created by the [`read`] function.
+///
+/// # Examples
+///
+/// ```rust
+/// use blend_rs::blend::{read, Reader, ReadError};
+///
+/// let blend_data = std::fs::read("examples/example-3.2.blend")
+///     .expect("Failed to open blend file!");
+///
+/// let reader: Result<Reader, ReadError> = read(&blend_data);
+/// ```
 pub struct Reader<'a> {
     data: Data<'a>,
     blend: BlendFile,
@@ -50,7 +64,7 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(views))
     }
 
-    /// Dereferences the specified [PointerLike] and returns an iterator over the structs.
+    /// Dereferences the specified [`PointerLike`] and returns an iterator over the structs.
     ///
     /// # Examples
     ///
@@ -81,7 +95,7 @@ impl <'a> Reader<'a> {
         Ok(StructIter::new(vec![FileBlockView::new(self.data, block)]))
     }
 
-    /// Dereferences the specified [PointerLike] and returns the struct.
+    /// Dereferences the specified [`PointerLike`] and returns the struct.
     ///
     /// # Examples
     ///
@@ -117,7 +131,7 @@ impl <'a> Reader<'a> {
         }
     }
 
-    /// Dereferences the specified [PointerLike] and returns a slice of the raw data.
+    /// Dereferences the specified [`PointerLike`] and returns a slice of the raw data.
     ///
     /// # Examples
     ///
@@ -144,7 +158,7 @@ impl <'a> Reader<'a> {
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
 
-    /// Dereferences the specified [PointerLike] and returns a sub-slice of the raw data.
+    /// Dereferences the specified [`PointerLike`] and returns a sub-slice of the raw data.
     ///
     /// # Examples
     ///
@@ -205,13 +219,20 @@ impl <'a> Reader<'a> {
     }
 }
 
+/// Iterator over [`GeneratedBlendStructs`].
+///
+/// This struct is created by the [`iter`] and [`deref`] function of the [`Reader`].
+///
+/// [`GeneratedBlendStructs`]: GeneratedBlendStruct
+/// [`iter`]: Reader::iter
+/// [`deref`]: Reader::deref
+///
 pub struct StructIter<'a, A>
 where A: GeneratedBlendStruct {
     views: Vec<FileBlockView<'a, A>>,
     view_index: usize,
     struct_index: usize,
     length: usize,
-    phantom: PhantomData<&'a A>,
 }
 
 impl <'a, A> StructIter<'a, A>
@@ -224,7 +245,6 @@ where A: GeneratedBlendStruct {
             view_index: 0,
             struct_index: 0,
             length,
-            phantom: PhantomData::default(),
         }
     }
 
