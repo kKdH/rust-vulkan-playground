@@ -12,18 +12,18 @@ pub struct Vertex {
 fn main() {
 
     let blend_data = std::fs::read("examples/example-3.2.blend")
-        .expect("Failed to open file!");
+        .expect("file 'examples/example-3.2.blend' to be readable");
 
     let reader = read(&blend_data)
-        .expect("Failed to read blend data!");
+        .expect("Blender data should be parsable");
 
-    let cube: &Object = reader.iter::<Object>()
-         .expect("Failed to create a StructIter for Object!")
-         .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
-         .expect("Cube could not be found!");
+    let plane: &Object = reader.iter::<Object>()
+        .expect("an iterator over all Objects")
+        .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
+        .expect("an Object with name 'Cube'");
 
-    let mesh: &Mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
-         .expect("Could not get mesh from object!");
+    let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>())
+        .expect("a Mesh of the 'Cube'");
 
     let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
     let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();

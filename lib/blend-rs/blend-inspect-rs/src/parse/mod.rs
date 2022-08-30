@@ -203,7 +203,7 @@ pub struct Version {
 }
 
 impl Version {
-    fn new(major: char, minor: char, patch: char) -> Version {
+    pub const fn new(major: char, minor: char, patch: char) -> Version {
         Version { major, minor, patch }
     }
 }

@@ -13,9 +13,9 @@ use crate::blend::{GeneratedBlendStruct, PointerLike};
 use crate::blend::reader::check::{check_blend, check_same_type};
 use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
-/// Core struct for reading `.blend` files.
+/// Main struct for reading `.blend` files.
 ///
-/// This struct can be created by the [`read`] function.
+/// This struct is created by the [`read`] function.
 ///
 /// # Examples
 ///
@@ -23,7 +23,7 @@ use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 /// use blend_rs::blend::{read, Reader, ReadError};
 ///
 /// let blend_data = std::fs::read("examples/example-3.2.blend")
-///     .expect("Failed to open blend file!");
+///     .expect("file 'examples/example-3.2.blend' to be readable");
 ///
 /// let reader: Result<Reader, ReadError> = read(&blend_data);
 /// ```
@@ -36,6 +36,14 @@ impl <'a> Reader<'a> {
 
     /// Returns an iterator over all structs of the specified type.
     ///
+    /// # Errors
+    /// * Fails with a [`VersionMismatchError`], if the [`GeneratedBlendStruct`] used to read
+    ///   is generated for a different version than the Blender data actually has.
+    /// * Fails with a [`PointerSizeMismatchError`], if the size of addresses (32bit, 64bit)
+    ///   differs from the address size found in the Blender data.
+    /// * Fails with a [`EndiannessMismatchError`], if the [`Endianness`] (little, big) differs from
+    ///   the [`Endianness`] found in the Blender data.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -43,13 +51,18 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::Mesh;
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("Failed to open blend file!");
+    ///     .expect("file 'examples/example-3.2.blend' to be readable");
     ///
     /// let reader = read(&blend_data)
-    ///     .expect("Failed to read blend file!");
+    ///     .expect("Blender data should be parsable");
     ///
-    /// let meshes: StructIter<Mesh> = reader.iter::<Mesh>().expect("Failed to create an iterator!");
+    /// let meshes: StructIter<Mesh> = reader.iter::<Mesh>()
+    ///     .expect("an iterator over all Meshes");
     /// ```
+    /// [`VersionMismatchError`]: ReadError::VersionMismatchError
+    /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
+    /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
+    ///
     pub fn iter<S>(&self) -> Result<StructIter<S>, ReadError>
     where S: 'a + GeneratedBlendStruct {
         check_blend::<S>(&self.blend)?;
@@ -66,6 +79,19 @@ impl <'a> Reader<'a> {
 
     /// Dereferences the specified [`PointerLike`] and returns an iterator over the structs.
     ///
+    /// # Errors
+    /// * Fails with a [`VersionMismatchError`], if the [`GeneratedBlendStruct`] used to read
+    ///   is generated for a different version than the Blender data actually has.
+    /// * Fails with a [`PointerSizeMismatchError`], if the size of addresses (32bit, 64bit)
+    ///   differs from the address size found in the Blender data.
+    /// * Fails with a [`EndiannessMismatchError`], if the [`Endianness`] (little, big) differs from
+    ///   the [`Endianness`] found in the Blender data.
+    /// * Fails with a [`InvalidPointerAddressError`], if the address of the specified
+    ///   [`PointerLike`] is invalid.
+    /// * Fails with a [`NullPointerError`], if the address of the specified [`PointerLike`] is zero.
+    /// * Fails with a [`InvalidPointerTypeError`], if the generic target-type of the [`PointerLike`]
+    ///   differs from the type actually found at the address in the Blender data.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -73,19 +99,26 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{Mesh, MLoop, MPoly};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("Failed to open blend file!");
+    ///     .expect("file 'examples/example-3.2.blend' to be readable");
     ///
     /// let reader = read(&blend_data)
-    ///     .expect("Failed to read blend file!");
+    ///     .expect("Blender data should be parsable");
     ///
     /// let mesh: &Mesh = reader.iter::<Mesh>()
-    ///    .expect("Failed to create an iterator!")
+    ///    .expect("an iterator over all Meshes")
     ///    .find(|mesh| mesh.id.name.to_name_str_unchecked() == "Cube")
-    ///    .expect("Failed to find 'Cube'!");
+    ///    .expect("an Mesh with name 'Cube'");
     ///
     /// let polygons: StructIter<MPoly> = reader.deref(&mesh.mpoly)
-    ///     .expect("Failed to deref the mesh's polygons!");
+    ///     .expect("an iterator over all polygons of the Mesh");
     /// ```
+    /// [`InvalidPointerAddressError`]: ReadError::InvalidPointerAddressError
+    /// [`NullPointerError`]: ReadError::NullPointerError
+    /// [`VersionMismatchError`]: ReadError::VersionMismatchError
+    /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
+    /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
+    /// [`InvalidPointerTypeError`]: ReadError::InvalidPointerTypeError
+    ///
     pub fn deref<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<StructIter<S>, ReadError>
     where P: PointerLike<S, SIZE>,
           S: 'a + GeneratedBlendStruct {
@@ -97,6 +130,19 @@ impl <'a> Reader<'a> {
 
     /// Dereferences the specified [`PointerLike`] and returns the struct.
     ///
+    /// # Errors
+    /// * Fails with a [`VersionMismatchError`], if the [`GeneratedBlendStruct`] used to read
+    ///   is generated for a different version than the Blender data actually has.
+    /// * Fails with a [`PointerSizeMismatchError`], if the size of addresses (32bit, 64bit)
+    ///   differs from the address size found in the Blender data.
+    /// * Fails with a [`EndiannessMismatchError`], if the [`Endianness`] (little, big) differs from
+    ///   the [`Endianness`] found in the Blender data.
+    /// * Fails with a [`InvalidPointerAddressError`], if the address of the specified
+    ///   [`PointerLike`] is invalid.
+    /// * Fails with a [`NullPointerError`], if the address of the specified [`PointerLike`] is zero.
+    /// * Fails with a [`InvalidPointerTypeError`], if the generic target-type of the [`PointerLike`]
+    ///   differs from the type actually found at the address in the Blender data.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -104,19 +150,26 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{Object, Mesh};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("Failed to open blend file!");
+    ///     .expect("file 'examples/example-3.2.blend' to be readable");
     ///
     /// let reader = read(&blend_data)
-    ///     .expect("Failed to read blend file!");
+    ///     .expect("Blender data should be parsable");
     ///
     /// let cube: &Object = reader.iter::<Object>()
-    ///    .expect("Failed to create an iterator!")
+    ///    .expect("an iterator over all Objects")
     ///    .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
-    ///    .expect("Failed to find 'Cube'!");
+    ///    .expect("an Object with name 'Cube'");
     ///
     /// let mesh: &Mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
-    ///     .expect("Failed to deref the object's mesh!");
+    ///     .expect("the Cube's Mesh");
     /// ```
+    /// [`InvalidPointerAddressError`]: ReadError::InvalidPointerAddressError
+    /// [`NullPointerError`]: ReadError::NullPointerError
+    /// [`VersionMismatchError`]: ReadError::VersionMismatchError
+    /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
+    /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
+    /// [`InvalidPointerTypeError`]: ReadError::InvalidPointerTypeError
+    ///
     pub fn deref_single<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<&'a S, ReadError>
     where P: PointerLike<S, SIZE>,
           S: 'a + GeneratedBlendStruct {
@@ -133,6 +186,17 @@ impl <'a> Reader<'a> {
 
     /// Dereferences the specified [`PointerLike`] and returns a slice of the raw data.
     ///
+    /// # Errors
+    /// * Fails with a [`VersionMismatchError`], if the [`GeneratedBlendStruct`] used to read
+    ///   is generated for a different version than the Blender data actually has.
+    /// * Fails with a [`PointerSizeMismatchError`], if the size of addresses (32bit, 64bit)
+    ///   differs from the address size found in the Blender data.
+    /// * Fails with a [`EndiannessMismatchError`], if the [`Endianness`] (little, big) differs from
+    ///   the [`Endianness`] found in the Blender data.
+    /// * Fails with a [`InvalidPointerAddressError`], if the address of the specified
+    ///   [`PointerLike`] is invalid.
+    /// * Fails with a [`NullPointerError`], if the address of the specified [`PointerLike`] is zero.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -140,26 +204,45 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{PackedFile};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("Failed to open blend file!");
+    ///     .expect("file 'examples/example-3.2.blend' to be readable");
     /// let reader = read(&blend_data)
-    ///     .expect("Failed to read blend file!");
+    ///     .expect("Blender data should be parsable");
     ///
     /// let packed_file: &PackedFile = reader.iter::<PackedFile>()
-    ///    .expect("Failed to create an iterator!")
+    ///    .expect("an iterator over all PackedFiles")
     ///    .first()
-    ///    .expect("No packed file!");
+    ///    .expect("at least one PackedFile");
     ///
     /// let data = reader.deref_raw(&packed_file.data)
-    ///     .expect("Failed to deref raw data!");
+    ///     .expect("raw data of the PackedFile");
     /// ```
+    /// [`InvalidPointerAddressError`]: ReadError::InvalidPointerAddressError
+    /// [`NullPointerError`]: ReadError::NullPointerError
+    /// [`VersionMismatchError`]: ReadError::VersionMismatchError
+    /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
+    /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
+    ///
     pub fn deref_raw<P, T, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<T, SIZE> {
+    where P: PointerLike<T, SIZE>,
+          T: 'a + GeneratedBlendStruct {
+        check_blend::<T>(&self.blend)?;
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
 
     /// Dereferences the specified [`PointerLike`] and returns a sub-slice of the raw data.
     ///
+    /// # Errors
+    /// * Fails with a [`VersionMismatchError`], if the [`GeneratedBlendStruct`] used to read
+    ///   is generated for a different version than the Blender data actually has.
+    /// * Fails with a [`PointerSizeMismatchError`], if the size of addresses (32bit, 64bit)
+    ///   differs from the address size found in the Blender data.
+    /// * Fails with a [`EndiannessMismatchError`], if the [`Endianness`] (little, big) differs from
+    ///   the [`Endianness`] found in the Blender data.
+    /// * Fails with a [`InvalidPointerAddressError`], if the address of the specified
+    ///   [`PointerLike`] is invalid.
+    /// * Fails with a [`NullPointerError`], if the address of the specified [`PointerLike`] is zero.
+    ///
     /// # Examples
     ///
     /// ```rust
@@ -167,20 +250,28 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{PackedFile};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("Failed to open blend file!");
+    ///     .expect("file 'examples/example-3.2.blend' to be readable");
     /// let reader = read(&blend_data)
-    ///     .expect("Failed to read blend file!");
+    ///     .expect("Blender data should be parsable");
     ///
     /// let packed_file: &PackedFile = reader.iter::<PackedFile>()
-    ///    .expect("Failed to create an iterator!")
+    ///    .expect("an iterator over all PackedFiles")
     ///    .first()
-    ///    .expect("No packed file!");
+    ///    .expect("at least one PackedFile");
     ///
     /// let magic_number = reader.deref_raw_range(&packed_file.data, 0..4 as usize)
-    ///     .expect("Failed to deref raw data!");
+    ///     .expect("a range of raw data of the PackedFile");
+    ///
     /// ```
+    /// [`InvalidPointerAddressError`]: ReadError::InvalidPointerAddressError
+    /// [`NullPointerError`]: ReadError::NullPointerError
+    /// [`VersionMismatchError`]: ReadError::VersionMismatchError
+    /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
+    /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
+    ///
     pub fn deref_raw_range<P, T, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<T, SIZE> {
+    where P: PointerLike<T, SIZE>,
+          T: 'a + GeneratedBlendStruct  {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })
@@ -423,8 +514,26 @@ pub enum ReadError {
     MoreThanOneElementError,
 }
 
+/// Creates a [`Reader`] from a [`BlendSource`].
+///
+/// # Errors
+/// * This function may fail with a [`ParseError`].
+///
+/// # Examples
+/// 
+/// ```rust
+/// use blend_rs::blend::{read, Reader};
+/// 
+/// let blend_data = std::fs::read("examples/example-3.2.blend")
+///     .expect("file 'examples/example-3.2.blend' to be readable");
+/// 
+/// let reader = read(&blend_data)
+///     .expect("Blender data should be parsable");
+/// ```
+/// [`ParseError`]: [`ReadError::ParseError`]
+/// 
 pub fn read<'a, A>(source: A) -> Result<Reader<'a>, ReadError>
-    where A: BlendSource<'a> {
+where A: BlendSource<'a> {
 
     let data = source.data();
     parse(source.data())
@@ -468,6 +577,20 @@ mod test {
             .unwrap();
 
         assert_that!(reader.deref(&cube.data.cast_to::<crate::blender2_79::Mesh>()), is(err()))
+    }
+
+    #[test]
+    fn test_that_deref_single_should_fail_on_version_mismatch() {
+
+        let blend_data = std::fs::read("examples/example-3.2.blend").unwrap();
+        let reader = read(&blend_data).unwrap();
+
+        let cube: &Object = reader.iter::<Object>().unwrap()
+            .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
+            .unwrap();
+
+        let mesh = reader.deref_single(&cube.data.cast_to::<crate::blender2_79::Mesh>());
+        assert_that!(mesh.is_err(), is(true))
     }
 
     #[test]

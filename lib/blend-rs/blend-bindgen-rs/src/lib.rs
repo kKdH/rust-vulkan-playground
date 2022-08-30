@@ -82,11 +82,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     #(#fields),*
                 }
                 impl GeneratedBlendStruct for #name {
-                    const BLEND_VERSION: Version = Version {
-                        major: #major_version,
-                        minor: #minor_version,
-                        patch: #patch_version
-                    };
+                    const BLEND_VERSION: Version = Version::new(#major_version, #minor_version, #patch_version);
                     const BLEND_POINTER_SIZE: usize = #pointer_size;
                     const BLEND_ENDIANNESS: Endianness = #endianness;
                     const STRUCT_NAME: &'static str = #struct_name;

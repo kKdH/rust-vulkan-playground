@@ -11,27 +11,28 @@ pub struct Vertex {
 fn main() {
 
     let blend_data = std::fs::read("examples/example-3.2.blend")
-        .expect("Blend file not found!");
+        .expect("file 'examples/example-3.2.blend' to be readable");
 
     let reader = read(&blend_data)
-        .expect("Failed to read blend data!");
+        .expect("Blender data should be parsable");
 
-    let plane: &Object = reader.iter::<Object>().unwrap()
+    let plane: &Object = reader.iter::<Object>()
+        .expect("an iterator over all Objects")
         .find(|object| object.id.name.to_name_str_unchecked() == "Plane")
-        .unwrap();
+        .expect("an Object with name 'Plane'");
 
     let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>())
-        .expect("Could not get mesh from object!");
+        .expect("the Mesh of the 'Plane'");
 
     let mesh_polygon = reader.deref(&mesh.mpoly)
-        .expect("Could not get polygons from mesh!");
+        .expect("an iterator over all polygons of the Mesh");
 
     let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop)
-        .expect("Could not get loops from mesh!")
+        .expect("an iterator over all loops of the Mesh")
         .collect();
 
     let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert)
-        .expect("Could not get vertices from mesh!")
+        .expect("an iterator over all vertices of the Mesh")
         .collect();
 
     let polygon_count = mesh_polygon.len();
