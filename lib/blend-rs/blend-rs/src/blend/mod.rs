@@ -154,6 +154,7 @@ where A: StringLike {
 #[cfg(test)]
 mod test {
     use crate::blend::{read, PointerLike, NameLike};
+    use crate::blend::traverse::Named;
     use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
     #[test]
@@ -166,16 +167,16 @@ mod test {
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
-        println!("Object: {}", cube.id.name.to_name_str_unchecked());
+        println!("Object: {}", cube.id.get_name());
 
         let parent = reader.deref(&cube.parent).unwrap().first().unwrap();
 
-        println!("Parent: {}", parent.id.name.to_name_str_unchecked());
+        println!("Parent: {}", parent.id.get_name());
 
         let mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
             .unwrap();
 
-        println!("Mesh: {}", mesh.id.name.to_name_str_unchecked());
+        println!("Mesh: {}", mesh.id.get_name());
 
         let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
         let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();
@@ -201,7 +202,7 @@ mod test {
             .first()
             .unwrap();
 
-        println!("Material: {}, use_nodes: {}", mat.id.name.to_name_str_unchecked(), &mat.use_nodes);
+        println!("Material: {}, use_nodes: {}", mat.id.get_name(), &mat.use_nodes);
 
         let tree: &bNodeTree = reader.deref_single(&mat.nodetree)
             .unwrap();

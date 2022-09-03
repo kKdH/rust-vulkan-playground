@@ -65,6 +65,20 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     quote!()
                 }
             };
+            let named = {
+                if is_struct_named(structure) {
+                    quote! {
+                        impl Named for #name {
+                            fn get_name(&self) -> &str {
+                                self.name.to_name_str_unchecked()
+                            }
+                        }
+                    }
+                }
+                else {
+                    quote!()
+                }
+            };
             let major_version = Literal::character(blend.version().major);
             let minor_version = Literal::character(blend.version().minor);
             let patch_version = Literal::character(blend.version().patch);
@@ -90,6 +104,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     const STRUCT_TYPE_INDEX: usize = #struct_type_index;
                 }
                 #double_linked
+                #named
             }
         })
         .collect();
@@ -102,8 +117,8 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             #![allow(non_snake_case)]
             #![allow(dead_code)]
 
-            use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Endianness, Void};
-            use crate::blend::traverse::{DoubleLinked};
+            use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Endianness, Void, NameLike};
+            use crate::blend::traverse::{DoubleLinked, Named};
 
             #(#quoted_structs)*
 
@@ -264,4 +279,18 @@ fn is_struct_double_linked(structure: &Struct) -> bool {
         }
     });
     has_next && has_prev
+}
+
+fn is_struct_named(structure: &Struct) -> bool {
+    structure.fields().any(|field| {
+        field.name() == "name" && match field.data_type() {
+            Type::Array { base_type, length: _length } => {
+                match base_type.deref() {
+                    Type::Char => true,
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    })
 }
