@@ -153,8 +153,19 @@ where A: StringLike {
 
 #[cfg(test)]
 mod test {
+    use blend_macros_rs::blend_use;
     use crate::blend::{read, PointerLike, NameLike};
     use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
+
+    blend_use!("examples/example-3.2.blend");
+
+    #[test]
+    fn test_macro() {
+        // blend_macros_rs::blend_using!("examples/example-3.2.blend");
+        // println!("out_dir: {}", foo);
+        // let f = Fubar { name: String::from("") };
+        use blender3_3::Mesh;
+    }
 
     #[test]
     fn test() {

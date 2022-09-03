@@ -102,8 +102,8 @@ extern crate core;
 
 pub mod blend;
 
-#[cfg(feature = "blender3_3")]
-include!(concat!(env!("OUT_DIR"), "/blender3_3.rs"));
+// #[cfg(feature = "blender3_3")]
+// include!(concat!(env!("OUT_DIR"), "/blender3_3.rs"));
 
 #[cfg(feature = "blender3_2")]
 include!(concat!(env!("OUT_DIR"), "/blender3_2.rs"));

@@ -223,9 +223,8 @@ impl <'a> Reader<'a> {
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     ///
     pub fn deref_raw<P, T, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<T, SIZE>,
-          T: 'a + GeneratedBlendStruct {
-        check_blend::<T>(&self.blend)?;
+    where P: PointerLike<T, SIZE> {
+        //check_blend::<T>(&self.blend)?; // TODO: Re-enable check. Currently disable, because GeneratedBlendStruct is not implemented for T and can be a Pointer.
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
@@ -270,8 +269,7 @@ impl <'a> Reader<'a> {
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     ///
     pub fn deref_raw_range<P, T, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<T, SIZE>,
-          T: 'a + GeneratedBlendStruct  {
+    where P: PointerLike<T, SIZE> {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })

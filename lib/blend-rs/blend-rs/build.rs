@@ -20,8 +20,8 @@ fn main() -> Result<(), Box<dyn Error>>{
         generate("gen/blender2_93.blend", &out_dir),
         #[cfg(feature = "blender3_2")]
         generate("gen/blender3_2.blend", &out_dir),
-        #[cfg(feature = "blender3_3")]
-        generate("gen/blender3_3.blend", &out_dir),
+        // #[cfg(feature = "blender3_3")]
+        // generate("gen/blender3_3.blend", &out_dir),
     ];
 
     generated.iter().for_each(|(src, _)| {
