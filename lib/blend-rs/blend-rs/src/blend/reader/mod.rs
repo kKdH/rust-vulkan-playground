@@ -224,8 +224,8 @@ impl <'a> Reader<'a> {
     ///
     pub fn deref_raw<P, T, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
     where P: PointerLike<T, SIZE>,
-          T: 'a + GeneratedBlendStruct {
-        check_blend::<T>(&self.blend)?;
+          /*T: 'a + GeneratedBlendStruct*/  { // TODO: Enable when Pointer/Void etc. implement GeneratedBlendStruct
+        // check_blend::<T>(&self.blend)?; // TODO: Enable check when Pointer/Void etc. implement GeneratedBlendStruct
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
     }
@@ -271,7 +271,7 @@ impl <'a> Reader<'a> {
     ///
     pub fn deref_raw_range<P, T, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
     where P: PointerLike<T, SIZE>,
-          T: 'a + GeneratedBlendStruct  {
+          /*T: 'a + GeneratedBlendStruct*/ { // TODO: Enable check when Pointer/Void etc. implement GeneratedBlendStruct
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })
