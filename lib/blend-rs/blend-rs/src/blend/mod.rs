@@ -46,7 +46,7 @@ pub trait GeneratedBlendStruct {
 
 pub trait PointerLike<A, const SIZE: usize> : Sized {
 
-    fn cast_to<B>(&self) -> Pointer<B, SIZE>;
+    fn as_instance_of<B>(&self) -> Pointer<B, SIZE>;
 
     fn address(&self) -> Option<Address>;
 
@@ -59,7 +59,7 @@ pub trait PointerLike<A, const SIZE: usize> : Sized {
 
 impl <A, const SIZE: usize> PointerLike<A, SIZE> for Pointer<A, SIZE> {
 
-    fn cast_to<B>(&self) -> Pointer<B, SIZE> {
+    fn as_instance_of<B>(&self) -> Pointer<B, SIZE> {
         Pointer::new(self.value)
     }
 
@@ -173,7 +173,7 @@ mod test {
 
         println!("Parent: {}", parent.id.get_name());
 
-        let mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
+        let mesh = reader.deref_single(&cube.data.as_instance_of::<Mesh>())
             .unwrap();
 
         println!("Mesh: {}", mesh.id.get_name());
@@ -193,10 +193,10 @@ mod test {
 
         // vertices.iter().for_each(|vert| println!("Vert: {:?}", vert));
 
-        let mat = reader.deref(&mesh.mat.cast_to::<Link>())
+        let mat = reader.deref(&mesh.mat.as_instance_of::<Link>())
             .map(|links| {
                 let link = links.first().unwrap();
-                reader.deref(&link.next.cast_to::<Material>()).unwrap()
+                reader.deref(&link.next.as_instance_of::<Material>()).unwrap()
             })
             .unwrap()
             .first()
@@ -207,10 +207,10 @@ mod test {
         let tree: &bNodeTree = reader.deref_single(&mat.nodetree)
             .unwrap();
 
-        let node = reader.deref_single(&tree.nodes.last.cast_to::<bNode>()) // FIXME: `last` is improper.
+        let node = reader.deref_single(&tree.nodes.last.as_instance_of::<bNode>()) // FIXME: `last` is improper.
             .unwrap();
 
-        let base_color_socket = reader.deref_single(&node.inputs.first.cast_to::<bNodeSocket>())
+        let base_color_socket = reader.deref_single(&node.inputs.first.as_instance_of::<bNodeSocket>())
             .unwrap();
 
         let link = reader.deref_single(&base_color_socket.link)
@@ -219,7 +219,7 @@ mod test {
         let tex_node = reader.deref_single(&link.fromnode)
             .unwrap();
 
-        let tex_image = reader.deref_single(&tex_node.id.cast_to::<Image>())
+        let tex_image = reader.deref_single(&tex_node.id.as_instance_of::<Image>())
             .unwrap();
 
         let image_packed_file = reader.deref_single(&tex_image.packedfile)
@@ -231,7 +231,7 @@ mod test {
         std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
 
-        let nodes = reader.traverse(&tree.nodes.first.cast_to::<bNode>())
+        let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
             .unwrap();
 
         nodes.for_each(|node| {

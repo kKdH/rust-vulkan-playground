@@ -1,6 +1,7 @@
 extern crate blend_rs;
 
-use blend_rs::blend::{read, PointerLike, NameLike};
+use blend_rs::blend::{read, PointerLike};
+use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_2::{Object, Mesh, MLoop, MVert};
 
 #[derive(Debug)]
@@ -18,10 +19,10 @@ fn main() {
 
     let plane: &Object = reader.iter::<Object>()
         .expect("an iterator over all Objects")
-        .find(|object| object.id.name.to_name_str_unchecked() == "Plane")
+        .find(|object| object.id.get_name() == "Plane")
         .expect("an Object with name 'Plane'");
 
-    let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>())
+    let mesh = reader.deref_single(&plane.data.as_instance_of::<Mesh>())
         .expect("the Mesh of the 'Plane'");
 
     let mesh_polygon = reader.deref(&mesh.mpoly)
@@ -49,7 +50,7 @@ fn main() {
         })
         .collect();
 
-    println!("\nPolygons ({:?}) of '{}':", polygon_count, plane.id.name.to_name_str_unchecked());
+    println!("\nPolygons ({:?}) of '{}':", polygon_count, plane.id.get_name());
     vertices_per_polygon.iter().enumerate().for_each(|(index, vertices)| {
         println!();
         vertices.iter().for_each(|vertex| {

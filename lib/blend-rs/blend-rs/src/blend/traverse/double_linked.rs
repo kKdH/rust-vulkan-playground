@@ -40,7 +40,7 @@ where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
         let result = self.next;
         self.next = self.next
             .map(|current| {
-                self.reader.deref_single(&current.next().cast_to::<D>()).ok()
+                self.reader.deref_single(&current.next().as_instance_of::<D>()).ok()
             })
             .flatten();
         result

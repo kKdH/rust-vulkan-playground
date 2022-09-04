@@ -31,6 +31,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
         .sorted_by(|a, b| Ord::cmp(a.name(), b.name()))
         .map(|structure| {
             let name = format_ident!("{}", structure.name());
+            let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
             let fields: Vec<TokenStream> = structure.fields()
                 .map(|field| {
                     let name = match field.name() {
@@ -49,7 +50,6 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                 .collect();
             let double_linked = {
                 if is_struct_double_linked(structure) {
-                    let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
                     quote! {
                         impl DoubleLinked<Pointer<#name, #pointer_size>, #pointer_size> for #name {
                             fn next(&self) -> &Pointer<Self, #pointer_size> {

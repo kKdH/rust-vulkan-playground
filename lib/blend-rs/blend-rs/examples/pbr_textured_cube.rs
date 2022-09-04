@@ -1,6 +1,7 @@
 extern crate blend_rs;
 
-use blend_rs::blend::{read, PointerLike, NameLike};
+use blend_rs::blend::{read, PointerLike};
+use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_2::{Object, Mesh, MLoop, MVert, MLoopUV};
 
 #[derive(Debug)]
@@ -19,10 +20,10 @@ fn main() {
 
     let plane: &Object = reader.iter::<Object>()
         .expect("an iterator over all Objects")
-        .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
+        .find(|object| object.id.get_name() == "Cube")
         .expect("an Object with name 'Cube'");
 
-    let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>())
+    let mesh = reader.deref_single(&plane.data.as_instance_of::<Mesh>())
         .expect("a Mesh of the 'Cube'");
 
     let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
@@ -42,7 +43,7 @@ fn main() {
         .flatten()
         .collect();
 
-    println!("\nTriangles of '{}':", mesh.id.name.to_name_str_unchecked());
+    println!("\nTriangles of '{}':", mesh.id.get_name());
     vertices.iter().enumerate().for_each(|(index, vertex)| {
         if index % 3 == 0 {
             println!()

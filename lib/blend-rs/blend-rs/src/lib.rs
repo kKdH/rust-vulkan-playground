@@ -15,6 +15,8 @@
 //! The example below illustrates how to extract the coordinates of each vertex of an object's mesh.
 //! ```rust
 //! use blend_rs::blend::{read, StructIter, PointerLike, NameLike};
+//! use blend_rs::blend::traverse::Named;
+//!
 //! use blend_rs::blender3_2::{Object, Mesh, MPoly, MVert, MLoop};
 //!
 //! pub struct Vertex {
@@ -30,10 +32,10 @@
 //!        .expect("Failed to read blend data!");
 //!
 //!    let plane: &Object = reader.iter::<Object>().unwrap()
-//!        .find(|object| object.id.name.to_name_str_unchecked() == "Plane")
+//!        .find(|object| object.id.get_name() == "Plane")
 //!        .unwrap();
 //!
-//!    let mesh = reader.deref_single(&plane.data.cast_to::<Mesh>())
+//!    let mesh = reader.deref_single(&plane.data.as_instance_of::<Mesh>())
 //!        .expect("Could not get mesh from object!");
 //!
 //!    let mesh_polygons: StructIter<MPoly> = reader.deref(&mesh.mpoly)

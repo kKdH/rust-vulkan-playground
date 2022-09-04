@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, Endianness, FileBlock, parse, Version};
 
-use crate::blend::{GeneratedBlendStruct, PointerLike};
+use crate::blend::{GeneratedBlendStruct, PointerLike, Void};
 use crate::blend::reader::check::{check_blend, check_same_type};
 use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
@@ -160,7 +160,7 @@ impl <'a> Reader<'a> {
     ///    .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
     ///    .expect("an Object with name 'Cube'");
     ///
-    /// let mesh: &Mesh = reader.deref_single(&cube.data.cast_to::<Mesh>())
+    /// let mesh: &Mesh = reader.deref_single(&cube.data.as_instance_of::<Mesh>())
     ///     .expect("the Cube's Mesh");
     /// ```
     /// [`InvalidPointerAddressError`]: ReadError::InvalidPointerAddressError
@@ -277,7 +277,7 @@ impl <'a> Reader<'a> {
         })
     }
 
-    pub fn traverse<PD, D, PT, const SIZE: usize>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT, SIZE>, ReadError>
+    pub fn traverse_double_linked<PD, D, PT, const SIZE: usize>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT, SIZE>, ReadError>
     where PD: PointerLike<D, SIZE>,
           D: 'a + DoubleLinked<PT, SIZE> + GeneratedBlendStruct,
           PT: PointerLike<D, SIZE> {
@@ -576,7 +576,7 @@ mod test {
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
-        assert_that!(reader.deref(&cube.data.cast_to::<crate::blender2_79::Mesh>()), is(err()))
+        assert_that!(reader.deref(&cube.data.as_instance_of::<crate::blender2_79::Mesh>()), is(err()))
     }
 
     #[test]
@@ -589,7 +589,7 @@ mod test {
             .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
             .unwrap();
 
-        let mesh = reader.deref_single(&cube.data.cast_to::<crate::blender2_79::Mesh>());
+        let mesh = reader.deref_single(&cube.data.as_instance_of::<crate::blender2_79::Mesh>());
         assert_that!(mesh.is_err(), is(true))
     }
 
