@@ -9,9 +9,9 @@ use thiserror::Error;
 
 use blend_inspect_rs::{BlendFile, BlendSource, Data, Endianness, FileBlock, parse, Version};
 
-use crate::blend::{GeneratedBlendStruct, PointerLike, Void};
+use crate::blend::{GeneratedBlendStruct, PointerLike, PointerTarget};
 use crate::blend::reader::check::{check_blend, check_same_type};
-use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
+// use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
 
 /// Main struct for reading `.blend` files.
 ///
@@ -120,8 +120,8 @@ impl <'a> Reader<'a> {
     /// [`InvalidPointerTypeError`]: ReadError::InvalidPointerTypeError
     ///
     pub fn deref<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<StructIter<S>, ReadError>
-    where P: PointerLike<S, SIZE>,
-          S: 'a + GeneratedBlendStruct {
+    where P: PointerLike<P, S, SIZE>,
+          S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         let block = self.look_up(pointer)?;
         check_blend::<S>(&self.blend)?;
         check_same_type(&self.blend, S::STRUCT_TYPE_INDEX, block)?;
@@ -171,8 +171,8 @@ impl <'a> Reader<'a> {
     /// [`InvalidPointerTypeError`]: ReadError::InvalidPointerTypeError
     ///
     pub fn deref_single<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<&'a S, ReadError>
-    where P: PointerLike<S, SIZE>,
-          S: 'a + GeneratedBlendStruct {
+    where P: PointerLike<P, S, SIZE>,
+          S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         let block = self.look_up(pointer)?;
         check_blend::<S>(&self.blend)?;
         check_same_type(&self.blend, S::STRUCT_TYPE_INDEX, block)?;
@@ -222,9 +222,9 @@ impl <'a> Reader<'a> {
     /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     ///
-    pub fn deref_raw<P, T, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<T, SIZE>,
-          /*T: 'a + GeneratedBlendStruct*/  { // TODO: Enable when Pointer/Void etc. implement GeneratedBlendStruct
+    pub fn deref_raw<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
+    where P: PointerLike<P, S, SIZE>,
+          S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         // check_blend::<T>(&self.blend)?; // TODO: Enable check when Pointer/Void etc. implement GeneratedBlendStruct
         let block = self.look_up(pointer)?;
         Ok(&self.data[block.data_location()..block.data_location() + block.length])
@@ -269,26 +269,27 @@ impl <'a> Reader<'a> {
     /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     ///
-    pub fn deref_raw_range<P, T, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<T, SIZE>,
-          /*T: 'a + GeneratedBlendStruct*/ { // TODO: Enable check when Pointer/Void etc. implement GeneratedBlendStruct
+    pub fn deref_raw_range<P, S, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
+    where P: PointerLike<P, S, SIZE>,
+          S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })
     }
 
-    pub fn traverse_double_linked<PD, D, PT, const SIZE: usize>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT, SIZE>, ReadError>
-    where PD: PointerLike<D, SIZE>,
-          D: 'a + DoubleLinked<PT, SIZE> + GeneratedBlendStruct,
-          PT: PointerLike<D, SIZE> {
-
-        self.deref_single(pointer).map(|first| {
-            DoubleLinkedIter::new(self, first)
-        })
-    }
+    // pub fn traverse_double_linked<PD, D, PT, const SIZE: usize>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT>, ReadError>
+    // where PD: PointerLike<PD, D>,
+    //       D: 'a + DoubleLinked<PT> + GeneratedBlendStruct,
+    //       PT: PointerLike<PT, D> {
+    //
+    //     self.deref_single(pointer).map(|first| {
+    //         DoubleLinkedIter::new(self, first)
+    //     })
+    // }
 
     fn look_up<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<&FileBlock, ReadError>
-    where A: PointerLike<B, SIZE> {
+    where A: PointerLike<A, B, SIZE>,
+          B: 'a + GeneratedBlendStruct + PointerTarget<B> {
         let address = pointer.address();
         let lookup = address
             .map(|address| self.blend.look_up(address))
@@ -545,7 +546,7 @@ where A: BlendSource<'a> {
 mod test {
     use hamcrest2::{assert_that, equal_to, err, HamcrestMatcher, is};
 
-    use crate::blend::{NameLike, PointerLike, read};
+    use crate::blend::{NameLike, read};
     use crate::blender3_2::Object;
 
     #[test]

@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-use std::marker::PhantomData;
 use std::str::Utf8Error;
 
 use blend_inspect_rs::Address;
@@ -11,42 +9,21 @@ pub mod traverse;
 
 mod reader;
 
-#[derive(Debug, Copy, Clone)]
-pub struct Void;
-
-#[derive(Debug, Clone)]
-pub struct Pointer<T, const SIZE: usize> {
-    pub value: [u8; SIZE],
-    phantom: PhantomData<T>
-}
-
-impl <T, const SIZE: usize> Pointer<T, SIZE> {
-
-    pub fn new(value: [u8; SIZE]) -> Self {
-        Pointer {
-            value,
-            phantom: Default::default()
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Function<const SIZE: usize> {
-    pub value: [u8; SIZE]
-}
-
-pub trait GeneratedBlendStruct {
+pub trait GeneratedBlendStruct : Sized {
     const BLEND_VERSION: Version;
     const BLEND_POINTER_SIZE: usize;
     const BLEND_ENDIANNESS: Endianness;
     const STRUCT_NAME: &'static str;
     const STRUCT_INDEX: usize;
     const STRUCT_TYPE_INDEX: usize;
+    const IS_SYNTHETIC: bool;
 }
 
-pub trait PointerLike<A, const SIZE: usize> : Sized {
+pub trait PointerLike<P, T, const SIZE: usize> : Sized
+where P: PointerLike<P, T, SIZE>,
+      T: PointerTarget<T> {
 
-    fn as_instance_of<B>(&self) -> Pointer<B, SIZE>;
+    // fn as_instance_of<B: PointerTarget<B>>(&self) -> Self;
 
     fn address(&self) -> Option<Address>;
 
@@ -57,23 +34,20 @@ pub trait PointerLike<A, const SIZE: usize> : Sized {
     }
 }
 
-impl <A, const SIZE: usize> PointerLike<A, SIZE> for Pointer<A, SIZE> {
+pub trait PointerTarget<T> : Sized {
 
-    fn as_instance_of<B>(&self) -> Pointer<B, SIZE> {
-        Pointer::new(self.value)
-    }
-
-    fn address(&self) -> Option<Address> {
-        let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
-            result + ((*value as usize) << (8 * index))
-        });
-        Address::new(result)
-    }
-
-    fn is_valid(&self) -> bool {
-        self.value.iter().sum::<u8>() > 0
-    }
 }
+
+impl PointerTarget<i8> for i8 {}
+impl PointerTarget<u8> for u8 {}
+impl PointerTarget<i16> for i16 {}
+impl PointerTarget<u16> for u16 {}
+impl PointerTarget<i32> for i32 {}
+impl PointerTarget<i64> for i64 {}
+impl PointerTarget<u64> for u64 {}
+impl PointerTarget<u32> for u32 {}
+impl PointerTarget<f32> for f32 {}
+impl PointerTarget<f64> for f64 {}
 
 pub trait StringLike {
 
@@ -153,7 +127,7 @@ where A: StringLike {
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, PointerLike, NameLike};
+    use crate::blend::{read, NameLike};
     use crate::blend::traverse::Named;
     use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
@@ -231,11 +205,11 @@ mod test {
         std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
 
-        let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
-            .unwrap();
-
-        nodes.for_each(|node| {
-            println!("Node: {}", node.name.to_name_str_unchecked());
-        });
+        // let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
+        //     .unwrap();
+        //
+        // nodes.for_each(|node| {
+        //     println!("Node: {}", node.name.to_name_str_unchecked());
+        // });
     }
 }

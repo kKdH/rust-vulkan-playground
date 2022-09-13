@@ -2,11 +2,12 @@ use std::fs::File;
 use std::io::Write;
 use std::ops::Deref;
 
-use proc_macro2::{Literal, TokenStream};
+use proc_macro2::{Ident, Literal, TokenStream};
 use quote::{format_ident, quote};
 
 use blend_inspect_rs::{Blend, Endianness, inspect, Struct, Type};
 use itertools::Itertools;
+use syn::__private::str;
 
 
 pub fn generate(source_file: &str, target_dir: &str) -> String {
@@ -27,7 +28,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
     let module_name_ident = format_ident!("{}", module_name);
     let file_name = format!("{}/{}.rs", target_dir, module_name);
 
-    let quoted_structs: Vec<TokenStream> = blend.structs()
+    let blend_structs: Vec<TokenStream> = blend.structs()
         .sorted_by(|a, b| Ord::cmp(a.name(), b.name()))
         .map(|structure| {
             let name = format_ident!("{}", structure.name());
@@ -51,11 +52,11 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             let double_linked = {
                 if is_struct_double_linked(structure) {
                     quote! {
-                        impl DoubleLinked<Pointer<#name, #pointer_size>, #pointer_size> for #name {
-                            fn next(&self) -> &Pointer<Self, #pointer_size> {
+                        impl DoubleLinked<Pointer<#name>, #pointer_size> for #name {
+                            fn next(&self) -> &Pointer<Self> {
                                 &self.next
                             }
-                            fn prev(&self) -> &Pointer<Self, #pointer_size> {
+                            fn prev(&self) -> &Pointer<Self> {
                                 &self.prev
                             }
                         }
@@ -79,31 +80,23 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                     quote!()
                 }
             };
-            let major_version = Literal::character(blend.version().major);
-            let minor_version = Literal::character(blend.version().minor);
-            let patch_version = Literal::character(blend.version().patch);
-            let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
-            let endianness = match blend.endianness() {
-                Endianness::Little => quote!(Endianness::Little),
-                Endianness::Big => quote!(Endianness::Big),
-            };
-            let struct_name = Literal::string(structure.name());
-            let struct_index = Literal::usize_unsuffixed(structure.struct_index());
-            let struct_type_index = Literal::usize_unsuffixed(structure.struct_type_index());
+            let generated_impl = quote_generated_impl(
+                &blend,
+                structure.name(),
+                structure.struct_index(),
+                structure.struct_type_index(),
+                Vec::new(),
+                false
+            );
+            let pointer_target_impl = quote_pointer_target_impl(structure.name());
             quote! {
                 #[repr(C, packed(4))]
                 pub struct #name {
                     #(#fields),*
                 }
-                impl GeneratedBlendStruct for #name {
-                    const BLEND_VERSION: Version = Version::new(#major_version, #minor_version, #patch_version);
-                    const BLEND_POINTER_SIZE: usize = #pointer_size;
-                    const BLEND_ENDIANNESS: Endianness = #endianness;
-                    const STRUCT_NAME: &'static str = #struct_name;
-                    const STRUCT_INDEX: usize = #struct_index;
-                    const STRUCT_TYPE_INDEX: usize = #struct_type_index;
-                }
-                #double_linked
+                #generated_impl
+                #pointer_target_impl
+                // #double_linked
                 #named
             }
         })
@@ -111,16 +104,28 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
 
     let primitive_types_verifications = quote_primitive_types_verifications();
     let struct_verifications = quote_struct_verifications(&blend);
+    let nothing_struct = quote_nothing_struct(&blend);
+    let void_struct = quote_void_struct(&blend);
+    let pointer_struct = quote_pointer_struct(&blend);
+    let function_struct = quote_function_struct(&blend);
 
     let code = quote! {
         pub mod #module_name_ident {
             #![allow(non_snake_case)]
             #![allow(dead_code)]
 
-            use crate::blend::{Function, GeneratedBlendStruct, Pointer, Version, Endianness, Void, NameLike};
-            use crate::blend::traverse::{DoubleLinked, Named};
+            use crate::blend::{GeneratedBlendStruct, Version, Endianness, PointerLike, PointerTarget, NameLike};
+            // use crate::blend::traverse::DoubleLinked;
+            use crate::blend::traverse::Named;
+            use blend_inspect_rs::Address;
+            use std::marker::PhantomData;
 
-            #(#quoted_structs)*
+            #nothing_struct
+            #void_struct
+            #pointer_struct
+            #function_struct
+
+            #(#blend_structs)*
 
             #[cfg(test)]
             mod verifications {
@@ -137,58 +142,228 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
     file_name
 }
 
+fn quote_nothing_struct(blend: &Blend) -> TokenStream {
+    let generated_impl = quote_generated_impl(
+        blend,
+        "Nothing",
+        usize::MAX,
+        usize::MAX,
+        Vec::new(),
+        true
+    );
+    quote! {
+        #[derive(Debug, Copy, Clone)]
+        pub struct Nothing;
+        impl PointerTarget<Nothing> for Nothing {}
+        #generated_impl
+    }
+}
+
+fn quote_void_struct(blend: &Blend) -> TokenStream {
+    let generated_impl = quote_generated_impl(
+        blend,
+        "Void",
+        usize::MAX - 1,
+        usize::MAX - 1,
+        Vec::new(),
+        true
+    );
+    quote! {
+        #[derive(Debug, Copy, Clone)]
+        pub struct Void;
+        impl PointerTarget<Void> for Void {}
+        #generated_impl
+    }
+}
+
+fn quote_pointer_struct(blend: &Blend) -> TokenStream {
+    let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
+    let generated_impl_fields = quote_generated_impl_fields(
+        blend,
+        "Pointer",
+        usize::MAX - 2,
+        usize::MAX - 2,
+        true
+    );
+    quote! {
+        #[derive(Debug, Clone)]
+        pub struct Pointer<T>
+        where T: PointerTarget<T> {
+            pub value: [u8; #pointer_size],
+            phantom: PhantomData<T>
+        }
+        impl <T> Pointer<T>
+        where T: PointerTarget<T> {
+            pub fn new(value: [u8; #pointer_size]) -> Self {
+                Pointer {
+                    value,
+                    phantom: Default::default()
+                }
+            }
+            pub fn as_instance_of<B: PointerTarget<B>>(&self) -> Pointer<B> {
+                Pointer::new(self.value)
+            }
+        }
+        impl <T> PointerLike<Pointer<T>, T, #pointer_size> for Pointer<T>
+        where T: PointerTarget<T> {
+            fn address(&self) -> Option<Address> {
+                let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
+                    result + ((*value as usize) << (8 * index))
+                });
+                Address::new(result)
+            }
+            fn is_valid(&self) -> bool {
+                self.value.iter().sum::<u8>() > 0
+            }
+        }
+        impl <T> PointerTarget<Pointer<T>> for Pointer<T>
+        where T: PointerTarget<T> {
+
+        }
+        impl <T> GeneratedBlendStruct for Pointer<T>
+        where T: PointerTarget<T> {
+            #generated_impl_fields
+        }
+    }
+}
+
+fn quote_function_struct(blend: &Blend) -> TokenStream {
+    let pointer_size = Literal::usize_unsuffixed(blend.pointer_size());
+    let generated_impl = quote_generated_impl(
+        blend,
+        "Function",
+        usize::MAX - 3,
+        usize::MAX - 3,
+        Vec::new(),
+        true
+    );
+    quote! {
+        #[derive(Debug, Copy, Clone)]
+        pub struct Function {
+            pub value: [u8; #pointer_size]
+        }
+        #generated_impl
+    }
+}
+
+fn quote_generated_impl(blend: &Blend, struct_name: &str, struct_index: usize, type_index: usize, type_parameters: Vec<(&str, Option<&str>)>, is_synthetic: bool) -> TokenStream {
+    let type_parameters_idents = type_parameters.iter()
+        .map(|(name, _)| format_ident!("{}", name))
+        .collect::<Vec<Ident>>();
+    let name = {
+        let name = format_ident!("{}", struct_name);
+        if type_parameters_idents.is_empty() {
+            quote!(#name)
+        }
+        else {
+            quote!(#name<#(#type_parameters_idents),*>)
+        }
+    };
+    let type_parameters = {
+        if type_parameters.is_empty() {
+            quote!()
+        }
+        else {
+            let type_parameters = type_parameters.iter()
+                .map(|(name, bounds)| {
+                    let name = format_ident!("{}", name);
+                    let bounds = bounds
+                        .map(|bounds| {
+                            let bounds = format_ident!("{}", bounds);
+                            quote!{: #bounds}
+                        })
+                        .unwrap_or(quote!());
+                    quote! {#name #bounds}
+                })
+                .collect::<Vec<TokenStream>>();
+            quote!(<#(#type_parameters),*>)
+        }
+    };
+    let fields = quote_generated_impl_fields(blend, struct_name, struct_index, type_index, is_synthetic);
+    quote! {
+        impl #type_parameters GeneratedBlendStruct for #name {
+            #fields
+        }
+    }
+}
+
+fn quote_generated_impl_fields(blend: &Blend, struct_name: &str, struct_index: usize, type_index: usize, is_synthetic: bool) -> TokenStream {
+    let major_version = Literal::character(blend.version().major);
+    let minor_version = Literal::character(blend.version().minor);
+    let patch_version = Literal::character(blend.version().patch);
+    let struct_name_literal = Literal::string(struct_name);
+    let struct_index_literal = Literal::usize_unsuffixed(struct_index);
+    let type_index_literal = Literal::usize_unsuffixed(type_index);
+    let endianness = quote_endianness(blend.endianness());
+    let pointer_size_literal = Literal::usize_unsuffixed(blend.pointer_size());
+    let is_synthetic_ident = format_ident!("{}", is_synthetic);
+    quote! {
+        const BLEND_VERSION: Version = Version::new(#major_version, #minor_version, #patch_version);
+        const BLEND_POINTER_SIZE: usize = #pointer_size_literal;
+        const BLEND_ENDIANNESS: Endianness = #endianness;
+        const STRUCT_NAME: &'static str = #struct_name_literal;
+        const STRUCT_INDEX: usize = #struct_index_literal;
+        const STRUCT_TYPE_INDEX: usize = #type_index_literal;
+        const IS_SYNTHETIC: bool = #is_synthetic_ident;
+    }
+}
+
+
+fn quote_pointer_target_impl(struct_name: &str) -> TokenStream {
+    let name = format_ident!("{}", struct_name);
+    quote! {
+        impl PointerTarget<#name> for #name {}
+    }
+}
+
 fn quote_type(ty: &Type) -> TokenStream {
     match ty {
         Type::Char => {
-            let ident = format_ident!("{}", "i8");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         },
         Type::UChar => {
-            let ident = format_ident!("{}", "u8");
-            quote! {
-                #ident
-            }
+            let ident = primitive_type_ident(ty);
+            quote!(#ident)
         },
         Type::Short => {
-            let ident = format_ident!("{}", "i16");
-            quote! {
-                #ident
-            }
+            let ident = primitive_type_ident(ty);
+            quote!(#ident)
         }
         Type::UShort => {
-            let ident = format_ident!("{}", "u16");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Int => {
-            let ident = format_ident!("{}", "i32");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Int8 => {
-            let ident = format_ident!("{}", "i8");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Int64 => {
-            let ident = format_ident!("{}", "i64");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::UInt64 => {
-            let ident = format_ident!("{}", "u64");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Long => {
-            let ident = format_ident!("{}", "i32");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::ULong => {
-            let ident = format_ident!("{}", "u32");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Float => {
-            let ident = format_ident!("{}", "f32");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Double => {
-            let ident = format_ident!("{}", "f64");
+            let ident = primitive_type_ident(ty);
             quote!(#ident)
         }
         Type::Void => quote!(Void),
@@ -196,11 +371,10 @@ fn quote_type(ty: &Type) -> TokenStream {
             let name = format_ident!("{}", name);
             quote!(#name)
         },
-        Type::Pointer { base_type, size } => {
-            let size = Literal::usize_unsuffixed(*size);
+        Type::Pointer { base_type, size: _size } => {
             let ty = quote_type(base_type);
             quote! {
-                Pointer<#ty, #size>
+                Pointer<#ty>
             }
         }
         Type::Array { base_type, length } => {
@@ -210,13 +384,19 @@ fn quote_type(ty: &Type) -> TokenStream {
                 [#ty; #size]
             }
         }
-        Type::Function { size } => {
-            let size = Literal::usize_unsuffixed(*size );
+        Type::Function { size: _size } => {
             quote! {
-                Function<#size>
+                Function
             }
         },
-        Type::Special { .. } => quote!(()),
+        Type::Special { .. } => quote!(Nothing),
+    }
+}
+
+fn quote_endianness(endianness: &Endianness) -> TokenStream {
+    match endianness {
+        Endianness::Little => quote!(Endianness::Little),
+        Endianness::Big => quote!(Endianness::Big),
     }
 }
 
@@ -253,6 +433,24 @@ fn quote_struct_verifications(blend: &Blend) -> TokenStream {
         });
     quote! {
         #(#verifications)*
+    }
+}
+
+fn primitive_type_ident(ty: &Type) -> Ident {
+    match ty {
+        Type::Char => format_ident!("{}", "i8"),
+        Type::UChar => format_ident!("{}", "u8"),
+        Type::Short => format_ident!("{}", "i16"),
+        Type::UShort => format_ident!("{}", "u16"),
+        Type::Int => format_ident!("{}", "i32"),
+        Type::Int8 => format_ident!("{}", "i8"),
+        Type::Int64 => format_ident!("{}", "i64"),
+        Type::UInt64 => format_ident!("{}", "u64"),
+        Type::Long => format_ident!("{}", "i32"),
+        Type::ULong => format_ident!("{}", "u32"),
+        Type::Float => format_ident!("{}", "f32"),
+        Type::Double => format_ident!("{}", "f64"),
+        _ => panic!("not a primitive type")
     }
 }
 
