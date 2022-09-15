@@ -24,7 +24,7 @@ thiserror = "1.0.31"
 winit = "0.26.1"
 
 skyshard = { path = "lib/skyshard" }
-blend-rs = { path = "lib/blend-rs/blend-rs", features = ["all"]}
+blend-rs = { path = "lib/blend-rs/blend-rs", version = "0.3.0", features = ["all"] }
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"

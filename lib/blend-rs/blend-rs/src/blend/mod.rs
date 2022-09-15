@@ -129,7 +129,7 @@ where A: StringLike {
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, PointerLike, NameLike};
+    use crate::blend::{read, PointerLike, NameLike, StringLike};
     use crate::blend::traverse::Named;
     use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
@@ -166,8 +166,6 @@ mod test {
             })
             .flatten()
             .collect::<Vec<[f32; 3]>>();
-
-        // vertices.iter().for_each(|vert| println!("Vert: {:?}", vert));
 
         let mat = reader.deref(&mesh.mat.as_instance_of::<Link>())
             .map(|links| {
@@ -208,10 +206,15 @@ mod test {
             .unwrap();
 
         let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
+            .unwrap()
+            .find(|node: &bNode| node.idname.to_str_unchecked() == "ShaderNodeTexImage")
             .unwrap();
 
-        nodes.for_each(|node| {
-            println!("Node: {}", node.name.to_name_str_unchecked());
-        });
+        println!("Node: {}", nodes.get_name());
+        println!("Node: {}", nodes.idname.to_name_str_unchecked());
+
+        // nodes.for_each(|node| {
+        //     println!("Node: {}", node.name.to_name_str_unchecked());
+        // });
     }
 }

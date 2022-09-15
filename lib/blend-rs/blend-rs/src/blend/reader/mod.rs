@@ -181,7 +181,7 @@ impl <'a> Reader<'a> {
         match file_block_view.len() {
             1 => Ok(file_block_view.view(0)),
             0 => Err(ReadError::NoSuchElementError),
-            _ => Err(ReadError::MoreThanOneElementError)
+            _ => Err(ReadError::MoreThanOneElementError { count: file_block_view.len() })
         }
     }
 
@@ -515,7 +515,7 @@ pub enum ReadError {
     NoSuchElementError,
 
     #[error("Contains more than one matching element!")]
-    MoreThanOneElementError,
+    MoreThanOneElementError { count: usize },
 }
 
 /// Creates a [`Reader`] from a [`BlendSource`].

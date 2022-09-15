@@ -2,45 +2,30 @@ extern crate ash;
 extern crate skyshard;
 extern crate winit;
 
-use std::borrow::{Borrow, BorrowMut};
-use std::cell::{Cell, RefCell};
-use std::error::Error;
-use std::f32::consts::FRAC_PI_2;
-use std::ffi::{CStr, CString};
-use std::io::Cursor;
-use std::iter::Copied;
+use std::borrow::Borrow;
 use std::ops::Deref;
-use std::process::exit;
-use std::rc::{Rc, Weak};
-use std::slice::Iter;
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, SystemTimeError};
+use std::time::{Duration, SystemTime};
 use std::vec;
 
-use ash::extensions::{
-    ext::DebugUtils,
-    khr::{Surface, Swapchain},
-};
-use ash::vk;
-use ash::vk::{Extent2D, PhysicalDevice, Queue, SurfaceCapabilitiesKHR, SurfaceFormatKHR, SurfaceKHR};
-use log::{debug, error, info, LevelFilter, warn};
+use log::{info, LevelFilter};
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
-use log4rs::config::{Appender, Config, Logger, Root};
+use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use nalgebra::Matrix4;
 use nalgebra::Vector3;
-use skyshard::entity::{World};
-use skyshard::graphics::{Camera, Extent, Position};
-use skyshard::{InstanceData, Vertex};
+use rand::Rng;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::{Window, WindowBuilder};
-use rand::Rng;
-use blender_rs::blender::Pointer;
+use winit::window::WindowBuilder;
 
+use blend_rs::blend::{PointerLike, StringLike};
+use blend_rs::blender3_2::{bNode, bNodeTree, Image, Link, Material, Mesh};
+use skyshard::{InstanceData, Vertex};
+use skyshard::entity::World;
+use skyshard::graphics::{Camera, Extent};
 
 fn main() {
 
@@ -118,9 +103,69 @@ fn main() {
 
             transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
 
+            let file_path = "assets/cube.blend";
+            let blend_data = std::fs::read(file_path).unwrap();
+            let blend_reader = blend_rs::blend::read(&blend_data)
+                    .expect(&format!("Failed to read: {}", file_path));
+
+            let mesh = blend_reader.iter::<Mesh>()
+                .unwrap()
+                .first()
+                .unwrap();
+
+            let indices: Vec<u32> = blend_reader.deref(&mesh.mloop)
+                .unwrap()
+                .map(|mesh_loop| mesh_loop.v as u32)
+                .collect();
+
+            let vertices: Vec<Vertex> = blend_reader.deref(&mesh.mvert)
+                .unwrap()
+                .zip(blend_reader.deref(&mesh.mloopuv).unwrap())
+                .map(|(mesh_vert, mesh_uv)| {
+                    Vertex {
+                        position: mesh_vert.co,
+                        color: [0.0, 0.0, 0.0],
+                        uv: mesh_uv.uv,
+                    }
+                })
+                .collect();
+
+            let material = blend_reader.deref_single(&mesh.mat.as_instance_of::<Link>())
+                .map(|link| {
+                    blend_reader.deref_single(&link.next.as_instance_of::<Material>()).unwrap()
+                })
+                .unwrap();
+
+            let tree: &bNodeTree = blend_reader.deref_single(&material.nodetree)
+                .unwrap();
+
+            let tex_image_node = blend_reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
+                .unwrap()
+                .find(|node: &bNode| node.idname.to_str_unchecked() == "ShaderNodeTexImage")
+                .unwrap();
+
+            let tex_image: &Image = blend_reader.deref_single(&tex_image_node.id.as_instance_of::<Image>())
+                .unwrap();
+
+            let image_packed_file = blend_reader.deref_single(&tex_image.packedfile)
+                .unwrap();
+
+            let data = blend_reader.deref_raw_range(&image_packed_file.data, 0..image_packed_file.size as usize)
+                .unwrap();
+
+            let (texture_extent, texture_data) = {
+                let decoder = ::png::Decoder::new(data);
+                let mut reader = decoder.read_info().unwrap();
+                let mut buf = vec![0; reader.output_buffer_size()];
+                let info = reader.next_frame(&mut buf).unwrap();
+                let bytes = &buf[..info.buffer_size()];
+
+                (Extent::from(info.width, info.width, 1), Vec::from(bytes))
+            };
+
             skyshard::create_geometry(&mut engine,
-                &cube_mesh.indices,
-                &cube_vertices,
+                &indices,
+                &vertices,
                 &texture_data,
                 texture_extent,
                 &vec![
@@ -237,64 +282,64 @@ fn main() {
         //     );
         // }
 
-        {
-            let mut transformation1 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(-1.5, 0.0, 0.0));
-
-            transformation1 = transformation1 * Matrix4::<f32>::from_euler_angles(0.25, -0.75, -0.0);
-
-            world.geometries.push(skyshard::create_geometry(&mut engine,
-                &vec![
-                    2, 0, 1, // front
-                    4, 3, 5, // back
-                    2, 3, 0, 5, 3, 2, // right
-                    1, 0, 3, 3, 4, 1, // left
-                    4, 2, 1, 5, 2, 4, // bottom
-                ],
-                &vec![
-                    Vertex {
-                        position: [0.0, -0.5, 0.0], // front top
-                        color: [1.0, 0.0, 0.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [-0.5, 0.5, 0.0], // front left
-                        color: [0.0, 1.0, 0.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [0.5, 0.5, 0.0], // front right
-                        color: [0.0, 0.0, 1.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [0.0, -0.5, 1.0], // rear top
-                        color: [1.0, 0.0, 0.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [-0.5, 0.5, 1.0], // rear left
-                        color: [0.0, 1.0, 0.0],
-                        uv: [0.0, 0.0],
-                    },
-                    Vertex {
-                        position: [0.5, 0.5, 1.0], // rear right
-                        color: [0.0, 0.0, 1.0],
-                        uv: [0.0, 0.0],
-                    },
-                ],
-                &texture_data,
-                texture_extent,
-                &vec![
-                    InstanceData {
-                        transformation: transformation1.data
-                            .as_slice()
-                            .try_into()
-                            .expect("slice with incorect length")
-                    },
-                ]
-            ));
-        }
+        // {
+        //     let mut transformation1 = Matrix4::<f32>::identity()
+        //         .append_translation(&Vector3::new(-1.5, 0.0, 0.0));
+        //
+        //     transformation1 = transformation1 * Matrix4::<f32>::from_euler_angles(0.25, -0.75, -0.0);
+        //
+        //     world.geometries.push(skyshard::create_geometry(&mut engine,
+        //         &vec![
+        //             2, 0, 1, // front
+        //             4, 3, 5, // back
+        //             2, 3, 0, 5, 3, 2, // right
+        //             1, 0, 3, 3, 4, 1, // left
+        //             4, 2, 1, 5, 2, 4, // bottom
+        //         ],
+        //         &vec![
+        //             Vertex {
+        //                 position: [0.0, -0.5, 0.0], // front top
+        //                 color: [1.0, 0.0, 0.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [-0.5, 0.5, 0.0], // front left
+        //                 color: [0.0, 1.0, 0.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.5, 0.5, 0.0], // front right
+        //                 color: [0.0, 0.0, 1.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.0, -0.5, 1.0], // rear top
+        //                 color: [1.0, 0.0, 0.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [-0.5, 0.5, 1.0], // rear left
+        //                 color: [0.0, 1.0, 0.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //             Vertex {
+        //                 position: [0.5, 0.5, 1.0], // rear right
+        //                 color: [0.0, 0.0, 1.0],
+        //                 uv: [0.0, 0.0],
+        //             },
+        //         ],
+        //         &texture_data,
+        //         texture_extent,
+        //         &vec![
+        //             InstanceData {
+        //                 transformation: transformation1.data
+        //                     .as_slice()
+        //                     .try_into()
+        //                     .expect("slice with incorect length")
+        //             },
+        //         ]
+        //     ));
+        // }
 
         let mut redraw_requested = true;
         let mut close_requested = false;
