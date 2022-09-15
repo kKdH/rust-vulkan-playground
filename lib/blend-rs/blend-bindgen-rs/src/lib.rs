@@ -52,7 +52,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             let double_linked = {
                 if is_struct_double_linked(structure) {
                     quote! {
-                        impl DoubleLinked<Pointer<#name>, #pointer_size> for #name {
+                        impl DoubleLinked<Pointer<#name>> for #name {
                             fn next(&self) -> &Pointer<Self> {
                                 &self.next
                             }
@@ -96,7 +96,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
                 }
                 #generated_impl
                 #pointer_target_impl
-                // #double_linked
+                #double_linked
                 #named
             }
         })
@@ -115,7 +115,7 @@ pub fn generate(source_file: &str, target_dir: &str) -> String {
             #![allow(dead_code)]
 
             use crate::blend::{GeneratedBlendStruct, Version, Endianness, PointerLike, PointerTarget, NameLike};
-            // use crate::blend::traverse::DoubleLinked;
+            use crate::blend::traverse::DoubleLinked;
             use crate::blend::traverse::Named;
             use blend_inspect_rs::Address;
             use std::marker::PhantomData;
@@ -200,12 +200,13 @@ fn quote_pointer_struct(blend: &Blend) -> TokenStream {
                     phantom: Default::default()
                 }
             }
-            pub fn as_instance_of<B: PointerTarget<B>>(&self) -> Pointer<B> {
+        }
+        impl <T> PointerLike<T> for Pointer<T>
+        where T: PointerTarget<T> {
+            type Pointer<A: PointerTarget<A>> = Pointer<A>;
+            fn as_instance_of<B: PointerTarget<B>>(&self) -> Self::Pointer<B> {
                 Pointer::new(self.value)
             }
-        }
-        impl <T> PointerLike<Pointer<T>, T, #pointer_size> for Pointer<T>
-        where T: PointerTarget<T> {
             fn address(&self) -> Option<Address> {
                 let result = self.value.iter().enumerate().fold(0usize, |result, (index, value)| {
                     result + ((*value as usize) << (8 * index))

@@ -19,11 +19,13 @@ pub trait GeneratedBlendStruct : Sized {
     const IS_SYNTHETIC: bool;
 }
 
-pub trait PointerLike<P, T, const SIZE: usize> : Sized
-where P: PointerLike<P, T, SIZE>,
-      T: PointerTarget<T> {
+pub trait PointerLike<T> : Sized
+where T: PointerTarget<T> {
 
-    // fn as_instance_of<B: PointerTarget<B>>(&self) -> Self;
+    #[feature(generic_associated_types)] //TODO: Switch to stable rust as soon as GATs are released.
+    type Pointer<A: PointerTarget<A>>: PointerLike<A>;
+
+    fn as_instance_of<B: PointerTarget<B>>(&self) -> Self::Pointer<B>;
 
     fn address(&self) -> Option<Address>;
 
@@ -127,7 +129,7 @@ where A: StringLike {
 
 #[cfg(test)]
 mod test {
-    use crate::blend::{read, NameLike};
+    use crate::blend::{read, PointerLike, NameLike};
     use crate::blend::traverse::Named;
     use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
 
@@ -205,11 +207,11 @@ mod test {
         std::fs::write("/tmp/texture.jpg", data)
             .unwrap();
 
-        // let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
-        //     .unwrap();
-        //
-        // nodes.for_each(|node| {
-        //     println!("Node: {}", node.name.to_name_str_unchecked());
-        // });
+        let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
+            .unwrap();
+
+        nodes.for_each(|node| {
+            println!("Node: {}", node.name.to_name_str_unchecked());
+        });
     }
 }

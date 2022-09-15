@@ -11,7 +11,8 @@ use blend_inspect_rs::{BlendFile, BlendSource, Data, Endianness, FileBlock, pars
 
 use crate::blend::{GeneratedBlendStruct, PointerLike, PointerTarget};
 use crate::blend::reader::check::{check_blend, check_same_type};
-// use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
+use crate::blend::traverse::{DoubleLinked, DoubleLinkedIter};
+
 
 /// Main struct for reading `.blend` files.
 ///
@@ -23,7 +24,7 @@ use crate::blend::reader::check::{check_blend, check_same_type};
 /// use blend_rs::blend::{read, Reader, ReadError};
 ///
 /// let blend_data = std::fs::read("examples/example-3.2.blend")
-///     .expect("file 'examples/example-3.2.blend' to be readable");
+///     .expect("file 'examples/example-3.2.blend' should exist and be readable");
 ///
 /// let reader: Result<Reader, ReadError> = read(&blend_data);
 /// ```
@@ -54,10 +55,10 @@ impl <'a> Reader<'a> {
     ///     .expect("file 'examples/example-3.2.blend' to be readable");
     ///
     /// let reader = read(&blend_data)
-    ///     .expect("Blender data should be parsable");
+    ///     .expect("Blender file should be parsable");
     ///
     /// let meshes: StructIter<Mesh> = reader.iter::<Mesh>()
-    ///     .expect("an iterator over all Meshes");
+    ///     .expect("Blender file should contains Meshes");
     /// ```
     /// [`VersionMismatchError`]: ReadError::VersionMismatchError
     /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
@@ -99,15 +100,15 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{Mesh, MLoop, MPoly};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("file 'examples/example-3.2.blend' to be readable");
+    ///     .expect("file 'examples/example-3.2.blend' should exist and be readable");
     ///
     /// let reader = read(&blend_data)
-    ///     .expect("Blender data should be parsable");
+    ///     .expect("Blender file should be parsable");
     ///
     /// let mesh: &Mesh = reader.iter::<Mesh>()
-    ///    .expect("an iterator over all Meshes")
+    ///    .expect("Blender file should contains Meshes")
     ///    .find(|mesh| mesh.id.name.to_name_str_unchecked() == "Cube")
-    ///    .expect("an Mesh with name 'Cube'");
+    ///    .expect("Blender file should contain a Mesh with name 'Cube'");
     ///
     /// let polygons: StructIter<MPoly> = reader.deref(&mesh.mpoly)
     ///     .expect("an iterator over all polygons of the Mesh");
@@ -119,8 +120,8 @@ impl <'a> Reader<'a> {
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     /// [`InvalidPointerTypeError`]: ReadError::InvalidPointerTypeError
     ///
-    pub fn deref<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<StructIter<S>, ReadError>
-    where P: PointerLike<P, S, SIZE>,
+    pub fn deref<P, S>(&self, pointer: &P) -> Result<StructIter<S>, ReadError>
+    where P: PointerLike<S>,
           S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         let block = self.look_up(pointer)?;
         check_blend::<S>(&self.blend)?;
@@ -150,18 +151,18 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{Object, Mesh};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("file 'examples/example-3.2.blend' to be readable");
+    ///     .expect("file 'examples/example-3.2.blend' should exist and be readable");
     ///
     /// let reader = read(&blend_data)
-    ///     .expect("Blender data should be parsable");
+    ///     .expect("Blender file should be parsable");
     ///
     /// let cube: &Object = reader.iter::<Object>()
-    ///    .expect("an iterator over all Objects")
+    ///    .expect("Blender file should contains Objects")
     ///    .find(|object| object.id.name.to_name_str_unchecked() == "Cube")
-    ///    .expect("an Object with name 'Cube'");
+    ///    .expect("Blender file should contain an Object with name 'Cube'");
     ///
     /// let mesh: &Mesh = reader.deref_single(&cube.data.as_instance_of::<Mesh>())
-    ///     .expect("the Cube's Mesh");
+    ///     .expect("object 'Cube' should have a Mesh");
     /// ```
     /// [`InvalidPointerAddressError`]: ReadError::InvalidPointerAddressError
     /// [`NullPointerError`]: ReadError::NullPointerError
@@ -170,8 +171,8 @@ impl <'a> Reader<'a> {
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     /// [`InvalidPointerTypeError`]: ReadError::InvalidPointerTypeError
     ///
-    pub fn deref_single<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<&'a S, ReadError>
-    where P: PointerLike<P, S, SIZE>,
+    pub fn deref_single<P, S>(&self, pointer: &P) -> Result<&'a S, ReadError>
+    where P: PointerLike<S>,
           S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         let block = self.look_up(pointer)?;
         check_blend::<S>(&self.blend)?;
@@ -204,7 +205,8 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{PackedFile};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("file 'examples/example-3.2.blend' to be readable");
+    ///     .expect("file 'examples/example-3.2.blend' should exist and be readable");
+    ///
     /// let reader = read(&blend_data)
     ///     .expect("Blender data should be parsable");
     ///
@@ -222,8 +224,8 @@ impl <'a> Reader<'a> {
     /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     ///
-    pub fn deref_raw<P, S, const SIZE: usize>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<P, S, SIZE>,
+    pub fn deref_raw<P, S>(&self, pointer: &P) -> Result<Data<'a>, ReadError>
+    where P: PointerLike<S>,
           S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         // check_blend::<T>(&self.blend)?; // TODO: Enable check when Pointer/Void etc. implement GeneratedBlendStruct
         let block = self.look_up(pointer)?;
@@ -250,14 +252,15 @@ impl <'a> Reader<'a> {
     /// use blend_rs::blender3_2::{PackedFile};
     ///
     /// let blend_data = std::fs::read("examples/example-3.2.blend")
-    ///     .expect("file 'examples/example-3.2.blend' to be readable");
+    ///     .expect("file 'examples/example-3.2.blend' should exist and be readable");
+    ///
     /// let reader = read(&blend_data)
-    ///     .expect("Blender data should be parsable");
+    ///     .expect("Blender file should be parsable");
     ///
     /// let packed_file: &PackedFile = reader.iter::<PackedFile>()
-    ///    .expect("an iterator over all PackedFiles")
+    ///    .expect("Blender file should contains PackedFiles")
     ///    .first()
-    ///    .expect("at least one PackedFile");
+    ///    .expect("Blender file should contain at least one PackedFiles");
     ///
     /// let magic_number = reader.deref_raw_range(&packed_file.data, 0..4 as usize)
     ///     .expect("a range of raw data of the PackedFile");
@@ -269,26 +272,26 @@ impl <'a> Reader<'a> {
     /// [`PointerSizeMismatchError`]: ReadError::PointerSizeMismatchError
     /// [`EndiannessMismatchError`]: ReadError::EndiannessMismatchError
     ///
-    pub fn deref_raw_range<P, S, const SIZE: usize>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
-    where P: PointerLike<P, S, SIZE>,
+    pub fn deref_raw_range<P, S>(&self, pointer: &P, range: Range<usize>) -> Result<Data<'a>, ReadError>
+    where P: PointerLike<S>,
           S: 'a + GeneratedBlendStruct + PointerTarget<S> {
         self.deref_raw(pointer).map(|data| {
             &data[range.start..range.end]
         })
     }
 
-    // pub fn traverse_double_linked<PD, D, PT, const SIZE: usize>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT>, ReadError>
-    // where PD: PointerLike<PD, D>,
-    //       D: 'a + DoubleLinked<PT> + GeneratedBlendStruct,
-    //       PT: PointerLike<PT, D> {
-    //
-    //     self.deref_single(pointer).map(|first| {
-    //         DoubleLinkedIter::new(self, first)
-    //     })
-    // }
+    pub fn traverse_double_linked<PD, D, PT>(&self, pointer: &PD) -> Result<DoubleLinkedIter<D, PT>, ReadError>
+    where PD: PointerLike<D>,
+          D: 'a + DoubleLinked<PT> + GeneratedBlendStruct + PointerTarget<D>,
+          PT: PointerLike<D> {
 
-    fn look_up<A, B, const SIZE: usize>(&self, pointer: &A) -> Result<&FileBlock, ReadError>
-    where A: PointerLike<A, B, SIZE>,
+        self.deref_single(pointer).map(|first| {
+            DoubleLinkedIter::new(self, first)
+        })
+    }
+
+    fn look_up<A, B>(&self, pointer: &A) -> Result<&FileBlock, ReadError>
+    where A: PointerLike<B>,
           B: 'a + GeneratedBlendStruct + PointerTarget<B> {
         let address = pointer.address();
         let lookup = address
@@ -526,10 +529,10 @@ pub enum ReadError {
 /// use blend_rs::blend::{read, Reader};
 /// 
 /// let blend_data = std::fs::read("examples/example-3.2.blend")
-///     .expect("file 'examples/example-3.2.blend' to be readable");
+///     .expect("file 'examples/example-3.2.blend' should exist and be readable");
 /// 
 /// let reader = read(&blend_data)
-///     .expect("Blender data should be parsable");
+///     .expect("Blender file should be parsable");
 /// ```
 /// [`ParseError`]: [`ReadError::ParseError`]
 /// 
@@ -546,7 +549,7 @@ where A: BlendSource<'a> {
 mod test {
     use hamcrest2::{assert_that, equal_to, err, HamcrestMatcher, is};
 
-    use crate::blend::{NameLike, read};
+    use crate::blend::{PointerLike, NameLike, read};
     use crate::blender3_2::Object;
 
     #[test]

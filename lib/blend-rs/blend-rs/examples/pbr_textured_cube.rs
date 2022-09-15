@@ -13,18 +13,18 @@ pub struct Vertex {
 fn main() {
 
     let blend_data = std::fs::read("examples/example-3.2.blend")
-        .expect("file 'examples/example-3.2.blend' to be readable");
+        .expect("file 'examples/example-3.2.blend' should exist and be readable");
 
     let reader = read(&blend_data)
-        .expect("Blender data should be parsable");
+        .expect("Blender file should be parsable");
 
     let plane: &Object = reader.iter::<Object>()
-        .expect("an iterator over all Objects")
+        .expect("Blender file should contains Objects")
         .find(|object| object.id.get_name() == "Cube")
-        .expect("an Object with name 'Cube'");
+        .expect("Blender file should contain an Object with name 'Cube'");
 
     let mesh = reader.deref_single(&plane.data.as_instance_of::<Mesh>())
-        .expect("a Mesh of the 'Cube'");
+        .expect("object 'Cube' should have a Mesh");
 
     let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop).unwrap().collect();
     let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert).unwrap().collect();

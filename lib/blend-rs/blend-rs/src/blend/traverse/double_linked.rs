@@ -1,24 +1,24 @@
 use std::marker::PhantomData;
 use crate::blend::{GeneratedBlendStruct, PointerLike, PointerTarget, Reader};
 
-pub trait DoubleLinked<P, const SIZE: usize> : Sized + PointerTarget<Self>
-where P: PointerLike<P, Self, SIZE> {
+pub trait DoubleLinked<P> : Sized + PointerTarget<Self>
+where P: PointerLike<Self> {
     fn next(&self) -> &P;
     fn prev(&self) -> &P;
 }
 
-pub struct DoubleLinkedIter<'a, D, P, const SIZE: usize>
-where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
-      P: PointerLike<P, D, SIZE> {
+pub struct DoubleLinkedIter<'a, D, P>
+where D: 'a + DoubleLinked<P> + GeneratedBlendStruct,
+      P: PointerLike<D> {
     reader: &'a Reader<'a>,
     next: Option<&'a D>,
     d_phantom: PhantomData<&'a D>,
     p_phantom: PhantomData<&'a P>,
 }
 
-impl<'a, D, P, const SIZE: usize> DoubleLinkedIter<'a, D, P, SIZE>
-where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
-      P: PointerLike<P, D, SIZE> {
+impl<'a, D, P> DoubleLinkedIter<'a, D, P>
+where D: 'a + DoubleLinked<P> + GeneratedBlendStruct,
+      P: PointerLike<D> {
 
     pub fn new(reader: &'a Reader<'a>, first: &'a D) -> Self {
         DoubleLinkedIter {
@@ -30,9 +30,9 @@ where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
     }
 }
 
-impl <'a, D, P, const SIZE: usize> Iterator for DoubleLinkedIter<'a, D, P, SIZE>
-where D: 'a + DoubleLinked<P, SIZE> + GeneratedBlendStruct,
-      P: PointerLike<P, D, SIZE> {
+impl <'a, D, P> Iterator for DoubleLinkedIter<'a, D, P>
+where D: 'a + DoubleLinked<P> + GeneratedBlendStruct,
+      P: PointerLike<D> {
 
     type Item = &'a D;
 

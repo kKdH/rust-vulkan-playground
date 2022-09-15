@@ -12,28 +12,28 @@ pub struct Vertex {
 fn main() {
 
     let blend_data = std::fs::read("examples/example-3.2.blend")
-        .expect("file 'examples/example-3.2.blend' to be readable");
+        .expect("file 'examples/example-3.2.blend' should exist and be readable");
 
     let reader = read(&blend_data)
-        .expect("Blender data should be parsable");
+        .expect("Blender file should be parsable");
 
     let plane: &Object = reader.iter::<Object>()
-        .expect("an iterator over all Objects")
+        .expect("Blender file should contains Objects")
         .find(|object| object.id.get_name() == "Plane")
-        .expect("an Object with name 'Plane'");
+        .expect("Blender file should contain an Object with name 'Plane'");
 
     let mesh = reader.deref_single(&plane.data.as_instance_of::<Mesh>())
-        .expect("the Mesh of the 'Plane'");
+        .expect("object 'Plane' should have a Mesh");
 
     let mesh_polygon = reader.deref(&mesh.mpoly)
-        .expect("an iterator over all polygons of the Mesh");
+        .expect("mesh of object 'Plane' should have polygons");
 
     let mesh_loop: Vec<&MLoop> = reader.deref(&mesh.mloop)
-        .expect("an iterator over all loops of the Mesh")
+        .expect("mesh of object 'Plane' should have loops")
         .collect();
 
     let mesh_vertices: Vec<&MVert> = reader.deref(&mesh.mvert)
-        .expect("an iterator over all vertices of the Mesh")
+        .expect("mesh of object 'Plane' should have vertices")
         .collect();
 
     let polygon_count = mesh_polygon.len();
