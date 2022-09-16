@@ -22,7 +22,8 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
 use blend_rs::blend::{PointerLike, StringLike};
-use blend_rs::blender3_2::{bNode, bNodeTree, Image, Link, Material, Mesh};
+use blend_rs::blend::traverse::Named;
+use blend_rs::blender3_2::{bNode, bNodeTree, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, Vertex};
 use skyshard::entity::World;
 use skyshard::graphics::{Camera, Extent};
@@ -108,52 +109,97 @@ fn main() {
             let blend_reader = blend_rs::blend::read(&blend_data)
                     .expect(&format!("Failed to read: {}", file_path));
 
-            let mesh = blend_reader.iter::<Mesh>()
+            let object: &Object = blend_reader.iter::<Object>()
                 .unwrap()
-                .first()
+                .find(|object| object.id.get_name() == "Plane")
                 .unwrap();
 
-            let indices: Vec<u32> = blend_reader.deref(&mesh.mloop)
-                .unwrap()
-                .map(|mesh_loop| mesh_loop.v as u32)
-                .collect();
-
-            let vertices: Vec<Vertex> = blend_reader.deref(&mesh.mvert)
-                .unwrap()
-                .zip(blend_reader.deref(&mesh.mloopuv).unwrap())
-                .map(|(mesh_vert, mesh_uv)| {
-                    Vertex {
-                        position: mesh_vert.co,
-                        color: [0.0, 0.0, 0.0],
-                        uv: mesh_uv.uv,
-                    }
-                })
-                .collect();
-
-            let material = blend_reader.deref_single(&mesh.mat.as_instance_of::<Link>())
-                .map(|link| {
-                    blend_reader.deref_single(&link.next.as_instance_of::<Material>()).unwrap()
-                })
+            let mesh: &Mesh = blend_reader.deref_single(&object.data.as_instance_of::<Mesh>())
                 .unwrap();
 
-            let tree: &bNodeTree = blend_reader.deref_single(&material.nodetree)
-                .unwrap();
+            let indices = (0..36).collect();
 
-            let tex_image_node = blend_reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
-                .unwrap()
-                .find(|node: &bNode| node.idname.to_str_unchecked() == "ShaderNodeTexImage")
-                .unwrap();
+            let vertices: Vec<Vertex> = {
 
-            let tex_image: &Image = blend_reader.deref_single(&tex_image_node.id.as_instance_of::<Image>())
-                .unwrap();
+                let mesh_polygons = blend_reader.deref(&mesh.mpoly)
+                    .expect("mesh of object 'Cube' should have polygons");
 
-            let image_packed_file = blend_reader.deref_single(&tex_image.packedfile)
-                .unwrap();
+                let mesh_loops: Vec<&MLoop> = blend_reader.deref(&mesh.mloop)
+                    .expect("mesh of object 'Cube' should have loops")
+                    .collect();
 
-            let data = blend_reader.deref_raw_range(&image_packed_file.data, 0..image_packed_file.size as usize)
-                .unwrap();
+                let mesh_uvs: Vec<&MLoopUV> = blend_reader.deref(&mesh.mloopuv)
+                    .expect("mesh of object 'Cube' should have UVs")
+                    .collect();
+
+                mesh_uvs.iter().for_each(|uv| println!("uv: {:?}", uv.uv));
+
+                let mesh_vertices: Vec<&MVert> = blend_reader.deref(&mesh.mvert)
+                    .expect("mesh of object 'Cube' should have vertices")
+                    .collect();
+
+                mesh_polygons
+                    .map(|polygon| {
+                        (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter()
+                            .enumerate()
+                            .map(|(index, loop_index)| {
+                                let uv = mesh_uvs[index].uv;
+                                let position = mesh_vertices[mesh_loops[loop_index as usize].v as usize].co;
+                                Vertex {
+                                    position: [position[0], position[1] * -1.0, position[2]],
+                                    color: [0.0, 0.0, 0.0],
+                                    uv: [uv[0], uv[1] * -1.0],
+                                }
+                            })
+                            .collect::<Vec<Vertex>>()
+                    })
+                    .flatten()
+                    .collect()
+            };
+
+            vertices.iter().for_each(|v| println!("v: {:?}, {:?}", v.position, v.uv));
+
+            // let vertices: Vec<Vertex> = blend_reader.deref(&mesh.mvert)
+            //     .unwrap()
+            //     .zip(blend_reader.deref(&mesh.mloopuv).unwrap())
+            //     .map(|(mesh_vert, mesh_uv)| {
+            //         Vertex {
+            //             position: mesh_vert.co,
+            //             color: [0.0, 0.0, 0.0],
+            //             uv: mesh_uv.uv,
+            //         }
+            //     })
+            //     .collect();
+
+            // println!("blend indices: {}", indices.len());
+            // indices.iter().for_each(|i| println!("index: {:?}", i));
+            // println!("blend vertices: {}", vertices.len());
 
             let (texture_extent, texture_data) = {
+
+                let material = blend_reader.deref_single(&mesh.mat.as_instance_of::<Link>())
+                    .map(|link| {
+                        blend_reader.deref_single(&link.next.as_instance_of::<Material>()).unwrap()
+                    })
+                    .unwrap();
+
+                let tree: &bNodeTree = blend_reader.deref_single(&material.nodetree)
+                    .unwrap();
+
+                let tex_image_node = blend_reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
+                    .unwrap()
+                    .find(|node: &bNode| node.idname.to_str_unchecked() == "ShaderNodeTexImage")
+                    .unwrap();
+
+                let tex_image: &Image = blend_reader.deref_single(&tex_image_node.id.as_instance_of::<Image>())
+                    .unwrap();
+
+                let image_packed_file = blend_reader.deref_single(&tex_image.packedfile)
+                    .unwrap();
+
+                let data = blend_reader.deref_raw_range(&image_packed_file.data, 0..image_packed_file.size as usize)
+                    .unwrap();
+
                 let decoder = ::png::Decoder::new(data);
                 let mut reader = decoder.read_info().unwrap();
                 let mut buf = vec![0; reader.output_buffer_size()];
