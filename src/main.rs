@@ -23,7 +23,7 @@ use winit::window::WindowBuilder;
 
 use blend_rs::blend::{PointerLike, StringLike};
 use blend_rs::blend::traverse::Named;
-use blend_rs::blender3_2::{bNode, bNodeTree, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
+use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, Vertex};
 use skyshard::entity::World;
 use skyshard::graphics::{Camera, Extent};
@@ -74,21 +74,6 @@ fn main() {
         let asset_manager = engine.asset_manager();
         let mut world = World::new();
 
-        let (texture_extent, texture_data) = load_image("src/texture-small.png");
-        let cube_node = asset_manager.load_node(&String::from("Cube")).expect("Failed to load cube");
-        let cube_mesh = cube_node.mesh();
-        let cube_vertices: Vec<Vertex> = cube_mesh.positions.iter().map(|index| {
-            Vertex {
-                position: *index,
-                color: [
-                    rng.gen_range(0f32..1f32),
-                    rng.gen_range(0f32..1f32),
-                    rng.gen_range(0f32..1f32)
-                ],
-                uv: [0.0, 0.0] //(&cube_mesh.texture_coordinates)[*index as usize],
-            }
-        }).collect();
-
         let cube = {
 
             let transformation1 = Matrix4::<f32>::identity()
@@ -111,13 +96,11 @@ fn main() {
 
             let object: &Object = blend_reader.iter::<Object>()
                 .unwrap()
-                .find(|object| object.id.get_name() == "Plane")
+                .find(|object| object.id.get_name() == "Cube")
                 .unwrap();
 
             let mesh: &Mesh = blend_reader.deref_single(&object.data.as_instance_of::<Mesh>())
                 .unwrap();
-
-            let indices = (0..36).collect();
 
             let vertices: Vec<Vertex> = {
 
@@ -132,8 +115,6 @@ fn main() {
                     .expect("mesh of object 'Cube' should have UVs")
                     .collect();
 
-                mesh_uvs.iter().for_each(|uv| println!("uv: {:?}", uv.uv));
-
                 let mesh_vertices: Vec<&MVert> = blend_reader.deref(&mesh.mvert)
                     .expect("mesh of object 'Cube' should have vertices")
                     .collect();
@@ -141,14 +122,13 @@ fn main() {
                 mesh_polygons
                     .map(|polygon| {
                         (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter()
-                            .enumerate()
-                            .map(|(index, loop_index)| {
-                                let uv = mesh_uvs[index].uv;
+                            .map(|loop_index| {
+                                let uv = mesh_uvs[loop_index as usize].uv;
                                 let position = mesh_vertices[mesh_loops[loop_index as usize].v as usize].co;
                                 Vertex {
-                                    position: [position[0], position[1] * -1.0, position[2]],
+                                    position: [position[0], position[2] * -1.0, position[1]], // # blender's z-up to y-up: x,y,z -> x,z,-y
                                     color: [0.0, 0.0, 0.0],
-                                    uv: [uv[0], uv[1] * -1.0],
+                                    uv: [uv[0], (uv[1] * -1.0) + 1.0], // blender: u,v -> u,1-v
                                 }
                             })
                             .collect::<Vec<Vertex>>()
@@ -157,29 +137,13 @@ fn main() {
                     .collect()
             };
 
-            vertices.iter().for_each(|v| println!("v: {:?}, {:?}", v.position, v.uv));
-
-            // let vertices: Vec<Vertex> = blend_reader.deref(&mesh.mvert)
-            //     .unwrap()
-            //     .zip(blend_reader.deref(&mesh.mloopuv).unwrap())
-            //     .map(|(mesh_vert, mesh_uv)| {
-            //         Vertex {
-            //             position: mesh_vert.co,
-            //             color: [0.0, 0.0, 0.0],
-            //             uv: mesh_uv.uv,
-            //         }
-            //     })
-            //     .collect();
-
-            // println!("blend indices: {}", indices.len());
-            // indices.iter().for_each(|i| println!("index: {:?}", i));
-            // println!("blend vertices: {}", vertices.len());
+            let indices = (0u32..vertices.len() as u32).collect();
 
             let (texture_extent, texture_data) = {
 
-                let material = blend_reader.deref_single(&mesh.mat.as_instance_of::<Link>())
+                let material = blend_reader.deref_single(&mesh.mat.as_instance_of::<DrawDataList>())
                     .map(|link| {
-                        blend_reader.deref_single(&link.next.as_instance_of::<Material>()).unwrap()
+                        blend_reader.deref_single(&link.first.as_instance_of::<Material>()).unwrap()
                     })
                     .unwrap();
 
