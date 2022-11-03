@@ -140,8 +140,8 @@ fn main() {
             let (texture_extent, texture_data) = {
 
                 let material = blend_reader.deref_single(&mesh.mat.as_instance_of::<DrawDataList>())
-                    .map(|link| {
-                        blend_reader.deref_single(&link.first.as_instance_of::<Material>()).unwrap()
+                    .map(|list| {
+                        blend_reader.deref_single(&list.first.as_instance_of::<Material>()).unwrap()
                     })
                     .unwrap();
 
@@ -346,7 +346,10 @@ fn main() {
                                 } => {
                                     is_cursor_grabbed = !is_cursor_grabbed;
 
-                                    window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
+                                    window.set_cursor_position(PhysicalPosition::new(
+                                        (window.inner_size().width as f32) * 0.5,
+                                        (window.inner_size().height as f32) * 0.5
+                                    )).unwrap();
                                     window.set_cursor_grab(is_cursor_grabbed);
                                     window.set_cursor_visible(!is_cursor_grabbed);
                                 }
