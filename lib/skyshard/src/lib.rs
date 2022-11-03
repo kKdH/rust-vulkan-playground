@@ -14,6 +14,7 @@ use engine::Engine;
 
 pub use engine::create;
 pub use engine::create_geometry;
+pub use engine::update_geometry;
 pub use engine::render;
 pub use engine::prepare;
 pub use engine::Vertex;

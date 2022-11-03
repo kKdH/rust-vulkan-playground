@@ -67,8 +67,6 @@ fn main() {
         .build(&events_loop)
         .unwrap();
 
-    let mut rng = rand::thread_rng();
-
     {
         let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
         let asset_manager = engine.asset_manager();
@@ -80,9 +78,9 @@ fn main() {
                 .append_translation(&Vector3::new(0.0, 0.0, 0.0));
 
             let mut transformation2 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(2.5, 0.0, 0.0));
+                .append_translation(&Vector3::new(3.5, 0.0, 0.0));
 
-            transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, 0.7);
+            transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, -0.7);
 
             let mut  transformation3 = Matrix4::<f32>::identity()
                 .append_translation(&Vector3::new(0.0, 3.0, 1.5));
@@ -197,159 +195,11 @@ fn main() {
                             .try_into()
                             .expect("slice with incorect length")
                     },
-                ])
+                ]
+            )
         };
 
         world.geometries.push(cube);
-
-        // {
-        //     let transformation1 = Matrix4::<f32>::identity()
-        //         .append_translation(&Vector3::new(0.0, 0.0, 0.0));
-        //
-        //     let mut transformation2 = Matrix4::<f32>::identity()
-        //         .append_translation(&Vector3::new(1.5, 0.0, 0.0));
-        //
-        //     transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, 0.7);
-        //
-        //     let mut  transformation3 = Matrix4::<f32>::identity()
-        //         .append_translation(&Vector3::new(0.0, 2.0, 1.5));
-        //
-        //     transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
-        //
-        //     world.geometries.push(skyshard::create_geometry(&mut engine,
-        //         &vec![
-        //             0, 1, 2, 2, 3, 0, // front
-        //             0, 3, 4, 5, 0, 4, // left
-        //             1, 7, 6, 2, 1, 6, // right
-        //             0, 5, 1, 1, 5, 7, // top
-        //             2, 4, 3, 6, 4, 2, // bottom
-        //             5, 4, 6, 6, 7, 5, // rear
-        //         ],
-        //         &vec![
-        //             Vertex {
-        //                 position: [-0.5, -0.5, 0.0], // front top-left
-        //                 color: [1.0, 0.0, 0.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.5, -0.5, 0.0], // front top-right
-        //                 color: [0.0, 1.0, 0.0],
-        //                 uv: [1.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.5, 0.5, 0.0], // front bottom-right
-        //                 color: [0.0, 0.0, 1.0],
-        //                 uv: [1.0, 1.0],
-        //             },
-        //             Vertex {
-        //                 position: [-0.5, 0.5, 0.0], // front bottom-left
-        //                 color: [1.0, 1.0, 1.0],
-        //                 uv: [0.0, 1.0],
-        //             },
-        //             Vertex {
-        //                 position: [-0.5, 0.5, 1.0], // rear bottom-left
-        //                 color: [1.0, 0.0, 1.0],
-        //                 uv: [0.0, 1.0],
-        //             },
-        //             Vertex {
-        //                 position: [-0.5, -0.5, 1.0], // rear top-left
-        //                 color: [1.0, 1.0, 0.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.5, 0.5, 1.0], // rear bottom-right
-        //                 color: [1.0, 0.0, 0.0],
-        //                 uv: [1.0, 1.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.5, -0.5, 1.0], // rear top-right
-        //                 color: [0.0, 0.0, 1.0],
-        //                 uv: [1.0, 0.0],
-        //             },
-        //         ],
-        //         &texture_data,
-        //         texture_extent,
-        //         &vec![
-        //             InstanceData {
-        //                 transformation: transformation1.data
-        //                     .as_slice()
-        //                     .try_into()
-        //                     .expect("slice with incorect length")
-        //             },
-        //             InstanceData {
-        //                 transformation: transformation2.data
-        //                     .as_slice()
-        //                     .try_into()
-        //                     .expect("slice with incorect length")
-        //             },
-        //             InstanceData {
-        //                 transformation: transformation3.data
-        //                     .as_slice()
-        //                     .try_into()
-        //                     .expect("slice with incorect length")
-        //             },
-        //         ])
-        //     );
-        // }
-
-        // {
-        //     let mut transformation1 = Matrix4::<f32>::identity()
-        //         .append_translation(&Vector3::new(-1.5, 0.0, 0.0));
-        //
-        //     transformation1 = transformation1 * Matrix4::<f32>::from_euler_angles(0.25, -0.75, -0.0);
-        //
-        //     world.geometries.push(skyshard::create_geometry(&mut engine,
-        //         &vec![
-        //             2, 0, 1, // front
-        //             4, 3, 5, // back
-        //             2, 3, 0, 5, 3, 2, // right
-        //             1, 0, 3, 3, 4, 1, // left
-        //             4, 2, 1, 5, 2, 4, // bottom
-        //         ],
-        //         &vec![
-        //             Vertex {
-        //                 position: [0.0, -0.5, 0.0], // front top
-        //                 color: [1.0, 0.0, 0.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [-0.5, 0.5, 0.0], // front left
-        //                 color: [0.0, 1.0, 0.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.5, 0.5, 0.0], // front right
-        //                 color: [0.0, 0.0, 1.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.0, -0.5, 1.0], // rear top
-        //                 color: [1.0, 0.0, 0.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [-0.5, 0.5, 1.0], // rear left
-        //                 color: [0.0, 1.0, 0.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //             Vertex {
-        //                 position: [0.5, 0.5, 1.0], // rear right
-        //                 color: [0.0, 0.0, 1.0],
-        //                 uv: [0.0, 0.0],
-        //             },
-        //         ],
-        //         &texture_data,
-        //         texture_extent,
-        //         &vec![
-        //             InstanceData {
-        //                 transformation: transformation1.data
-        //                     .as_slice()
-        //                     .try_into()
-        //                     .expect("slice with incorect length")
-        //             },
-        //         ]
-        //     ));
-        // }
 
         let mut redraw_requested = true;
         let mut close_requested = false;
@@ -363,7 +213,7 @@ fn main() {
             100.0
         );
 
-        camera.eye(0f32, 0f32, 3f32);
+        camera.eye(0f32, 0f32, 5f32);
         camera.update();
 
         let mut is_cursor_grabbed = false;
@@ -382,6 +232,11 @@ fn main() {
         info!("Starting event loop");
 
         skyshard::render(&mut engine, &mut world, &camera);
+
+        let mut translation: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
+        let mut rotation = 0.0f32;
+        let mut move_speed = 1f32;
+        let mut rotation_speed = 0.01f32;
 
         events_loop.run(move |event, _, control_flow| {
             match event {
@@ -509,6 +364,57 @@ fn main() {
                         (false, false) => {}
                         (true, false) => {
                             skyshard::render(&mut engine, &mut world, &camera);
+
+                            let mut cube = &mut world.geometries[0];
+
+                            if translation.x < -1.0 {
+                                move_speed = 0.05
+                            }
+
+                            if translation.x > 1.0 {
+                                move_speed = -0.05
+                            }
+
+                            translation.x = translation.x + move_speed;
+
+                            rotation = rotation + 0.01;
+
+                            let transformation1 = Matrix4::<f32>::identity()
+                                .append_translation(&translation);
+
+                            let mut transformation2 = Matrix4::<f32>::identity()
+                                .append_translation(&Vector3::new(3.5, 0.0, 0.0));
+
+                            transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, rotation);
+
+                            let mut  transformation3 = Matrix4::<f32>::identity()
+                                .append_translation(&Vector3::new(0.0, 3.0, 1.5));
+
+                            transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.0, rotation, 0.5);
+
+                            let transformations = vec![
+                                InstanceData {
+                                    transformation: transformation1.data
+                                        .as_slice()
+                                        .try_into()
+                                        .expect("slice with incorect length")
+                                },
+                                InstanceData {
+                                    transformation: transformation2.data
+                                        .as_slice()
+                                        .try_into()
+                                        .expect("slice with incorect length")
+                                },
+                                InstanceData {
+                                    transformation: transformation3.data
+                                        .as_slice()
+                                        .try_into()
+                                        .expect("slice with incorect length")
+                                },
+                            ];
+
+                            skyshard::update_geometry(&mut engine, &mut cube, &transformations);
+
                             frame_count += 1;
                             match frames_per_second_time.elapsed() {
                                 Ok(elapsed) => {

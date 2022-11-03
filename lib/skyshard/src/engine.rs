@@ -864,6 +864,19 @@ pub fn create_geometry(
     }
 }
 
+pub fn update_geometry(
+    engine: &mut Engine,
+    geometry: &mut Geometry,
+    instances: &Vec<InstanceData>,
+) {
+    let mut resource_manager = &mut engine.resource_manager;
+    let mut buffer = &mut geometry.instances_buffer;
+    unsafe {
+        resource_manager.copy(&instances, buffer, 0, instances.len());
+        resource_manager.flush(buffer, 0, instances.len());
+    }
+}
+
 pub fn prepare(engine: &mut Engine, world: &mut World) {
 
     let _device: Ref<Device> = (*engine.device).borrow();
@@ -1233,11 +1246,10 @@ fn record_commands(
             }
 
             unsafe {
-                _device.handle().cmd_draw_indexed(
+                _device.handle().cmd_draw(
                     *command_buffer,
-                    geometry.index_buffer.capacity() as u32,
+                    geometry.vertex_buffer.capacity() as u32,
                     geometry.instances_buffer.capacity() as u32,
-                    0,
                     0,
                     0,
                 );
