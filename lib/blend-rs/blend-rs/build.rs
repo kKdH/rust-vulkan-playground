@@ -10,18 +10,20 @@ fn main() -> Result<(), Box<dyn Error>>{
     let out_dir = format!("{}", out_dir.to_str().unwrap());
 
     let generated: Vec<(String, String)> = vec![
-        #[cfg(feature = "blender2_79")]
-        generate("gen/blender2_79.blend", &out_dir),
-        #[cfg(feature = "blender2_80")]
-        generate("gen/blender2_80.blend", &out_dir),
-        #[cfg(feature = "blender2_80x86")]
-        generate("gen/blender2_80x86.blend", &out_dir),
-        #[cfg(feature = "blender2_93")]
-        generate("gen/blender2_93.blend", &out_dir),
-        #[cfg(feature = "blender3_2")]
-        generate("gen/blender3_2.blend", &out_dir),
+        #[cfg(feature = "blender3_4")]
+        generate("gen/blender3_4.blend", &out_dir),
         #[cfg(feature = "blender3_3")]
         generate("gen/blender3_3.blend", &out_dir),
+        #[cfg(feature = "blender3_2")]
+        generate("gen/blender3_2.blend", &out_dir),
+        #[cfg(feature = "blender2_93")]
+        generate("gen/blender2_93.blend", &out_dir),
+        #[cfg(feature = "blender2_80x86")]
+        generate("gen/blender2_80x86.blend", &out_dir),
+        #[cfg(feature = "blender2_80")]
+        generate("gen/blender2_80.blend", &out_dir),
+        #[cfg(feature = "blender2_79")]
+        generate("gen/blender2_79.blend", &out_dir),
     ];
 
     generated.iter().for_each(|(src, _)| {

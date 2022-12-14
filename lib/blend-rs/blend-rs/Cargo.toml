@@ -19,7 +19,8 @@ blender2_80x86 = []
 blender2_93 = []
 blender3_2 = []
 blender3_3 = []
-all = ["blender2_79", "blender2_80", "blender2_80x86", "blender2_93", "blender3_2", "blender3_3"]
+blender3_4 = []
+all = ["blender2_79", "blender2_80", "blender2_80x86", "blender2_93", "blender3_2", "blender3_3", "blender3_4"]
 
 [dependencies]
 blend-inspect-rs = { path = "../blend-inspect-rs" }

@@ -14,7 +14,7 @@ This library belongs to a set of three libraries which are all related to the to
   A Rust library to generated Blender's data structures.
 
 * [blend-rs](https://crates.io/crates/blend-rs):
-  A Rust library to read Blender's .blend files.
+  A Rust library to read objects from Blender's .blend files.
 
 ## Contributions
 All contributions are welcome: ideas, patches, documentation, bug reports, complaints. Any contribution intentionally submitted for inclusion in this crate by you, as defined in the Apache-2.0 license, shall be licensed without any additional terms or conditions.
