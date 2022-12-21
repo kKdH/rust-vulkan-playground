@@ -2,11 +2,12 @@ use std::borrow::Cow;
 use std::ffi::CStr;
 use std::fmt;
 
-use ash::vk::{Handle, Result};
-use log::{debug, error, info, log, warn};
+use ash::vk::Handle;
+use log::{error, info, log};
 use thiserror::Error;
 
 mod util;
+
 pub mod instance;
 pub mod device;
 pub mod surface;
@@ -15,6 +16,7 @@ pub mod swapchain;
 pub mod buffer;
 pub mod renderpass;
 pub mod resources;
+pub mod shaders;
 
 pub trait VulkanObject {
 

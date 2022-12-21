@@ -1,0 +1,18 @@
+[package]
+name = "skyshard_shaders"
+version = "0.1.0"
+authors = ["Elmar Schug <elmar.schug@jayware.org>"]
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+skyshard = { path = ".." }
+
+proc-macro2 = "1.0.49"
+quote = "1.0.23"
+shaderc = "0.8.1"
+syn = { version = "1.0.107", features = ["full"] }
+
+[dev-dependencies]

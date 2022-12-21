@@ -1,0 +1,11 @@
+[package]
+name = "skyshard_shaders_tests"
+version = "0.1.0"
+authors = ["Elmar Schug <elmar.schug@jayware.org>"]
+edition = "2021"
+
+[dependencies]
+skyshard = { path = "../.." }
+skyshard_shaders = { path = ".." }
+
+[dev-dependencies]

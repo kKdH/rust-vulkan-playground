@@ -3,10 +3,10 @@
 #[macro_use]
 extern crate memoffset;
 
-mod assets;
 mod engine;
 mod util;
 
+pub mod assets;
 pub mod entity;
 pub mod graphics;
 

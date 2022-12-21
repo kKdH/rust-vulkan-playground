@@ -1,39 +1,31 @@
 use std::borrow::Borrow;
-use std::cell::{Cell, Ref, RefCell};
+use std::cell::{Ref, RefCell};
 use std::convert::TryInto;
-use std::ffi::{CStr, CString};
-use std::io::Cursor;
-use std::mem::uninitialized;
-use std::ops::Deref;
+use std::io::Write;
 use std::rc::Rc;
 
-use ash::extensions::ext::DebugUtils;
-use ash::extensions::khr;
 use ash::vk;
-use ash::vk::{AccessFlags, CommandBuffer, CommandBufferResetFlags, DrawIndexedIndirectCommand, DrawIndirectCommand, Extent2D, Extent3D, ImageLayout, Offset3D, Rect2D, xcb_connection_t};
-use chrono::Duration;
+use ash::vk::{CommandBufferResetFlags, Offset3D};
 use log::info;
-use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3, Vector4};
-use syn::__private::quote::quote_bind_into_iter;
-use winit::platform::unix::x11::ffi::_XkbDesc;
+use nalgebra::Matrix4;
 use winit::window::Window;
-use crate::assets::AssetsManager;
 
+use crate::assets::AssetsManager;
 use crate::entity::World;
-use crate::graphics::{Extent, Geometry, Material, Position, vulkan};
+use crate::graphics::{Extent, Geometry, Material};
 use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
-use crate::graphics::vulkan::resources::{Buffer, CopyDestination, ResourceManager, Resource, ImageAllocationDescriptor, ImageUsage, Image, ImageFormat};
-use crate::graphics::vulkan::resources::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::renderpass::create_render_pass;
+use crate::graphics::vulkan::resources::{Buffer, CopyDestination, Image, ImageAllocationDescriptor, ImageFormat, ImageUsage, Resource, ResourceManager};
+use crate::graphics::vulkan::resources::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
+use crate::graphics::vulkan::shaders::{FragmentShaderBinary, ShaderModule, VertexShaderBinary};
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 use crate::graphics::vulkan::VulkanObject;
 use crate::util::HasBuilder;
-use crate::util::Version;
 
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
@@ -109,7 +101,12 @@ impl Drop for Engine {
     }
 }
 
-pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
+pub fn create(
+    app_name: &str,
+    window: &Window,
+    vertex_shader: VertexShaderBinary,
+    fragment_shader: FragmentShaderBinary,
+) -> Result<Engine, EngineError> {
 
     let instance = Instance::builder()
         .application_name(app_name)
@@ -211,40 +208,19 @@ pub fn create(app_name: &str, window: &Window) -> Result<Engine, EngineError> {
             }.expect("QueryPool creation failed.");
         }
 
-        // let command_buffer = (*device).borrow_mut().allocate_command_buffer();
-
-        let mut vertex_spv_file = Cursor::new(&include_bytes!("../vert.spv")[..]);
-        let mut frag_spv_file = Cursor::new(&include_bytes!("../frag.spv")[..]);
-
-        let vertex_code = ash::util::read_spv(&mut vertex_spv_file).expect("Failed to read vertex shader spv file");
-        let vertex_shader_info = vk::ShaderModuleCreateInfo::builder().code(&vertex_code);
-
-        let frag_code = ash::util::read_spv(&mut frag_spv_file).expect("Failed to read fragment shader spv file");
-        let frag_shader_info = vk::ShaderModuleCreateInfo::builder().code(&frag_code);
-
         let _device = (*device).borrow();
 
-        let vertex_shader_module = unsafe {
-            _device.handle().create_shader_module(&vertex_shader_info, None)
-        }.expect("Vertex shader module error");
+        let vertex_shader_module = ShaderModule::create(vertex_shader, "main")
+            .and_then(|module| module.load(&_device))
+            .unwrap();
 
-        let fragment_shader_module = unsafe {
-            _device.handle().create_shader_module(&frag_shader_info, None)
-        }.expect("Fragment shader module error");
-
-        let shader_entry_name = CString::new("main").unwrap();
+        let fragment_shader_module = ShaderModule::create(fragment_shader, "main")
+            .and_then(|module| module.load(&_device))
+            .unwrap();
 
         let shader_stage_create_infos = [
-            ash::vk::PipelineShaderStageCreateInfo::builder()
-                .stage(ash::vk::ShaderStageFlags::VERTEX)
-                .module(vertex_shader_module)
-                .name(shader_entry_name.as_c_str())
-                .build(),
-            ash::vk::PipelineShaderStageCreateInfo::builder()
-                .stage(ash::vk::ShaderStageFlags::FRAGMENT)
-                .module(fragment_shader_module)
-                .name(shader_entry_name.as_c_str())
-                .build(),
+            vertex_shader_module.create_pipeline_shader_stage_create_info(),
+            fragment_shader_module.create_pipeline_shader_stage_create_info(),
         ];
 
         let vertex_input_binding_descriptors = [
@@ -1246,10 +1222,11 @@ fn record_commands(
             }
 
             unsafe {
-                _device.handle().cmd_draw(
+                _device.handle().cmd_draw_indexed(
                     *command_buffer,
-                    geometry.vertex_buffer.capacity() as u32,
+                    geometry.index_buffer.capacity() as u32,
                     geometry.instances_buffer.capacity() as u32,
+                    0,
                     0,
                     0,
                 );

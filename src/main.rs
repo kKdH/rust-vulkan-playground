@@ -21,12 +21,14 @@ use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEve
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 
-use blend_rs::blend::{PointerLike, StringLike};
+use blend_rs::blend::{NameLike, PointerLike, StringLike};
 use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, Vertex};
 use skyshard::entity::World;
 use skyshard::graphics::{Camera, Extent};
+
+mod shaders;
 
 fn main() {
 
@@ -68,7 +70,12 @@ fn main() {
         .unwrap();
 
     {
-        let mut engine = skyshard::create("Rust Vulkan Example", &window).unwrap();
+        let mut engine = skyshard::create(
+            "Rust Vulkan Example",
+            &window,
+            shaders::vs::shader(),
+            shaders::fs::shader(),
+        ).unwrap();
         let asset_manager = engine.asset_manager();
         let mut world = World::new();
 
@@ -92,10 +99,12 @@ fn main() {
             let blend_reader = blend_rs::blend::read(&blend_data)
                     .expect(&format!("Failed to read: {}", file_path));
 
+            let object_name = "tetrahedron";
+
             let object: &Object = blend_reader.iter::<Object>()
                 .unwrap()
-                .find(|object| object.id.get_name() == "Cube")
-                .unwrap();
+                .find(|object| object.id.get_name() == object_name)
+                .expect(format!("blend file should contain object '{}'", object_name).as_str());
 
             let mesh: &Mesh = blend_reader.deref_single(&object.data.as_instance_of::<Mesh>())
                 .unwrap();
@@ -103,21 +112,22 @@ fn main() {
             let vertices: Vec<Vertex> = {
 
                 let mesh_polygons = blend_reader.deref(&mesh.mpoly)
-                    .expect("mesh of object 'Cube' should have polygons");
+                    .expect(format!("mesh of object '{}' should have polygons", object_name).as_str());
 
                 let mesh_loops: Vec<&MLoop> = blend_reader.deref(&mesh.mloop)
-                    .expect("mesh of object 'Cube' should have loops")
+                    .expect(format!("mesh of object '{}' should have loops", object_name).as_str())
                     .collect();
 
                 let mesh_uvs: Vec<&MLoopUV> = blend_reader.deref(&mesh.mloopuv)
-                    .expect("mesh of object 'Cube' should have UVs")
+                    .expect(format!("mesh of object '{}' should have UVs", object_name).as_str())
                     .collect();
 
                 let mesh_vertices: Vec<&MVert> = blend_reader.deref(&mesh.mvert)
-                    .expect("mesh of object 'Cube' should have vertices")
+                    .expect(format!("mesh of object '{}' should have vertices", object_name).as_str())
                     .collect();
 
                 mesh_polygons
+                    .filter(|polygon| polygon.totloop == 3) // filter for triangles
                     .map(|polygon| {
                         (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter()
                             .map(|loop_index| {
@@ -143,7 +153,7 @@ fn main() {
                     .map(|list| {
                         blend_reader.deref_single(&list.first.as_instance_of::<Material>()).unwrap()
                     })
-                    .unwrap();
+                    .expect("A material to load for the object");
 
                 let tree: &bNodeTree = blend_reader.deref_single(&material.nodetree)
                     .unwrap();
@@ -371,11 +381,11 @@ fn main() {
                             let mut cube = &mut world.geometries[0];
 
                             if translation.x < -1.0 {
-                                move_speed = 0.05
+                                move_speed = 0.025
                             }
 
                             if translation.x > 1.0 {
-                                move_speed = -0.05
+                                move_speed = -0.025
                             }
 
                             translation.x = translation.x + move_speed;
@@ -465,4 +475,9 @@ fn load_image(filepath: &'static str) -> (Extent, Vec<u8>) {
     let bytes = &buf[..info.buffer_size()];
 
     (Extent::from(info.width, info.width, 1), Vec::from(bytes))
+}
+
+#[cfg(test)]
+mod test {
+
 }

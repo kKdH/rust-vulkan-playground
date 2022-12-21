@@ -1,74 +1,51 @@
 
-// pub mod vs {
-//     vulkano_shaders::shader! {
-//             ty: "vertex",
-//             src: "
-//                 #version 450
-//                 layout(location = 0) in vec3 position;
-//                 layout(location = 1) in vec2 tex_coord;
-//                 layout(location = 2) in vec3 position_offset;
-//                 layout(location = 3) in float scale;
-//
-//                 layout(location = 0) out vec2 tex_coords;
-//
-//                 layout(set = 0, binding = 0) uniform Data {
-//                     mat4 mvp;
-//                 } data;
-//
-//                 layout(set = 0, binding = 0) uniform Model {
-//                     mat4 translation;
-//                 } model;
-//
-//                 void main() {
-//                    gl_Position = data.mvp * vec4(position, 1.0);
-//                    tex_coords = tex_coord;
-//                 }
-// 			"
-//         }
-// }
+pub mod vs {
+    skyshard_shaders::shader! {
+        kind: "Vertex",
+        src: "
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
 
-// pub mod fs {
-//     vulkano_shaders::shader! {
-//             ty: "fragment",
-//             src: "
-// 				#version 450
-// 				layout(location = 0) out vec4 f_color;
-//                 layout(location = 0) in vec2 tex_coords;
-//
-//                 layout(set = 0, binding = 1) uniform sampler2D tex;
-//
-// 				void main() {
-//                     f_color = texture(tex, tex_coords);
-// 				}
-// 			"
-//         }
-// }
+            layout(binding = 0) uniform UniformBufferObject {
+                mat4 mvp;
+            } ubo;
 
-/*
-pub mod tess_ctrl {
-    vulkano_shaders::shader! {
-            ty: "tess_ctrl",
-            src: "
-				#version 450
+            layout(location = 0) in vec3 inPosition;
+            layout(location = 1) in vec3 inColor;
+            layout(location = 2) in vec2 inTextCord;
 
-                layout(vertices = 3) out;
+            layout(location = 3) in mat4 transformation; // consumes location 3, 4, 5, 6
 
-				void main() {
+            layout(location = 0) out vec3 outColor;
+            layout(location = 1) out vec2 outTextCord;
 
-				}
-			"
-        }
+            void main() {
+                gl_Position = ubo.mvp * transformation * vec4(inPosition, 1.0);
+                outColor = inColor;
+                outTextCord = inTextCord;
+            }
+        "
+    }
 }
 
-pub mod tess_eval {
-    vulkano_shaders::shader! {
-            ty: "tess_eval",
-            src: "
-				#version 450
-				void main() {
+pub mod fs {
+    skyshard_shaders::shader! {
+        kind: "Fragment",
+        src: "
+            #version 450
+            #extension GL_ARB_separate_shader_objects : enable
 
-				}
-			"
-        }
+            layout(location = 0) in vec3 inFragColor;
+            layout(location = 1) in vec2 inTextCord;
+
+            layout(set = 1, binding = 0) uniform sampler2D texture_sampler;
+
+            layout(location = 0) out vec4 outColor;
+
+            void main() {
+                vec3 color = texture(texture_sampler, inTextCord).xyz;
+                outColor = vec4(color, 1.0f);
+            }
+        "
+    }
 }
-*/

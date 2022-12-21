@@ -2,7 +2,6 @@ pub mod vulkan;
 
 mod camera;
 
-use nalgebra::Matrix4;
 use crate::engine::{InstanceData, Vertex};
 pub use crate::graphics::camera::Camera;
 use crate::graphics::vulkan::resources::{Buffer, Image};

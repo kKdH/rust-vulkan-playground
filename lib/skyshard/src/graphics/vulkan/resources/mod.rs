@@ -81,7 +81,7 @@ impl ResourceManager {
                 .map_err(|error| ResourceManagerError::BindBufferError { name })
         }?;
 
-        info!("Created buffer '{}' as {:?} with a capacity for {} elements respectifely {} bytes ({} bytes pre element).", name, descriptor.usage, capacity, size, element_size);
+        info!("Created buffer '{}' as {:?} with a capacity for {} elements respectively {} bytes ({} bytes pre element).", name, descriptor.usage, capacity, size, element_size);
 
         Ok(Buffer::new(name, capacity, element_size, buffer, allocation))
     }
