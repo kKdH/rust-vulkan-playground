@@ -24,7 +24,7 @@ all = ["blender2_79", "blender2_80", "blender2_80x86", "blender2_93", "blender3_
 
 [dependencies]
 blend-inspect-rs = { path = "../blend-inspect-rs" }
-thiserror = "1.0.31"
+thiserror = "1.0.38"
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"

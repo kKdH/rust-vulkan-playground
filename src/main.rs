@@ -1,4 +1,3 @@
-extern crate ash;
 extern crate skyshard;
 extern crate winit;
 
@@ -19,7 +18,7 @@ use rand::Rng;
 use winit::dpi::PhysicalPosition;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
+use winit::window::{CursorGrabMode, WindowBuilder};
 
 use blend_rs::blend::{NameLike, PointerLike, StringLike};
 use blend_rs::blend::traverse::Named;
@@ -360,8 +359,17 @@ fn main() {
                                         (window.inner_size().width as f32) * 0.5,
                                         (window.inner_size().height as f32) * 0.5
                                     )).unwrap();
-                                    window.set_cursor_grab(is_cursor_grabbed);
+
                                     window.set_cursor_visible(!is_cursor_grabbed);
+                                    if is_cursor_grabbed {
+                                        window.set_cursor_grab(CursorGrabMode::Confined)
+                                            .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+                                            .unwrap();
+                                    }
+                                    else {
+                                        window.set_cursor_grab(CursorGrabMode::None)
+                                            .unwrap();
+                                    }
                                 }
                                 _ => {}
                             }

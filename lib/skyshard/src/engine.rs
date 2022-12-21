@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::cell::{Ref, RefCell};
 use std::convert::TryInto;
+use std::ffi::{CStr, CString};
 use std::io::Write;
 use std::rc::Rc;
 
@@ -9,6 +10,7 @@ use ash::vk::{CommandBufferResetFlags, Offset3D};
 use log::info;
 use nalgebra::Matrix4;
 use winit::window::Window;
+use raw_window_handle::HasRawWindowHandle;
 
 use crate::assets::AssetsManager;
 use crate::entity::World;
@@ -116,10 +118,10 @@ pub fn create(
             // String::from("VK_LAYER_LUNARG_mem_tracker")
             // String::from("VK_LAYER_LUNARG_api_dump"),
         ]))
-        .extensions(&ash_window::enumerate_required_extensions(window)
+        .extensions(&ash_window::enumerate_required_extensions(&window)
             .expect("Failed to enumerate required vulkan extensions to create a surface!")
             .iter()
-            .map(|ext| ext.to_string_lossy().into_owned())
+            .map(|ptr| unsafe { String::from(CStr::from_ptr(*ptr).to_string_lossy()) })
             .collect::<Vec<_>>())
         .debug(true,DebugLevel::DEBUG)
         .build()
