@@ -1,7 +1,9 @@
+extern crate ash;
+
 use std::borrow::Borrow;
 use std::cell::{Ref, RefCell};
 use std::convert::TryInto;
-use std::ffi::{CStr, CString};
+use std::ffi::CStr;
 use std::io::Write;
 use std::rc::Rc;
 
@@ -10,7 +12,6 @@ use ash::vk::{CommandBufferResetFlags, Offset3D};
 use log::info;
 use nalgebra::Matrix4;
 use winit::window::Window;
-use raw_window_handle::HasRawWindowHandle;
 
 use crate::assets::AssetsManager;
 use crate::entity::World;
@@ -494,7 +495,7 @@ pub fn create(
 
         renderpass = create_render_pass(device.clone(), surface.clone());
 
-        let default_graphic_pipeline_info = vk::GraphicsPipelineCreateInfo::builder()
+        let default_graphic_pipeline_info = ::ash::vk::GraphicsPipelineCreateInfo::builder()
             .flags(::ash::vk::PipelineCreateFlags::ALLOW_DERIVATIVES)
             .stages(&shader_stage_create_infos)
             .vertex_input_state(&vertex_input_state_info)

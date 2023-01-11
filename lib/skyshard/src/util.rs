@@ -1,7 +1,8 @@
 use std::convert::TryFrom;
-use thiserror::Error;
-use regex::Regex;
 use std::num::ParseIntError;
+
+use regex::Regex;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 #[error("Failed to parse string '{value}' into a version!")]
@@ -76,7 +77,6 @@ pub trait HasBuilder {
 #[cfg(test)]
 mod tests {
     use hamcrest2::prelude::*;
-    use crate::util::Version;
 
     #[test]
     fn test_vk_version() {

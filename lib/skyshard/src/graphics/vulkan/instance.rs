@@ -1,24 +1,18 @@
-use std::alloc::handle_alloc_error;
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::convert::TryFrom;
 use std::convert::TryInto;
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::fmt;
-use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
+use std::fmt::Debug;
 use std::rc::Rc;
-use std::time::SystemTime;
 
-use ash::vk::{DebugUtilsMessageSeverityFlagsEXT, Handle};
-use chrono::prelude::*;
-use log::{debug, info, warn, error};
+use ash::vk::Handle;
+use log::{debug, error, info};
 use thiserror::Error;
 
+use crate::graphics::vulkan::{DebugLevel, DebugUtil, VulkanError, VulkanObject};
 use crate::graphics::vulkan::device::PhysicalDevice;
-use crate::graphics::vulkan::{VulkanError, DebugLevel, DebugUtil, VulkanObject};
-use crate::util::{InvalidVersionStringError, Version};
-use std::any::Any;
+use crate::util::Version;
 
 #[derive(Error, Debug)]
 pub enum  InstanceInstantiationError {

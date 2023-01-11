@@ -1,8 +1,5 @@
-use crate::graphics::vulkan::device::DeviceRef;
+use std::cell::RefCell;
 use std::rc::Rc;
-use crate::graphics::vulkan::queue::QueueFamily;
-use ash::vk::{Handle};
-use std::cell::{RefCell, Ref};
 
 pub struct CommandBuffer {
     inner: Rc<RefCell<InternalCommandBuffer>>,

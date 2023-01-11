@@ -22,7 +22,6 @@ pub trait GeneratedBlendStruct : Sized {
 pub trait PointerLike<T> : Sized
 where T: PointerTarget<T> {
 
-    #[feature(generic_associated_types)] //TODO: Switch to stable rust as soon as GATs are released.
     type Pointer<A: PointerTarget<A>>: PointerLike<A>;
 
     fn as_instance_of<B: PointerTarget<B>>(&self) -> Self::Pointer<B>;

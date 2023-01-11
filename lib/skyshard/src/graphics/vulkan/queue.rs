@@ -1,10 +1,9 @@
 use std::fmt;
-use std::rc::{Weak, Rc};
-use std::cell::RefCell;
-use crate::graphics::vulkan::device::PhysicalDevice;
+use std::fmt::Debug;
 use std::ops::BitAnd;
-use log::{debug, info};
-use std::fmt::{Formatter, Debug};
+use std::rc::Rc;
+
+use log::info;
 
 pub type DeviceQueueRef = Rc<DeviceQueue>;
 

@@ -3,14 +3,14 @@ use std::rc::{Rc, Weak};
 
 use ash::extensions::khr;
 use ash::vk;
+use ash::vk::Handle;
 use log::info;
 
-use crate::graphics::vulkan::device::{DeviceRef, PhysicalDevice, PhysicalDeviceRef};
-use crate::graphics::vulkan::instance::Instance;
-use crate::graphics::vulkan::queue::{DeviceQueue, DeviceQueueRef};
-use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainError, SwapchainRef};
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
-use ash::vk::Handle;
+use crate::graphics::vulkan::device::PhysicalDeviceRef;
+use crate::graphics::vulkan::instance::Instance;
+use crate::graphics::vulkan::queue::DeviceQueueRef;
+use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 
 pub type SurfaceRef = Rc<RefCell<Surface>>;
 

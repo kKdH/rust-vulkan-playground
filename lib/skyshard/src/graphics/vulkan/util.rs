@@ -1,8 +1,5 @@
-use ash::vk::Extent3D;
 use crate::graphics::Extent;
 use crate::util::Version;
-
-
 
 impl From<&Version> for u32 {
     fn from(value: &Version) -> Self {

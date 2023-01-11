@@ -1,9 +1,5 @@
-use std::any::TypeId;
-use std::num::NonZeroU64;
-use std::ptr::addr_of_mut;
-use std::slice::Iter;
 use std::sync::atomic::{AtomicU64, Ordering};
-use crate::engine::Vertex;
+
 use crate::graphics::Geometry;
 
 pub struct World {

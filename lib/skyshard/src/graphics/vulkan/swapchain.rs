@@ -1,28 +1,24 @@
 use core::fmt;
-use std::any::Any;
 use std::borrow::{Borrow, BorrowMut};
-use std::cell::Cell;
-use std::fmt::{Debug, Formatter};
-use std::ops::{BitAnd, Deref};
-use std::rc::{Rc, Weak};
-use std::result;
+use std::fmt::Debug;
+use std::rc::Rc;
 use std::result::Result;
 
-use ash::{Instance, vk};
+use ash::vk;
 use ash::extensions::khr;
-use ash::vk::{Extent3D, Handle, ImageView, MemoryAllocateInfo};
+use ash::vk::Handle;
 use log::{debug, info};
-use SwapchainError::{PresentationNotSupportedError, SwapchainInstantiationError};
 use thiserror::Error;
+
+use SwapchainError::PresentationNotSupportedError;
 
 use crate::graphics::Extent;
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
-use crate::graphics::vulkan::device::{Device, DeviceRef};
-use crate::graphics::vulkan::instance::InstanceRef;
+use crate::graphics::vulkan::device::DeviceRef;
+use crate::graphics::vulkan::queue::DeviceQueueRef;
 use crate::graphics::vulkan::resources::{ImageAllocationDescriptor, ImageFormat, ImageUsage, MemoryLocation};
 use crate::graphics::vulkan::resources::ResourceManager;
-use crate::graphics::vulkan::queue::DeviceQueueRef;
-use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
+use crate::graphics::vulkan::surface::SurfaceRef;
 use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
 use crate::util::HasBuilder;
 

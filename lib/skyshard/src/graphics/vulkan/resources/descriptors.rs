@@ -1,7 +1,7 @@
-use std::ops::{BitOr, BitOrAssign};
+use std::ops::BitOr;
+
 use crate::graphics::Extent;
 use crate::graphics::vulkan::resources::ResourceManagerError;
-
 
 #[derive(Debug)]
 pub struct BufferAllocationDescriptor<const UsagesCount: usize> {

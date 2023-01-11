@@ -1,13 +1,9 @@
 use proc_macro::TokenStream;
-use std::fs::File;
-use std::io::Write;
-use std::os::linux::raw::ino_t;
 
 use proc_macro2::{Ident, Literal};
 use quote::quote;
 use syn::{LitStr, Token};
 use syn::parse::ParseStream;
-
 
 struct ShaderSource {
     kind: ::shaderc::ShaderKind,
