@@ -9,7 +9,7 @@ license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]
-blend-inspect-rs = "0.3.0"
+blend-inspect-rs = { path = "../blend-inspect-rs" }
 itertools = "0.10.5"
 proc-macro2 = "1.0.49"
 quote = "1.0.23"

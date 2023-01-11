@@ -23,11 +23,11 @@ blender3_4 = []
 all = ["blender2_79", "blender2_80", "blender2_80x86", "blender2_93", "blender3_2", "blender3_3", "blender3_4"]
 
 [dependencies]
-blend-inspect-rs = "0.3.0"
+blend-inspect-rs = { path = "../blend-inspect-rs" }
 thiserror = "1.0.38"
 
 [dev-dependencies]
 hamcrest2 = "0.3.0"
 
 [build-dependencies]
-blend-bindgen-rs = "0.5.0"
+blend-bindgen-rs = { path = "../blend-bindgen-rs" }
