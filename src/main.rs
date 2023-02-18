@@ -98,7 +98,7 @@ fn main() {
             let blend_reader = blend_rs::blend::read(&blend_data)
                     .expect(&format!("Failed to read: {}", file_path));
 
-            let object_name = "tetrahedron";
+            let object_name = "cube";// "tetrahedron";
 
             let object: &Object = blend_reader.iter::<Object>()
                 .unwrap()
@@ -125,23 +125,30 @@ fn main() {
                     .expect(format!("mesh of object '{}' should have vertices", object_name).as_str())
                     .collect();
 
-                mesh_polygons
-                    .filter(|polygon| polygon.totloop == 3) // filter for triangles
-                    .map(|polygon| {
-                        (polygon.loopstart..polygon.loopstart + polygon.totloop).into_iter()
-                            .map(|loop_index| {
-                                let uv = mesh_uvs[loop_index as usize].uv;
-                                let position = mesh_vertices[mesh_loops[loop_index as usize].v as usize].co;
-                                Vertex {
-                                    position: [position[0], position[2] * -1.0, position[1]], // # blender's z-up to y-up: x,y,z -> x,z,-y
-                                    color: [0.0, 0.0, 0.0],
-                                    uv: [uv[0], (uv[1] * -1.0) + 1.0], // blender: u,v -> u,1-v
-                                }
-                            })
-                            .collect::<Vec<Vertex>>()
+                let mk_vert = |index| {
+                    let uv = mesh_uvs[index as usize].uv;
+                    let position = mesh_vertices[mesh_loops[index as usize].v as usize].co;
+                    Vertex {
+                        position: [position[0], position[2] * -1.0, position[1]], // # blender's z-up to y-up: x,y,z -> x,z,-y
+                        color: [0.0, 0.0, 0.0],
+                        uv: [uv[0], (uv[1] * -1.0) + 1.0], // blender: u,v -> u,1-v
+                    }
+                };
+
+                mesh_polygons.fold(Vec::new(), | mut vertices, polygon| {
+
+                        vertices.push(mk_vert(polygon.loopstart));
+                        vertices.push(mk_vert(polygon.loopstart + 1));
+                        vertices.push(mk_vert(polygon.loopstart + 2));
+
+                        if polygon.totloop == 4 {
+                            vertices.push(mk_vert(polygon.loopstart));
+                            vertices.push(mk_vert(polygon.loopstart + 2));
+                            vertices.push(mk_vert(polygon.loopstart + 3));
+                        }
+
+                        vertices
                     })
-                    .flatten()
-                    .collect()
             };
 
             let indices = (0u32..vertices.len() as u32).collect();
