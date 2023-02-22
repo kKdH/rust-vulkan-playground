@@ -25,7 +25,7 @@ use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, Vertex};
 use skyshard::entity::World;
-use skyshard::graphics::{Camera, Extent};
+use skyshard::graphics::{Camera, Extent, MSAA};
 
 mod shaders;
 
@@ -74,7 +74,9 @@ fn main() {
             &window,
             shaders::vs::shader(),
             shaders::fs::shader(),
+            MSAA::X2,
         ).unwrap();
+
         let asset_manager = engine.asset_manager();
         let mut world = World::new();
 

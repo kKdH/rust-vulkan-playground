@@ -2,6 +2,7 @@ pub mod vulkan;
 
 mod camera;
 
+use std::fmt::{Display, Formatter};
 use crate::engine::{InstanceData, Vertex};
 pub use crate::graphics::camera::Camera;
 use crate::graphics::vulkan::resources::{Buffer, Image};
@@ -67,4 +68,29 @@ pub struct Material {
     pub texture_buffer: Buffer<u8>,
     pub texture_image: Image,
     pub texture_image_view: ::ash::vk::ImageView,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum MSAA {
+    Off,
+    X2,
+    X4,
+    X8,
+    X16,
+    X32,
+    X64,
+}
+
+impl Display for MSAA {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MSAA::Off => write!(formatter, "off"),
+            MSAA::X2 => write!(formatter, "2x"),
+            MSAA::X4 => write!(formatter, "4x"),
+            MSAA::X8 => write!(formatter, "8x"),
+            MSAA::X16 => write!(formatter, "16x"),
+            MSAA::X32 => write!(formatter, "32x"),
+            MSAA::X64 => write!(formatter, "64x"),
+        }
+    }
 }

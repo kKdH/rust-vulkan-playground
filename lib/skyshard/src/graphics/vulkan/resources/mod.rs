@@ -118,7 +118,7 @@ impl ResourceManager {
                 .map_err(|error| ResourceManagerError::BindBufferError { name })
         }?;
 
-        info!("Created image '{}' as {:?} with an extent of {}x{}x{}.", name, descriptor.usage, descriptor.extent.width, descriptor.extent.height, descriptor.extent.depth);
+        info!("Created image '{}' as {:?} with an extent of {}x{}x{} (sampling: {:?}).", name, descriptor.usage, descriptor.extent.width, descriptor.extent.height, descriptor.extent.depth, descriptor.samples);
 
         Ok(Image::new(
             name,

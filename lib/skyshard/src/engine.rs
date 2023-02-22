@@ -8,14 +8,14 @@ use std::io::Write;
 use std::rc::Rc;
 
 use ash::vk;
-use ash::vk::{CommandBufferResetFlags, Offset3D};
+use ash::vk::{CommandBufferResetFlags, Offset3D, SampleCountFlags};
 use log::info;
 use nalgebra::Matrix4;
 use winit::window::Window;
 
 use crate::assets::AssetsManager;
 use crate::entity::World;
-use crate::graphics::{Extent, Geometry, Material};
+use crate::graphics::{Extent, Geometry, Material, MSAA};
 use crate::graphics::Camera;
 use crate::graphics::vulkan::DebugLevel;
 use crate::graphics::vulkan::device::{Device, DeviceRef};
@@ -29,6 +29,7 @@ use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
 use crate::graphics::vulkan::swapchain::{Swapchain, SwapchainRef};
 use crate::graphics::vulkan::VulkanObject;
 use crate::util::HasBuilder;
+
 
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
@@ -109,6 +110,7 @@ pub fn create(
     window: &Window,
     vertex_shader: VertexShaderBinary,
     fragment_shader: FragmentShaderBinary,
+    msaa: MSAA,
 ) -> Result<Engine, EngineError> {
 
     let instance = Instance::builder()
@@ -186,6 +188,7 @@ pub fn create(
                 Rc::clone(&device),
                 Rc::clone(queue),
                 Rc::clone(&surface),
+                msaa,
                 &mut resource_manager,
             ).unwrap()
         };
@@ -340,9 +343,9 @@ pub fn create(
             .build();
 
         let multisample_state_info = vk::PipelineMultisampleStateCreateInfo::builder()
-            .sample_shading_enable(false)
-            .rasterization_samples(vk::SampleCountFlags::TYPE_1)
-            .min_sample_shading(1.0)
+            .sample_shading_enable(true)
+            .min_sample_shading(0.2)
+            .rasterization_samples(msaa.into())
             .alpha_to_coverage_enable(false)
             .alpha_to_one_enable(false)
             .build();
@@ -493,7 +496,7 @@ pub fn create(
             }
         };
 
-        renderpass = create_render_pass(device.clone(), surface.clone());
+        renderpass = create_render_pass(device.clone(), surface.clone(), msaa);
 
         let default_graphic_pipeline_info = ::ash::vk::GraphicsPipelineCreateInfo::builder()
             .flags(::ash::vk::PipelineCreateFlags::ALLOW_DERIVATIVES)
@@ -540,15 +543,13 @@ pub fn create(
         }.expect("Failed to create graphic pipelines");
 
         frame_buffers = swapchain.views().iter().map(|view| {
-            let attachments = [*view, *swapchain.depth_image_view()];
-
+            let attachments = [*swapchain.color_image_view(), *swapchain.depth_image_view(), *view];
             let create_info = ash::vk::FramebufferCreateInfo::builder()
                 .render_pass(renderpass)
                 .attachments(&attachments)
                 .width(window.inner_size().width)
                 .height(window.inner_size().height)
                 .layers(1);
-
             unsafe {
                 _device.handle().create_framebuffer(&create_info, None)
             }.unwrap()
@@ -747,7 +748,8 @@ pub fn create_geometry(
         resource_manager.create_image("texture-image", &ImageAllocationDescriptor {
             usage: [ImageUsage::Sampled, ImageUsage::TransferDestination],
             extent: texture_extent,
-            format: ImageFormat::RGBA8,
+            format: ImageFormat::R8G8B8A8_UNORM,
+            samples: SampleCountFlags::TYPE_1,
             memory: MemoryLocation::GpuOnly
         }).expect("Failed to create texture image")
     };

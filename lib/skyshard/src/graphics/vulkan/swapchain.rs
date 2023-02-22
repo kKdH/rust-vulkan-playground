@@ -6,13 +6,13 @@ use std::result::Result;
 
 use ash::vk;
 use ash::extensions::khr;
-use ash::vk::Handle;
+use ash::vk::{Handle, SampleCountFlags};
 use log::{debug, info};
 use thiserror::Error;
 
 use SwapchainError::PresentationNotSupportedError;
 
-use crate::graphics::Extent;
+use crate::graphics::{Extent, MSAA};
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
 use crate::graphics::vulkan::device::DeviceRef;
 use crate::graphics::vulkan::queue::DeviceQueueRef;
@@ -42,6 +42,8 @@ pub struct Swapchain {
     handle: vk::SwapchainKHR,
     images: Vec<vk::Image>,
     views: Vec<vk::ImageView>,
+    color_image: vk::Image,
+    color_image_view: vk::ImageView,
     depth_image: vk::Image,
     depth_image_view: vk::ImageView,
     device: DeviceRef,
@@ -50,7 +52,7 @@ pub struct Swapchain {
 
 impl Swapchain {
 
-    pub fn new(device: DeviceRef, queue: DeviceQueueRef, surface: SurfaceRef, resource_manager: &mut ResourceManager) -> Result<SwapchainRef, SwapchainError> {
+    pub fn new(device: DeviceRef, queue: DeviceQueueRef, surface: SurfaceRef, msaa: MSAA, resource_manager: &mut ResourceManager) -> Result<SwapchainRef, SwapchainError> {
 
         let _device = (*device).borrow();
         let instance = _device.instance();
@@ -158,12 +160,50 @@ impl Swapchain {
                 })
                 .collect();
 
+            let color_image: vk::Image = unsafe {
+
+                let image = resource_manager.create_image("color-image", &ImageAllocationDescriptor {
+                    usage: [ImageUsage::Sampled, ImageUsage::TransferSource, ImageUsage::TransferDestination],
+                    extent: Extent::from(resolution.width, resolution.height, 1),
+                    format: ImageFormat::R8G8B8A8_SRGB,
+                    samples: msaa.into(),
+                    memory: MemoryLocation::GpuOnly,
+                }).expect("color image");
+
+                *image.handle()
+            };
+
+            let color_image_view: vk::ImageView = {
+                let create_view_info = vk::ImageViewCreateInfo::builder()
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(ash::vk::Format::R8G8B8A8_SRGB)
+                    .components(vk::ComponentMapping {
+                        r: vk::ComponentSwizzle::R,
+                        g: vk::ComponentSwizzle::G,
+                        b: vk::ComponentSwizzle::B,
+                        a: vk::ComponentSwizzle::A,
+                    })
+                    .subresource_range(vk::ImageSubresourceRange {
+                        aspect_mask: vk::ImageAspectFlags::COLOR,
+                        base_mip_level: 0,
+                        level_count: 1,
+                        base_array_layer: 0,
+                        layer_count: 1,
+                    })
+                    .image(color_image);
+
+                unsafe {
+                    _device.handle().create_image_view(&create_view_info, None)
+                }.unwrap()
+            };
+
             let depth_image: vk::Image = unsafe {
 
                 let image = resource_manager.create_image("depth-image", &ImageAllocationDescriptor {
                     usage: [ImageUsage::DepthStencilAttachment],
                     extent: Extent::from(resolution.width, resolution.height, 1),
                     format: ImageFormat::DepthStencil,
+                    samples: SampleCountFlags::TYPE_1,
                     memory: MemoryLocation::GpuOnly
                 }).expect("depth image");
 
@@ -199,6 +239,8 @@ impl Swapchain {
                 handle,
                 images,
                 views,
+                color_image,
+                color_image_view,
                 depth_image,
                 depth_image_view,
                 device: device.clone(),
@@ -220,6 +262,10 @@ impl Swapchain {
 
     pub fn views(&self) -> &Vec<ash::vk::ImageView> {
         &self.views
+    }
+
+    pub fn color_image_view(&self) -> &ash::vk::ImageView {
+        &self.color_image_view
     }
 
     pub fn depth_image_view(&self) -> &ash::vk::ImageView {

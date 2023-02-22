@@ -1,7 +1,9 @@
+use crate::graphics::MSAA;
 use crate::graphics::vulkan::device::DeviceRef;
 use crate::graphics::vulkan::surface::SurfaceRef;
 
-pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::RenderPass {
+
+pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef, msaa: MSAA) -> ash::vk::RenderPass {
 
     let _device = (*device).borrow();
     let _surface = (*surface).borrow();
@@ -11,13 +13,13 @@ pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::Re
     let attachments = [
         ash::vk::AttachmentDescription::builder()
             .format(surface_format.format)
-            .samples(ash::vk::SampleCountFlags::TYPE_1)
+            .samples(msaa.into())
             .load_op(ash::vk::AttachmentLoadOp::CLEAR)
             .store_op(ash::vk::AttachmentStoreOp::STORE)
             .stencil_load_op(ash::vk::AttachmentLoadOp::DONT_CARE)
             .stencil_store_op(ash::vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(ash::vk::ImageLayout::UNDEFINED)
-            .final_layout(ash::vk::ImageLayout::PRESENT_SRC_KHR)
+            .final_layout(ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
             .build(),
         ash::vk::AttachmentDescription::builder()
             .format(ash::vk::Format::D32_SFLOAT_S8_UINT) // TODO: check hardware support
@@ -28,18 +30,37 @@ pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::Re
             .stencil_store_op(ash::vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(ash::vk::ImageLayout::UNDEFINED)
             .final_layout(ash::vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .build()
+            .build(),
+        ash::vk::AttachmentDescription::builder()
+            .format(surface_format.format)
+            .samples(ash::vk::SampleCountFlags::TYPE_1)
+            .load_op(ash::vk::AttachmentLoadOp::DONT_CARE)
+            .store_op(ash::vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(ash::vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(ash::vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(ash::vk::ImageLayout::UNDEFINED)
+            .final_layout(ash::vk::ImageLayout::PRESENT_SRC_KHR)
+            .build(),
     ];
 
-    let color_attachment_refs = [ash::vk::AttachmentReference {
-        attachment: 0,
-        layout: ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    }];
+    let color_attachment_refs = [
+        ash::vk::AttachmentReference {
+            attachment: 0,
+            layout: ash::vk::ImageLayout::PRESENT_SRC_KHR,
+        }
+    ];
 
     let depth_attachment_ref = ash::vk::AttachmentReference {
         attachment: 1,
         layout: ash::vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
     };
+
+    let color_attachment_resolve_refs = [
+        ash::vk::AttachmentReference {
+            attachment: 2,
+            layout: ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        }
+    ];
 
     let dependencies = [
         ash::vk::SubpassDependency::builder()
@@ -65,6 +86,7 @@ pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::Re
         ash::vk::SubpassDescription::builder()
             .pipeline_bind_point(ash::vk::PipelineBindPoint::GRAPHICS)
             .color_attachments(&color_attachment_refs)
+            .resolve_attachments(&color_attachment_resolve_refs)
             .depth_stencil_attachment(&depth_attachment_ref)
             .build(),
     ];

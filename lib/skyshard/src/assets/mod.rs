@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::fs::{read, read_dir};
-use log::{debug, info};
-use nalgebra::{inf, Vector3};
 
 use thiserror::Error;
-use crate::Engine;
+
+pub mod mesh;
 
 type Result<T, E = AssetsManagerError> = ::std::result::Result<T, E>;
 

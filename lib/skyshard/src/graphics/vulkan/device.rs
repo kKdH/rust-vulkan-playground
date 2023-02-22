@@ -8,8 +8,9 @@ use std::rc::{Rc, Weak};
 
 use std::mem::MaybeUninit;
 
-use ash::vk::{Handle, CommandPoolResetFlags};
+use ash::vk::{Handle, CommandPoolResetFlags, SampleCountFlags};
 use log::{debug, info};
+use nalgebra::max;
 use thiserror::Error;
 
 use crate::graphics::vulkan::device::DeviceError::NoSatisfyingQueueFamilyFound;
@@ -89,6 +90,7 @@ impl Device {
                 .fill_mode_non_solid(true)
                 .pipeline_statistics_query(true)
                 .sampler_anisotropy(true)
+                .sample_rate_shading(true)
                 .build();
 
             let mut buffer_features = ::ash::vk::PhysicalDeviceBufferDeviceAddressFeatures::builder()
@@ -238,6 +240,20 @@ impl PhysicalDevice {
                 properties
             )
         };
+
+        fn max_sample_count(flags: SampleCountFlags) -> SampleCountFlags {
+            if flags.as_raw() & SampleCountFlags::TYPE_64.as_raw() != 0 { return SampleCountFlags::TYPE_64 }
+            if flags.as_raw() & SampleCountFlags::TYPE_32.as_raw() != 0 { return SampleCountFlags::TYPE_32 }
+            if flags.as_raw() & SampleCountFlags::TYPE_16.as_raw() != 0 { return SampleCountFlags::TYPE_16 }
+            if flags.as_raw() & SampleCountFlags::TYPE_8.as_raw() != 0 { return SampleCountFlags::TYPE_8 }
+            if flags.as_raw() & SampleCountFlags::TYPE_4.as_raw() != 0 { return SampleCountFlags::TYPE_4 }
+            if flags.as_raw() & SampleCountFlags::TYPE_2.as_raw() != 0 { return SampleCountFlags::TYPE_2 }
+            return SampleCountFlags::TYPE_1
+        }
+
+        println!("{} framebuffer_color_sample_counts: {:?}", name, max_sample_count(properties.limits.framebuffer_color_sample_counts));
+        println!("{} framebuffer_depth_sample_counts: {:?}", name, max_sample_count(properties.limits.framebuffer_depth_sample_counts));
+        println!("{} framebuffer_stencil_sample_counts: {:?}", name, max_sample_count(properties.limits.framebuffer_stencil_sample_counts));
 
         let queue_families: Vec<QueueFamily> = unsafe {
             _instance.handle().get_physical_device_queue_family_properties(handle)
