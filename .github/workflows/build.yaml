@@ -3,14 +3,24 @@ on: [push]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        platform:
+          - name: Linux-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - name: Windows-x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.platform.os }}
     steps:
       - name: Checkout sources
         uses: actions/checkout@e96b7a80d708e231e7b958853ecf42169671fbc5
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@b2417cde72dcf67f306c0ae8e0828a81bf0b189f
+        uses: dtolnay/rust-toolchain@8504a5cb1826786b18ef7a8819e6fddaf9f3eb8d
         with:
           toolchain: stable
+          targets: ${{ matrix.platform.target }}
       - name: Cache Rust toolchain
         uses: actions/cache@48af2dc4a9e8278b89d7fa154b955c30c6aaab09
         with:
