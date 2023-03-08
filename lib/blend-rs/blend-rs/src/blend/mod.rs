@@ -128,6 +128,7 @@ where A: StringLike {
 
 #[cfg(test)]
 mod test {
+    use std::env;
     use crate::blend::{read, PointerLike, NameLike, StringLike};
     use crate::blend::traverse::Named;
     use crate::blender3_2::{bNode, bNodeSocket, bNodeTree, Image, Link, Material, Mesh, MLoop, MVert, Object};
@@ -201,7 +202,11 @@ mod test {
         let data = reader.deref_raw_range(&image_packed_file.data, 0..image_packed_file.size as usize)
             .unwrap();
 
-        std::fs::write("/tmp/texture.jpg", data)
+        let texture_file = env::temp_dir().join("texture.jpg");
+
+        println!("Writing texture to {texture_file:?}");
+
+        std::fs::write(texture_file, data)
             .unwrap();
 
         let nodes = reader.traverse_double_linked(&tree.nodes.first.as_instance_of::<bNode>())
