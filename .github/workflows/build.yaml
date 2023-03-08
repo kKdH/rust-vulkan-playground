@@ -6,10 +6,10 @@ jobs:
     strategy:
       matrix:
         platform:
-          - name: Linux-x86_64
+          - name: linux-x86_64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-          - name: Windows-x86_64
+          - name: windows-x86_64
             os: windows-2022
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.platform.os }}
@@ -21,27 +21,33 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.platform.target }}
-      - name: Cache Rust toolchain
+      - name: Cache Toolchain
         uses: actions/cache@48af2dc4a9e8278b89d7fa154b955c30c6aaab09
         with:
           path: |
             ~/.rustup/toolchains
             ~/.rustup/update-hashes
             ~/.rustup/settings.toml
-          key: toolchain-${{ hashFiles('rust-toolchain') }}
-      - name: Cache project dependencies
+          key: toolchain-${{ matrix.platform.target }}
+      - name: Cache Dependencies
         uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6
-      - name: Fetch
+      - name: Cargo Fetch
         uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b
         with:
           command: fetch
-      - name: Build
+      - name: Cargo Build
         uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b
         with:
           command: build
           args: --workspace
-      - name: Test
+      - name: Cargo Test
         uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b
         with:
           command: test
           args: --workspace
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce
+        with:
+          name: rust-vulkan-playground-${{ matrix.platform.name }}
+          path: target/debug/rust-vulkan-playground*
+          retention-days: 7
