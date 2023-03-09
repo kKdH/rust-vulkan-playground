@@ -9,9 +9,13 @@ jobs:
           - name: linux-x86_64
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
+            binary: rust-vulkan-playground
+            bundle: rust-vulkan-playground.tar.gz
           - name: windows-x86_64
             os: windows-2022
             target: x86_64-pc-windows-msvc
+            binary: rust-vulkan-playground.exe
+            bundle: rust-vulkan-playground.zip
     runs-on: ${{ matrix.platform.os }}
     steps:
       - name: Checkout sources
@@ -50,11 +54,31 @@ jobs:
         with:
           command: build
           args: --workspace --release
+      - name: Bundle
+        run: |
+          mkdir -p dist/rust-vulkan-playground
+          cd dist
+          cp -R ../assets/ rust-vulkan-playground/
+          cp ../target/release/${{ matrix.platform.binary }} rust-vulkan-playground/
+          cd -
+        shell: bash
+      - name: Archive (linux)
+        if: contains(matrix.platform.name, 'linux')
+        run: |
+         cd dist
+         tar czvf ${{ matrix.platform.bundle }} rust-vulkan-playground/
+         cd -
+        shell: bash
+      - name: Archive (windows)
+        if: contains(matrix.platform.name, 'windows')
+        run: |
+         cd dist
+         7z a ${{ matrix.platform.bundle }} rust-vulkan-playground/
+         cd -
+        shell: bash
       - name: Upload Artifacts
         uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce
         with:
-          name: rust-vulkan-playground-${{ matrix.platform.name }}
-          path: |
-            target/release/rust-vulkan-playground*
-            assets/*.blend
+          name: ${{ matrix.platform.bundle }}
+          path: dist/${{ matrix.platform.bundle }}
           retention-days: 7
