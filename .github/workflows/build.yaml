@@ -35,7 +35,7 @@ jobs:
         uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b
         with:
           command: fetch
-      - name: Cargo Build
+      - name: Cargo Build (debug)
         uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b
         with:
           command: build
@@ -45,9 +45,16 @@ jobs:
         with:
           command: test
           args: --workspace
+      - name: Cargo Build (release)
+        uses: actions-rs/cargo@ae10961054e4aa8b4aa7dffede299aaf087aa33b
+        with:
+          command: build
+          args: --workspace --release
       - name: Upload Artifacts
         uses: actions/upload-artifact@0b7f8abb1508181956e8e162db84b466c27e18ce
         with:
           name: rust-vulkan-playground-${{ matrix.platform.name }}
-          path: target/debug/rust-vulkan-playground*
+          path: |
+            target/release/rust-vulkan-playground*
+            assets/*.blend
           retention-days: 7
