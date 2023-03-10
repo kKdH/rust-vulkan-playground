@@ -16,14 +16,14 @@ use nalgebra::Matrix4;
 use nalgebra::Vector3;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{CursorGrabMode, WindowBuilder};
 
 use blend_rs::blend::{NameLike, PointerLike, StringLike};
 use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
-use skyshard::{InstanceData, Vertex};
+use skyshard::{InstanceData, pick_object, Vertex};
 use skyshard::entity::World;
 use skyshard::graphics::{Camera, Extent};
 
@@ -194,18 +194,21 @@ fn main() {
                 texture_extent,
                 &vec![
                     InstanceData {
+                        id: 1,
                         transformation: transformation1.data
                             .as_slice()
                             .try_into()
                             .expect("slice with incorect length")
                     },
                     InstanceData {
+                        id: 2,
                         transformation: transformation2.data
                             .as_slice()
                             .try_into()
                             .expect("slice with incorect length")
                     },
                     InstanceData {
+                        id: 3,
                         transformation: transformation3.data
                             .as_slice()
                             .try_into()
@@ -388,6 +391,10 @@ fn main() {
                             camera.update()
                         }
                     }
+                    WindowEvent::MouseInput { button: MouseButton::Left, state: ElementState::Pressed, .. } => {
+                        let object_id: Option<u32> = pick_object(&mut engine, last_cursor_x, last_cursor_y);
+                        println!("Picked: {object_id:?} at {last_cursor_x}/{last_cursor_y}")
+                    }
                     _ => (),
                 }
                 Event::MainEventsCleared => {
@@ -425,18 +432,21 @@ fn main() {
 
                             let transformations = vec![
                                 InstanceData {
+                                    id: 1,
                                     transformation: transformation1.data
                                         .as_slice()
                                         .try_into()
-                                        .expect("slice with incorect length")
+                                        .expect("slice with incorect length"),
                                 },
                                 InstanceData {
+                                    id: 2,
                                     transformation: transformation2.data
                                         .as_slice()
                                         .try_into()
-                                        .expect("slice with incorect length")
+                                        .expect("slice with incorect length"),
                                 },
                                 InstanceData {
+                                    id: 3,
                                     transformation: transformation3.data
                                         .as_slice()
                                         .try_into()

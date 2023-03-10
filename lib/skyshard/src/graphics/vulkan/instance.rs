@@ -183,7 +183,7 @@ impl InstanceBuilder {
             application_version,
             engine_name: CString::new("skyshard").unwrap(),
             engine_version: Version::try_from("0.1.0").unwrap(),
-            vulkan_version: self.vulkan_version.unwrap_or("1.2.0".try_into().unwrap()),
+            vulkan_version: self.vulkan_version.unwrap_or("1.3.0".try_into().unwrap()),
             layer_names: self.layers,
             extension_names: self.extensions
         };

@@ -28,13 +28,29 @@ pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::Re
             .stencil_store_op(ash::vk::AttachmentStoreOp::DONT_CARE)
             .initial_layout(ash::vk::ImageLayout::UNDEFINED)
             .final_layout(ash::vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            .build()
+            .build(),
+        ash::vk::AttachmentDescription::builder()
+            .format(ash::vk::Format::R32_UINT)
+            .samples(ash::vk::SampleCountFlags::TYPE_1)
+            .load_op(ash::vk::AttachmentLoadOp::CLEAR)
+            .store_op(ash::vk::AttachmentStoreOp::STORE)
+            .stencil_load_op(ash::vk::AttachmentLoadOp::DONT_CARE)
+            .stencil_store_op(ash::vk::AttachmentStoreOp::DONT_CARE)
+            .initial_layout(ash::vk::ImageLayout::UNDEFINED)
+            .final_layout(ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+            .build(),
     ];
 
-    let color_attachment_refs = [ash::vk::AttachmentReference {
-        attachment: 0,
-        layout: ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
-    }];
+    let color_attachment_refs = [
+        ash::vk::AttachmentReference {
+            attachment: 0,
+            layout: ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
+        },
+        ash::vk::AttachmentReference {
+            attachment: 2,
+            layout: ash::vk::ImageLayout::GENERAL,
+        }
+    ];
 
     let depth_attachment_ref = ash::vk::AttachmentReference {
         attachment: 1,
@@ -57,6 +73,22 @@ pub fn create_render_pass(device: DeviceRef, surface: SurfaceRef) -> ash::vk::Re
             .dst_access_mask(
                 ash::vk::AccessFlags::COLOR_ATTACHMENT_WRITE
                     | ash::vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE
+            )
+            .build(),
+        ash::vk::SubpassDependency::builder()
+            .src_subpass(ash::vk::SUBPASS_EXTERNAL)
+            .src_stage_mask(
+                ash::vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | ash::vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+            )
+            .src_access_mask(ash::vk::AccessFlags::default())
+            .dst_subpass(0)
+            .dst_stage_mask(
+                ash::vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                    | ash::vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS
+            )
+            .dst_access_mask(
+                ash::vk::AccessFlags::COLOR_ATTACHMENT_WRITE
             )
             .build(),
     ];

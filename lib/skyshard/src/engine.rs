@@ -8,7 +8,7 @@ use std::io::Write;
 use std::rc::Rc;
 
 use ash::vk;
-use ash::vk::{CommandBufferResetFlags, Offset3D};
+use ash::vk::{CommandBufferResetFlags, ImageView, Offset3D};
 use log::info;
 use nalgebra::Matrix4;
 use winit::window::Window;
@@ -41,6 +41,7 @@ pub struct Vertex {
 #[repr(C, align(16))]
 #[derive(Clone, Debug, Copy)]
 pub struct InstanceData {
+    pub id: u32,
     pub transformation: [f32; 16],
 }
 
@@ -74,12 +75,16 @@ pub struct Engine {
     material_descriptor_set_layout: ::ash::vk::DescriptorSetLayout,
     texture_sampler: ::ash::vk::Sampler,
     ubo_buffer: Buffer<UniformBufferObject>,
+    object_id_lookup_images: Vec<Image>,
+    object_id_lookup_images_views: Vec<ImageView>,
+    object_id_lookup_buffer: Buffer<u32>,
     image_available_semaphore: ash::vk::Semaphore,
     render_finished_semaphore: ash::vk::Semaphore,
     command_buffers_completed_fence: ash::vk::Fence,
     timings_query_pool: ash::vk::QueryPool,
     vertices_query_pool: ash::vk::QueryPool,
-    last_timing_value: [u64; 1]
+    last_timing_value: [u64; 1],
+    last_swapchain_image_index: u32,
 }
 
 impl Engine {
@@ -114,11 +119,6 @@ pub fn create(
     let instance = Instance::builder()
         .application_name(app_name)
         .application_version(&"0.1.0".try_into().unwrap())
-        .layers(&Vec::from([
-            // String::from("VK_LAYER_KHRONOS_validation"),
-            // String::from("VK_LAYER_LUNARG_mem_tracker"),
-            // String::from("VK_LAYER_LUNARG_api_dump"),
-        ]))
         .extensions(&ash_window::enumerate_required_extensions(&window)
             .expect("Failed to enumerate required vulkan extensions to create a surface!")
             .iter()
@@ -147,6 +147,9 @@ pub fn create(
     let ubo_buffer: Buffer<UniformBufferObject>;
     let index_buffer: ash::vk::Buffer;
     let vertex_buffer: ash::vk::Buffer;
+    let object_id_lookup_images: Vec<Image>;
+    let object_id_lookup_images_views: Vec<ImageView>;
+    let object_id_lookup_buffer: Buffer<u32>;
     let image_available_semaphore: ash::vk::Semaphore;
     let render_finished_semaphore: ash::vk::Semaphore;
     let command_buffers_completed_fence: ash::vk::Fence;
@@ -261,26 +264,32 @@ pub fn create(
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(3)
-                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(0 as u32)
+                .format(ash::vk::Format::R32_UINT)
+                .offset(offset_of!(InstanceData, id) as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(4)
                 .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(16 as u32)
+                .offset((offset_of!(InstanceData, transformation) + 0) as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(5)
                 .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(32 as u32)
+                .offset((offset_of!(InstanceData, transformation) + 16) as u32)
                 .build(),
             ash::vk::VertexInputAttributeDescription::builder()
                 .binding(1)
                 .location(6)
                 .format(ash::vk::Format::R32G32B32A32_SFLOAT)
-                .offset(48 as u32)
+                .offset((offset_of!(InstanceData, transformation) + 32) as u32)
+                .build(),
+            ash::vk::VertexInputAttributeDescription::builder()
+                .binding(1)
+                .location(7)
+                .format(ash::vk::Format::R32G32B32A32_SFLOAT)
+                .offset((offset_of!(InstanceData, transformation) + 48) as u32)
                 .build(),
         ];
 
@@ -380,6 +389,21 @@ pub fn create(
                 .dst_alpha_blend_factor(ash::vk::BlendFactor::ZERO)
                 .alpha_blend_op(ash::vk::BlendOp::ADD)
                 .build(),
+            vk::PipelineColorBlendAttachmentState::builder()
+                .color_write_mask(
+                    vk::ColorComponentFlags::R
+                        | vk::ColorComponentFlags::G
+                        | vk::ColorComponentFlags::B
+                        | vk::ColorComponentFlags::A
+                )
+                .blend_enable(false)
+                .src_color_blend_factor(ash::vk::BlendFactor::ONE)
+                .dst_color_blend_factor(ash::vk::BlendFactor::ZERO)
+                .color_blend_op(ash::vk::BlendOp::ADD)
+                .src_color_blend_factor(ash::vk::BlendFactor::ONE)
+                .dst_alpha_blend_factor(ash::vk::BlendFactor::ZERO)
+                .alpha_blend_op(ash::vk::BlendOp::ADD)
+                .build(),
         ];
 
         // for all frame buffers - global
@@ -430,7 +454,7 @@ pub fn create(
                     .descriptor_count(1)
                     .stage_flags(::ash::vk::ShaderStageFlags::VERTEX)
                     .descriptor_type(ash::vk::DescriptorType::UNIFORM_BUFFER)
-                    .build()
+                    .build(),
             ];
 
             let create_info = ::ash::vk::DescriptorSetLayoutCreateInfo::builder()
@@ -539,8 +563,44 @@ pub fn create(
             )
         }.expect("Failed to create graphic pipelines");
 
-        frame_buffers = swapchain.views().iter().map(|view| {
-            let attachments = [*view, *swapchain.depth_image_view()];
+        object_id_lookup_images = swapchain.views().iter().enumerate().map(|(index, _)| {
+            resource_manager.create_image(format!("object-id-lookup-{index:?}"), &ImageAllocationDescriptor {
+                usage: [ImageUsage::ColorAttachment, ImageUsage::TransferSource],
+                extent: Extent::from(window.inner_size().width, window.inner_size().height, 1),
+                format: ImageFormat::UInt32,
+                tiling: ImageTiling::Linear,
+                memory: MemoryLocation::GpuOnly
+            }).expect("Failed to create object-id-lookup image")
+        }).collect::<Vec<_>>();
+
+        object_id_lookup_images_views = object_id_lookup_images.iter().map(|image| {
+
+            let create_image_view_info = vk::ImageViewCreateInfo::builder()
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(ash::vk::Format::R32_UINT)
+                .components(vk::ComponentMapping {
+                    r: vk::ComponentSwizzle::R,
+                    g: vk::ComponentSwizzle::IDENTITY,
+                    b: vk::ComponentSwizzle::IDENTITY,
+                    a: vk::ComponentSwizzle::IDENTITY,
+                })
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                })
+                .image(*image.handle());
+
+            unsafe {
+                _device.handle().create_image_view(&create_image_view_info, None)
+            }.unwrap()
+        }).collect::<Vec<_>>();
+
+        frame_buffers = swapchain.views().iter().zip(&object_id_lookup_images_views).map(|(view, object_id_lookup)| {
+
+            let attachments = [*view, *swapchain.depth_image_view(), *object_id_lookup];
 
             let create_info = ash::vk::FramebufferCreateInfo::builder()
                 .render_pass(renderpass)
@@ -610,6 +670,26 @@ pub fn create(
             buffer
         };
 
+        object_id_lookup_buffer = {
+
+            let count = {
+                let extent = object_id_lookup_images[0].extent();
+                (extent.width * extent.height * extent.depth) as usize
+            };
+
+            let mut buffer = resource_manager.create_buffer(String::from("object-lookup-buffer"), &BufferAllocationDescriptor {
+                usage: [BufferUsage::TransferDestinationBuffer],
+                memory: MemoryLocation::GpuToCpu
+            }, count).expect("Failed to create object-lookup-buffer");
+
+            unsafe {
+                resource_manager.copy(&vec![0u32; count], &mut buffer, 0, count);
+                resource_manager.flush(&mut buffer, 0, count);
+            }
+
+            buffer
+        };
+
         texture_sampler = {
             let sampler_create_info = ::ash::vk::SamplerCreateInfo::builder()
                 .mag_filter(::ash::vk::Filter::LINEAR)
@@ -670,12 +750,16 @@ pub fn create(
         material_descriptor_set_layout,
         texture_sampler,
         ubo_buffer,
+        object_id_lookup_images,
+        object_id_lookup_images_views,
+        object_id_lookup_buffer,
         image_available_semaphore,
         render_finished_semaphore,
         command_buffers_completed_fence,
         timings_query_pool,
         vertices_query_pool,
-        last_timing_value: [0]
+        last_timing_value: [0],
+        last_swapchain_image_index: 0,
     });
 }
 
@@ -854,6 +938,158 @@ pub fn update_geometry(
     unsafe {
         resource_manager.copy(&instances, buffer, 0, instances.len());
         resource_manager.flush(buffer, 0, instances.len());
+    }
+}
+
+pub fn pick_object(engine: &mut Engine, x: i32, y: i32) -> Option<u32> {
+
+    let _device = (*engine.device).borrow();
+    let queue = Rc::clone(&_device.queues()[0]);
+    let mut resource_manager = &engine.resource_manager;
+    let mut image = &mut engine.object_id_lookup_images[engine.last_swapchain_image_index as usize];
+    let mut buffer = &mut engine.object_id_lookup_buffer;
+    let mut dst = vec![0u32; buffer.capacity()];
+
+    let command_buffer = {
+        let create_info = ::ash::vk::CommandBufferAllocateInfo::builder()
+            .command_pool(_device.command_pool().handle())
+            .command_buffer_count(1)
+            .level(ash::vk::CommandBufferLevel::PRIMARY)
+            .build();
+
+        unsafe {
+            _device.handle().allocate_command_buffers(&create_info)
+                .expect("Failed to create command buffer")[0]
+        }
+    };
+
+    let completion_fence = {
+        let fence_create_info = ::ash::vk::FenceCreateInfo::builder()
+            .build();
+        unsafe {
+            _device.handle().create_fence(&fence_create_info, None)
+                .expect("Expected successfull fence creation!")
+        }
+    };
+
+    let begin_info = ash::vk::CommandBufferBeginInfo::builder()
+        .flags(ash::vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+
+    unsafe {
+        _device.handle().begin_command_buffer(command_buffer, &begin_info)
+            .expect("Failed to begin command buffer");
+    }
+
+    // let barrier = ::ash::vk::ImageMemoryBarrier::builder()
+    //     .src_queue_family_index(0)
+    //     .dst_queue_family_index(0)
+    //     .image(*image.handle())
+    //     .old_layout(::ash::vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL)
+    //     .new_layout(::ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+    //     .subresource_range(::ash::vk::ImageSubresourceRange::builder()
+    //         .aspect_mask(::ash::vk::ImageAspectFlags::COLOR)
+    //         .base_mip_level(0)
+    //         .level_count(1)
+    //         .base_array_layer(0)
+    //         .layer_count(1)
+    //         .build())
+    //     .src_access_mask(::ash::vk::AccessFlags::NONE)
+    //     .dst_access_mask(::ash::vk::AccessFlags::HOST_READ);
+    //
+    // unsafe {
+    //     _device.handle().cmd_pipeline_barrier(
+    //         command_buffer,
+    //         ::ash::vk::PipelineStageFlags::FRAGMENT_SHADER,
+    //         ::ash::vk::PipelineStageFlags::HOST,
+    //         ::ash::vk::DependencyFlags::empty(),
+    //         &[],
+    //         &[],
+    //         &[*barrier],
+    //     )
+    // }
+
+    let image_to_buffer_copy = ::ash::vk::CopyImageToBufferInfo2::builder()
+        .src_image(*image.handle())
+        .src_image_layout(::ash::vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+        .dst_buffer(*buffer.handle())
+        .regions(&[
+            ::ash::vk::BufferImageCopy2::builder()
+                .buffer_offset(0)
+                .buffer_row_length(image.extent().width)
+                .buffer_image_height(image.extent().height)
+                .image_offset(::ash::vk::Offset3D { x: 0, y: 0, z: 0})
+                .image_extent(::ash::vk::Extent3D { width: image.extent().width, height: image.extent().height, depth: image.extent().depth })
+                .image_subresource(::ash::vk::ImageSubresourceLayers::builder()
+                   .aspect_mask(::ash::vk::ImageAspectFlags::COLOR)
+                   .base_array_layer(0)
+                   .layer_count(1)
+                   .mip_level(0)
+                   .build())
+                .build()
+        ])
+        .build();
+
+    unsafe {
+        _device.handle().cmd_copy_image_to_buffer2(command_buffer, &image_to_buffer_copy)
+    }
+
+    // let barrier = ::ash::vk::BufferMemoryBarrier::builder()
+    //     .buffer(*buffer.handle())
+    //     .offset(0)
+    //     .size((std::mem::size_of::<u32>() * buffer.capacity()) as u64)
+    //     .src_access_mask(::ash::vk::AccessFlags::NONE)
+    //     .dst_access_mask(::ash::vk::AccessFlags::HOST_READ)
+    //     .src_queue_family_index(0)
+    //     .dst_queue_family_index(0);
+    //
+    // unsafe {
+    //     _device.handle().cmd_pipeline_barrier(
+    //         command_buffer,
+    //         ::ash::vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+    //         ::ash::vk::PipelineStageFlags::HOST,
+    //         ::ash::vk::DependencyFlags::empty(),
+    //         &[],
+    //         &[*barrier],
+    //         &[]
+    //     )
+    // }
+
+    unsafe {
+        _device.handle().end_command_buffer(command_buffer)
+            .expect("Failed to end command buffer");
+    }
+
+    let command_buffers = [command_buffer];
+    let submit_info = ash::vk::SubmitInfo::builder()
+        .command_buffers(&command_buffers);
+
+    unsafe {
+        _device.handle().queue_submit(*queue.handle(), &[*submit_info], completion_fence)
+            .expect("Failed to submit queue");
+    }
+
+    unsafe {
+        let fences = [completion_fence];
+        _device.handle().wait_for_fences(&fences, true, 5_000_000_000)
+            .expect("Failed to wait for command buffer completion fence!");
+    }
+
+    unsafe {
+        _device.handle().free_command_buffers(_device.command_pool().handle(), &command_buffers);
+    }
+
+    unsafe {
+        resource_manager.flush(&buffer, 0, buffer.capacity());
+        resource_manager.copy(buffer, &mut dst, 0, buffer.capacity());
+    }
+
+    let objectId = dst[(x as u32 + (y as u32 * image.extent().width)) as usize];
+
+    if objectId > 0 {
+        Some(objectId)
+    }
+    else {
+        None
     }
 }
 
@@ -1115,6 +1351,7 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
 
     // println!("draw time: {} ns", timing_data[1] - timing_data[0]);
     // println!("vert. invocations: {}", vertices_data[0]);
+    engine.last_swapchain_image_index = index
 }
 
 fn update_ubo(index: usize, device: DeviceRef, resource_manager: &mut ResourceManager, buffer: &mut Buffer<UniformBufferObject>, camera: &Camera) {
@@ -1176,6 +1413,9 @@ fn record_commands(
             },
             ash::vk::ClearValue {
                 depth_stencil: ash::vk::ClearDepthStencilValue { depth: 1.0, stencil: 0 }
+            },
+            ash::vk::ClearValue {
+                color: ash::vk::ClearColorValue { uint32: [0, 0, 0, 0] }
             }
         ]);
 
