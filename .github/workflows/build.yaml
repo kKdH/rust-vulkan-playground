@@ -10,12 +10,12 @@ jobs:
             os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             binary: rust-vulkan-playground
-            bundle: rust-vulkan-playground.tar.gz
+            bundle: rust-vulkan-playground_linux-x86_64.tar.gz
           - name: windows-x86_64
             os: windows-2022
             target: x86_64-pc-windows-msvc
             binary: rust-vulkan-playground.exe
-            bundle: rust-vulkan-playground.zip
+            bundle: rust-vulkan-playground_windows-x86_64.zip
     runs-on: ${{ matrix.platform.os }}
     steps:
       - name: Checkout sources
