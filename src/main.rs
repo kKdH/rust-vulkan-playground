@@ -38,7 +38,7 @@ fn main() {
     let fileout = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new("[{d(%Y-%m-%d %H:%M:%S.%3f%Z)(utc)}] [{h({l})}] {T} {M} - {m}\n")))
         .append(false)
-        .build("log/application.log")
+        .build("logs/application.log")
         .unwrap();
 
     let config = Config::builder()

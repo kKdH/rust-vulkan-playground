@@ -1,6 +1,6 @@
 **/target
 **/.idea
-**/log
+**/log*
 **/*.spv
 **/*.bk
 **/*.blend1
