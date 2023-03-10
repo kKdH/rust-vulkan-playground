@@ -55,8 +55,8 @@ fn main() {
 
     let mut events_loop = EventLoop::new();
 
-    let window_width = 960;
-    let window_height = 540;
+    let window_width = 800;
+    let window_height = 600;
 
     let window_title_prefix = "rust vulkan example: ";
     let window = WindowBuilder::new()
@@ -224,8 +224,8 @@ fn main() {
 
         let mut camera = Camera::new(
             window_width as f32 / window_height as f32,
-            3.14 / 4.0,
-            0.01,
+            ::std::f32::consts::FRAC_PI_2,
+            0.5,
             100.0
         );
 
@@ -233,8 +233,8 @@ fn main() {
         camera.update();
 
         let mut is_cursor_grabbed = false;
-        let mut last_cursor_x = 0.0;
-        let mut last_cursor_y = 0.0;
+        let mut last_cursor_x = 0i32;
+        let mut last_cursor_y = 0i32;
         let mut roll = 0.0;
         let mut pitch = 0.0;
         let mut yaw = 0.0;
@@ -262,6 +262,9 @@ fn main() {
                         close_requested = true
                     }
                     WindowEvent::CursorMoved { position, .. } => {
+                        last_cursor_x = position.x as i32;
+                        last_cursor_y = position.y as i32;
+
                         if is_cursor_grabbed {
                             let delta_x = 0.01 * (window.inner_size().width as f64 * 0.5 - position.x) as f32;
                             let delta_y = -0.01 * (window.inner_size().height as f64 * 0.5 - position.y) as f32;
@@ -437,7 +440,7 @@ fn main() {
                                     transformation: transformation3.data
                                         .as_slice()
                                         .try_into()
-                                        .expect("slice with incorect length")
+                                        .expect("slice with incorrect length")
                                 },
                             ];
 
@@ -461,7 +464,7 @@ fn main() {
                                 Err(_) => {}
                             };
                             render_time = SystemTime::now();
-                            std::thread::sleep(Duration::from_millis(30))
+                            std::thread::sleep(Duration::from_millis(20))
                         }
                         (_, true) => {
                             println!("Closing");

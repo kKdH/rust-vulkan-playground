@@ -16,7 +16,7 @@ use crate::graphics::Extent;
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
 use crate::graphics::vulkan::device::DeviceRef;
 use crate::graphics::vulkan::queue::DeviceQueueRef;
-use crate::graphics::vulkan::resources::{ImageAllocationDescriptor, ImageFormat, ImageUsage, MemoryLocation};
+use crate::graphics::vulkan::resources::{ImageAllocationDescriptor, ImageFormat, ImageTiling, ImageUsage, MemoryLocation};
 use crate::graphics::vulkan::resources::ResourceManager;
 use crate::graphics::vulkan::surface::SurfaceRef;
 use crate::graphics::vulkan::swapchain::SwapchainError::SwapchainVulkanError;
@@ -160,10 +160,11 @@ impl Swapchain {
 
             let depth_image: vk::Image = unsafe {
 
-                let image = resource_manager.create_image("depth-image", &ImageAllocationDescriptor {
+                let image = resource_manager.create_image(String::from("depth-image"), &ImageAllocationDescriptor {
                     usage: [ImageUsage::DepthStencilAttachment],
                     extent: Extent::from(resolution.width, resolution.height, 1),
                     format: ImageFormat::DepthStencil,
+                    tiling: ImageTiling::Optimal,
                     memory: MemoryLocation::GpuOnly
                 }).expect("depth image");
 

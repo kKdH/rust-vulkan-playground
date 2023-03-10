@@ -22,7 +22,7 @@ use crate::graphics::vulkan::device::{Device, DeviceRef};
 use crate::graphics::vulkan::instance::{Instance, InstanceRef};
 use crate::graphics::vulkan::queue::QueueCapabilities;
 use crate::graphics::vulkan::renderpass::create_render_pass;
-use crate::graphics::vulkan::resources::{Buffer, CopyDestination, Image, ImageAllocationDescriptor, ImageFormat, ImageUsage, Resource, ResourceManager};
+use crate::graphics::vulkan::resources::{Buffer, CopyDestination, Image, ImageAllocationDescriptor, ImageFormat, ImageTiling, ImageUsage, Resource, ResourceManager};
 use crate::graphics::vulkan::resources::{BufferAllocationDescriptor, BufferUsage, MemoryLocation};
 use crate::graphics::vulkan::shaders::{FragmentShaderBinary, ShaderModule, VertexShaderBinary};
 use crate::graphics::vulkan::surface::{Surface, SurfaceRef};
@@ -115,8 +115,8 @@ pub fn create(
         .application_name(app_name)
         .application_version(&"0.1.0".try_into().unwrap())
         .layers(&Vec::from([
-            String::from("VK_LAYER_KHRONOS_validation"),
-            // String::from("VK_LAYER_LUNARG_mem_tracker")
+            // String::from("VK_LAYER_KHRONOS_validation"),
+            // String::from("VK_LAYER_LUNARG_mem_tracker"),
             // String::from("VK_LAYER_LUNARG_api_dump"),
         ]))
         .extensions(&ash_window::enumerate_required_extensions(&window)
@@ -591,7 +591,7 @@ pub fn create(
             let count = swapchain.views().len(); // one ubo per swapchain image
             let size: usize = count * std::mem::size_of::<UniformBufferObject>();
 
-            let mut buffer = resource_manager.create_buffer("uniform-buffer", &BufferAllocationDescriptor {
+            let mut buffer = resource_manager.create_buffer(String::from("uniform-buffer"), &BufferAllocationDescriptor {
                 usage: [BufferUsage::UniformBuffer],
                 memory: MemoryLocation::CpuToGpu
             }, count).expect("Failed to create uniform buffer");
@@ -695,7 +695,7 @@ pub fn create_geometry(
 
         let size: usize = (indices.len() * std::mem::size_of::<u32>());
 
-        let mut buffer = resource_manager.create_buffer("geometry-index-buffer", &BufferAllocationDescriptor {
+        let mut buffer = resource_manager.create_buffer(String::from("geometry-index-buffer"), &BufferAllocationDescriptor {
             usage: [BufferUsage::IndexBuffer],
             memory: MemoryLocation::CpuToGpu
         }, indices.len()).expect("geometry index buffer");
@@ -712,7 +712,7 @@ pub fn create_geometry(
 
         let size: usize = (vertices.len() * std::mem::size_of::<Vertex>());
 
-        let mut buffer = resource_manager.create_buffer("geometry-vertex-buffer", &BufferAllocationDescriptor {
+        let mut buffer = resource_manager.create_buffer(String::from("geometry-vertex-buffer"), &BufferAllocationDescriptor {
             usage: [BufferUsage::VertexBuffer],
             memory: MemoryLocation::CpuToGpu
         }, vertices.len()).expect("geometry vertex buffer");
@@ -729,7 +729,7 @@ pub fn create_geometry(
 
         let size: usize = texture_data.len() * std::mem::size_of::<u8>();
 
-        let mut buffer = resource_manager.create_buffer("texture-transfer-buffer", &BufferAllocationDescriptor {
+        let mut buffer = resource_manager.create_buffer(String::from("texture-transfer-buffer"), &BufferAllocationDescriptor {
             usage: [BufferUsage::TransferSourceBuffer],
             memory: MemoryLocation::CpuToGpu,
         }, size).expect("Failed to create texture data transfer buffer");
@@ -744,10 +744,11 @@ pub fn create_geometry(
 
     let texture_image: Image = {
 
-        resource_manager.create_image("texture-image", &ImageAllocationDescriptor {
+        resource_manager.create_image(String::from("texture-image"), &ImageAllocationDescriptor {
             usage: [ImageUsage::Sampled, ImageUsage::TransferDestination],
             extent: texture_extent,
             format: ImageFormat::RGBA8,
+            tiling: ImageTiling::Optimal,
             memory: MemoryLocation::GpuOnly
         }).expect("Failed to create texture image")
     };
@@ -776,7 +777,7 @@ pub fn create_geometry(
 
         let size: usize = (instances.len() * std::mem::size_of::<InstanceData>());
 
-        let mut buffer = resource_manager.create_buffer("geometry-instance-data-buffer", &BufferAllocationDescriptor {
+        let mut buffer = resource_manager.create_buffer(String::from("geometry-instance-data-buffer"), &BufferAllocationDescriptor {
             usage: [BufferUsage::VertexBuffer],
             memory: MemoryLocation::CpuToGpu
         }, instances.len()).expect("geometry instance data buffer");

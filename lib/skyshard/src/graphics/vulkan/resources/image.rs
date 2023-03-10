@@ -6,7 +6,8 @@ use crate::graphics::vulkan::VulkanObject;
 
 
 pub struct Image {
-    name: &'static str,
+    id: String,
+    name: String,
     extent: Extent,
     image: ::ash::vk::Image,
     allocation: Allocation,
@@ -15,12 +16,13 @@ pub struct Image {
 impl Image {
 
     pub fn new(
-        name: &'static str,
+        name: String,
         extent: Extent,
         image: ::ash::vk::Image,
         allocation: Allocation
     ) -> Image {
         Image {
+            id: String::from(format!("0x{:x?}", image.as_raw())),
             name,
             extent,
             image,
@@ -51,8 +53,12 @@ impl VulkanObject for Image {
 
 impl Resource for Image {
 
-    fn name(&self) -> &'static str {
-        self.name
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn capacity(&self) -> usize {

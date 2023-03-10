@@ -36,6 +36,7 @@ pub struct ImageAllocationDescriptor<const N: usize> {
     pub usage: [ImageUsage; N],
     pub extent: Extent,
     pub format: ImageFormat,
+    pub tiling: ImageTiling,
     pub memory: MemoryLocation,
 }
 
@@ -50,7 +51,7 @@ impl <const N: usize> TryFrom<&ImageAllocationDescriptor<N>> for ::ash::vk::Imag
             .mip_levels(1)
             .array_layers(1)
             .format(descriptor.format.into())
-            .tiling(ash::vk::ImageTiling::OPTIMAL)
+            .tiling(descriptor.tiling.into())
             .initial_layout(ash::vk::ImageLayout::UNDEFINED)
             .samples(ash::vk::SampleCountFlags::TYPE_1)
             .sharing_mode(ash::vk::SharingMode::EXCLUSIVE)
@@ -60,6 +61,7 @@ impl <const N: usize> TryFrom<&ImageAllocationDescriptor<N>> for ::ash::vk::Imag
                     ImageUsage::Sampled => ::ash::vk::ImageUsageFlags::SAMPLED,
                     ImageUsage::TransferDestination => ::ash::vk::ImageUsageFlags::TRANSFER_DST,
                     ImageUsage::TransferSource => ::ash::vk::ImageUsageFlags::TRANSFER_SRC,
+                    ImageUsage::ColorAttachment => ::ash::vk::ImageUsageFlags::COLOR_ATTACHMENT,
                 })
             }));
         Ok(builder)
@@ -82,6 +84,7 @@ pub enum ImageUsage {
     Sampled,
     TransferDestination,
     TransferSource,
+    ColorAttachment,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -104,6 +107,7 @@ impl From<MemoryLocation> for gpu_allocator::MemoryLocation {
 #[derive(Debug, Copy, Clone)]
 pub enum ImageFormat {
     RGBA8,
+    UInt32,
     DepthStencil,
 }
 
@@ -111,7 +115,24 @@ impl From<ImageFormat> for ::ash::vk::Format {
     fn from(format: ImageFormat) -> Self {
         match format {
             ImageFormat::RGBA8 => ::ash::vk::Format::R8G8B8A8_UNORM,
+            ImageFormat::UInt32 => ::ash::vk::Format::R32_UINT,
             ImageFormat::DepthStencil => ::ash::vk::Format::D32_SFLOAT_S8_UINT,
         }
     }
 }
+
+#[derive(Debug, Copy, Clone)]
+pub enum ImageTiling {
+    Linear,
+    Optimal,
+}
+
+impl From<ImageTiling> for ::ash::vk::ImageTiling {
+    fn from(format: ImageTiling) -> Self {
+        match format {
+            ImageTiling::Linear => ::ash::vk::ImageTiling::LINEAR,
+            ImageTiling::Optimal => ::ash::vk::ImageTiling::OPTIMAL,
+        }
+    }
+}
+

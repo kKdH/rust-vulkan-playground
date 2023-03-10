@@ -6,7 +6,8 @@ use crate::graphics::vulkan::VulkanObject;
 
 
 pub struct Buffer<A> {
-    name: &'static str,
+    id: String,
+    name: String,
     capacity: usize,
     size: Size,
     element: Element<A>,
@@ -17,7 +18,7 @@ pub struct Buffer<A> {
 impl <A> Buffer<A> {
 
     pub fn new(
-        name: &'static str,
+        name: String,
         capacity: usize,
         size: usize,
         buffer: ::ash::vk::Buffer,
@@ -25,6 +26,7 @@ impl <A> Buffer<A> {
     ) -> Buffer<A> {
 
         Buffer {
+            id: String::from(format!("0x{:x?}", buffer.as_raw())),
             name: name,
             capacity: capacity,
             size: (capacity * size) as Size,
@@ -52,14 +54,18 @@ impl <A> VulkanObject for Buffer<A> {
     }
 
     fn hex_id(&self) -> String {
-        format!("0x{:x?}", self.buffer.as_raw())
+        String::from(self.id())
     }
 }
 
 impl <A> Resource for Buffer<A> {
 
-    fn name(&self) -> &'static str {
-        self.name
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn capacity(&self) -> usize {
@@ -85,8 +91,12 @@ impl <A> Resource for Buffer<A> {
 
 impl <A> Resource for &mut Buffer<A> {
 
-    fn name(&self) -> &'static str {
-        self.name
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn capacity(&self) -> usize {
