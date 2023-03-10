@@ -252,7 +252,8 @@ fn main() {
 
         skyshard::render(&mut engine, &mut world, &camera);
 
-        let mut translation: Vector3<f32> = Vector3::new(0.0, 0.0, 0.0);
+        let mut grabbed_object_id: Option<u32> = None;
+        let mut translations: [Vector3<f32>; 3] = [Vector3::new(0.0, 0.0, 0.0); 3];
         let mut rotation = 0.0f32;
         let mut move_speed = 1f32;
         let mut rotation_speed = 0.01f32;
@@ -265,21 +266,35 @@ fn main() {
                         close_requested = true
                     }
                     WindowEvent::CursorMoved { position, .. } => {
-                        last_cursor_x = position.x as i32;
-                        last_cursor_y = position.y as i32;
 
                         if is_cursor_grabbed {
-                            let delta_x = 0.01 * (window.inner_size().width as f64 * 0.5 - position.x) as f32;
-                            let delta_y = -0.01 * (window.inner_size().height as f64 * 0.5 - position.y) as f32;
 
-                            yaw += delta_x;
-                            pitch += delta_y;
+                            let delta_x = (window.inner_size().width as f64 * 0.5 - position.x) as f32;
+                            let delta_y = (window.inner_size().height as f64 * 0.5 - position.y) as f32;
+
+                            yaw += 0.01 * delta_x;
+                            pitch += -0.01 * delta_y;
 
                             window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
                             camera.yaw(yaw);
                             camera.pitch(pitch);
                             camera.update()
                         }
+
+                        if let Some(object_id) = grabbed_object_id {
+
+                            let object_index = (object_id - 1) as usize;
+                            let delta_x = position.x as f32 - last_cursor_x as f32;
+                            let delta_y = position.y as f32 - last_cursor_y as f32;
+
+                            println!("Delta: {:?} / {:?}", delta_x, delta_y);
+
+                            translations[object_index].x = translations[object_index].x + 0.01 * delta_x;
+                            translations[object_index].y = translations[object_index].y + 0.01 * delta_y;
+                        }
+
+                        last_cursor_x = position.x as i32;
+                        last_cursor_y = position.y as i32;
                     }
                     WindowEvent::KeyboardInput { input, ..} => {
                         if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
@@ -391,9 +406,21 @@ fn main() {
                             camera.update()
                         }
                     }
-                    WindowEvent::MouseInput { button: MouseButton::Left, state: ElementState::Pressed, .. } => {
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Left,
+                        state: ElementState::Pressed,
+                        ..
+                    } => {
                         let object_id: Option<u32> = pick_object(&mut engine, last_cursor_x, last_cursor_y);
-                        println!("Picked: {object_id:?} at {last_cursor_x}/{last_cursor_y}")
+                        println!("Picked: {object_id:?} at {last_cursor_x}/{last_cursor_y}");
+                        grabbed_object_id = object_id;
+                    }
+                    WindowEvent::MouseInput {
+                        button: MouseButton::Left,
+                        state: ElementState::Released,
+                        ..
+                    } => {
+                        grabbed_object_id = None;
                     }
                     _ => (),
                 }
@@ -405,49 +432,48 @@ fn main() {
 
                             let mut cube = &mut world.geometries[0];
 
-                            if translation.x < -1.0 {
-                                move_speed = 0.025
-                            }
+                            // if translation.x < -1.0 {
+                            //     move_speed = 0.025
+                            // }
 
-                            if translation.x > 1.0 {
-                                move_speed = -0.025
-                            }
+                            // if translation.x > 1.0 {
+                            //     move_speed = -0.025
+                            // }
 
-                            translation.x = translation.x + move_speed;
+                            // translation.x = translation.x + move_speed;
 
-                            rotation = rotation + 0.01;
+                            // rotation = rotation + 0.01;
 
-                            let transformation1 = Matrix4::<f32>::identity()
-                                .append_translation(&translation);
-
-                            let mut transformation2 = Matrix4::<f32>::identity()
-                                .append_translation(&Vector3::new(3.5, 0.0, 0.0));
-
-                            transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, rotation);
-
-                            let mut  transformation3 = Matrix4::<f32>::identity()
-                                .append_translation(&Vector3::new(0.0, 3.0, 1.5));
-
-                            transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.0, rotation, 0.5);
+                            let mut transformations: [Matrix4::<f32>; 3] = [
+                                Matrix4::<f32>::identity()
+                                    .append_translation(&Vector3::new(0.0, 0.0, 0.0))
+                                    .append_translation(&translations[0]),
+                                Matrix4::<f32>::identity()
+                                    .append_translation(&Vector3::new(3.5, 0.0, 0.0))
+                                    .append_translation(&translations[1]),
+                                Matrix4::<f32>::identity()
+                                    .append_translation(&Vector3::new(0.0, 3.0, 1.5))
+                                    .append_translation(&translations[2]),
+                            ];
 
                             let transformations = vec![
                                 InstanceData {
                                     id: 1,
-                                    transformation: transformation1.data
+                                    transformation: transformations[0].data
                                         .as_slice()
                                         .try_into()
                                         .expect("slice with incorect length"),
                                 },
                                 InstanceData {
                                     id: 2,
-                                    transformation: transformation2.data
+                                    transformation: transformations[1].data
                                         .as_slice()
                                         .try_into()
                                         .expect("slice with incorect length"),
                                 },
                                 InstanceData {
                                     id: 3,
-                                    transformation: transformation3.data
+                                    transformation: transformations[2].data
                                         .as_slice()
                                         .try_into()
                                         .expect("slice with incorrect length")
