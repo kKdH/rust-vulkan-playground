@@ -3,7 +3,7 @@ pub mod vulkan;
 mod camera;
 
 use crate::engine::{InstanceData, Vertex};
-pub use crate::graphics::camera::Camera;
+pub use crate::graphics::camera::{Camera, Projection, view_direction};
 use crate::graphics::vulkan::resources::{Buffer, Image};
 
 pub struct Renderer {

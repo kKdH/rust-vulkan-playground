@@ -1357,11 +1357,11 @@ pub fn render(engine: &mut Engine, world: &mut World, camera: &Camera) {
 fn update_ubo(index: usize, device: DeviceRef, resource_manager: &mut ResourceManager, buffer: &mut Buffer<UniformBufferObject>, camera: &Camera) {
 
     let size = std::mem::size_of::<UniformBufferObject>();
-    let mvp = camera.as_matrix();
+    let mvp: Matrix4<f32> = *camera.as_matrix();
 
     let ubo = [
         UniformBufferObject {
-            mvp: *mvp,
+            mvp: mvp,
         }
     ];
 

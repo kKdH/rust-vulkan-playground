@@ -2,7 +2,7 @@ extern crate skyshard;
 extern crate winit;
 
 use std::borrow::Borrow;
-use std::ops::Deref;
+use std::ops::{Deref, Mul};
 use std::time::{Duration, SystemTime};
 use std::vec;
 
@@ -12,7 +12,7 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector4};
 use nalgebra::Vector3;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
@@ -25,7 +25,8 @@ use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, pick_object, Vertex};
 use skyshard::entity::World;
-use skyshard::graphics::{Camera, Extent};
+use skyshard::graphics::{Camera, Extent, view_direction};
+use skyshard::graphics::Projection::PerspectiveProjection;
 
 mod shaders;
 
@@ -55,16 +56,13 @@ fn main() {
 
     let mut events_loop = EventLoop::new();
 
-    let window_width = 800;
-    let window_height = 600;
+    let window_width: f32 = 800.0;
+    let window_height: f32 = 600.0;
 
     let window_title_prefix = "rust vulkan example: ";
     let window = WindowBuilder::new()
         .with_title(window_title_prefix)
-        .with_inner_size(winit::dpi::LogicalSize::new(
-            f64::from(window_width),
-            f64::from(window_height),
-        ))
+        .with_inner_size(winit::dpi::LogicalSize::new(window_width, window_height,))
         .build(&events_loop)
         .unwrap();
 
@@ -81,15 +79,18 @@ fn main() {
         let cube = {
 
             let transformation1 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(0.0, 0.0, 0.0));
+                .append_translation(&Vector3::new(0.0, 0.0, 0.0))
+                .transpose();
 
             let mut transformation2 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(3.5, 0.0, 0.0));
+                .append_translation(&Vector3::new(3.5, 0.0, 0.0))
+                .transpose();
 
             transformation2 = transformation2 * Matrix4::<f32>::from_euler_angles(0.0, 0.5, -0.7);
 
             let mut  transformation3 = Matrix4::<f32>::identity()
-                .append_translation(&Vector3::new(0.0, 3.0, 1.5));
+                .append_translation(&Vector3::new(0.0, 3.0, 1.5))
+                .transpose();
 
             transformation3 = transformation3 * Matrix4::<f32>::from_euler_angles(0.5, 0.3, 0.5);
 
@@ -151,7 +152,7 @@ fn main() {
                     })
             };
 
-            let indices = (0u32..vertices.len() as u32).collect();
+            let indices: Vec<u32> = (0u32..vertices.len() as u32).collect();
 
             let (texture_extent, texture_data) = {
 
@@ -226,13 +227,19 @@ fn main() {
         engine.reference_counts();
 
         let mut camera = Camera::new(
-            window_width as f32 / window_height as f32,
-            ::std::f32::consts::FRAC_PI_2,
-            0.5,
-            100.0
+            PerspectiveProjection {
+                fovy: 50f32.to_radians(),
+                aspect: window_width / window_height,
+                near: 0.1,
+                far: 100.0
+            }
         );
 
-        camera.eye(0f32, 0f32, 5f32);
+        camera.view = view_direction(
+            &Vector3::new(0.0, 0.0, -5.0),
+            &Vector3::new(0.0, 0.0, 1.0),
+            &Vector3::new(0.0, -1.0, 0.0)
+        );
         camera.update();
 
         let mut is_cursor_grabbed = false;
@@ -275,10 +282,11 @@ fn main() {
                             yaw += 0.01 * delta_x;
                             pitch += -0.01 * delta_y;
 
+                            camera.yaw(-0.0005 * delta_x);
+                            camera.pitch(0.0005 * delta_y);
+                            camera.update();
+
                             window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
-                            camera.yaw(yaw);
-                            camera.pitch(pitch);
-                            camera.update()
                         }
 
                         if let Some(object_id) = grabbed_object_id {
@@ -286,8 +294,6 @@ fn main() {
                             let object_index = (object_id - 1) as usize;
                             let delta_x = position.x as f32 - last_cursor_x as f32;
                             let delta_y = position.y as f32 - last_cursor_y as f32;
-
-                            println!("Delta: {:?} / {:?}", delta_x, delta_y);
 
                             translations[object_index].x = translations[object_index].x + 0.01 * delta_x;
                             translations[object_index].y = translations[object_index].y + 0.01 * delta_y;
@@ -308,35 +314,28 @@ fn main() {
                                     virtual_keycode: Some(VirtualKeyCode::Left),
                                     ..
                                 } => {
-                                    yaw += 5.0;
+                                    camera.look_left();
                                 }
                                 KeyboardInput {
                                     state: ElementState::Pressed,
                                     virtual_keycode: Some(VirtualKeyCode::Right),
                                     ..
                                 } => {
-                                    yaw -= 5.0;
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Right),
-                                    ..
-                                } => {
-                                    yaw -= 5.0;
+                                    camera.look_right();
                                 }
                                 KeyboardInput {
                                     state: ElementState::Pressed,
                                     virtual_keycode: Some(VirtualKeyCode::Up),
                                     ..
                                 } => {
-                                    pitch -= 5.0;
+                                    camera.look_up()
                                 }
                                 KeyboardInput {
                                     state: ElementState::Pressed,
                                     virtual_keycode: Some(VirtualKeyCode::Down),
                                     ..
                                 } => {
-                                    pitch += 5.0;
+                                    camera.look_down()
                                 }
                                 KeyboardInput {
                                     state: ElementState::Pressed,
@@ -401,8 +400,6 @@ fn main() {
                                 }
                                 _ => {}
                             }
-                            camera.yaw(yaw);
-                            camera.pitch(pitch);
                             camera.update()
                         }
                     }
@@ -414,6 +411,29 @@ fn main() {
                         let object_id: Option<u32> = pick_object(&mut engine, last_cursor_x, last_cursor_y);
                         println!("Picked: {object_id:?} at {last_cursor_x}/{last_cursor_y}");
                         grabbed_object_id = object_id;
+
+                        // let ray: Vector4<f32> = {
+
+                            // let ray_clip_coordinates = Vector4::<f32>::new(
+                            //     (2 * last_cursor_x) as f32 / window_width as f32 - 1.0,
+                            //     1.0 - (2 * last_cursor_y) as f32 / window_height as f32,
+                            //     -1.0,
+                            //     1.0,
+                            // );
+
+                            // let inverse_projection = camera.projection.try_inverse().unwrap();
+                            // let inverse_view = camera.view.try_inverse().unwrap();
+                            //
+                            // let ray_eye: Vector4<f32> = {
+                            //     let vec: Vector4<f32> = inverse_projection.mul(ray_clip_coordinates);
+                            //     Vector4::<f32>::new(vec.x, vec.y, -1.0, 0.0).normalize()
+                            // };
+                            //
+                            // inverse_view.mul(ray_eye).normalize()
+                        // };
+
+                        // println!("Ray: {:?}", ray);
+
                     }
                     WindowEvent::MouseInput {
                         button: MouseButton::Left,
@@ -432,28 +452,19 @@ fn main() {
 
                             let mut cube = &mut world.geometries[0];
 
-                            // if translation.x < -1.0 {
-                            //     move_speed = 0.025
-                            // }
-
-                            // if translation.x > 1.0 {
-                            //     move_speed = -0.025
-                            // }
-
-                            // translation.x = translation.x + move_speed;
-
-                            // rotation = rotation + 0.01;
-
                             let mut transformations: [Matrix4::<f32>; 3] = [
                                 Matrix4::<f32>::identity()
                                     .append_translation(&Vector3::new(0.0, 0.0, 0.0))
-                                    .append_translation(&translations[0]),
+                                    .append_translation(&translations[0])
+                                    .transpose(),
                                 Matrix4::<f32>::identity()
                                     .append_translation(&Vector3::new(3.5, 0.0, 0.0))
-                                    .append_translation(&translations[1]),
+                                    .append_translation(&translations[1])
+                                    .transpose(),
                                 Matrix4::<f32>::identity()
                                     .append_translation(&Vector3::new(0.0, 3.0, 1.5))
-                                    .append_translation(&translations[2]),
+                                    .append_translation(&translations[2])
+                                    .transpose(),
                             ];
 
                             let transformations = vec![

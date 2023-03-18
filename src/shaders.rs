@@ -22,7 +22,7 @@ pub mod vs {
             layout(location = 2) out vec2 outTextCord;
 
             void main() {
-                gl_Position = ubo.mvp * transformation * vec4(inPosition, 1.0);
+                gl_Position = vec4(inPosition, 1.0) * transformation * ubo.mvp;
                 outObjectId = inObjectId;
                 outColor = inColor;
                 outTextCord = inTextCord;
