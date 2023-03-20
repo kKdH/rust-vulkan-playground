@@ -11,6 +11,7 @@ use ash::vk;
 use ash::vk::{CommandBufferResetFlags, ImageView, Offset3D};
 use log::info;
 use nalgebra::Matrix4;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::window::Window;
 
 use crate::assets::AssetsManager;
@@ -119,7 +120,7 @@ pub fn create(
     let instance = Instance::builder()
         .application_name(app_name)
         .application_version(&"0.1.0".try_into().unwrap())
-        .extensions(&ash_window::enumerate_required_extensions(&window)
+        .extensions(&ash_window::enumerate_required_extensions(window.raw_display_handle())
             .expect("Failed to enumerate required vulkan extensions to create a surface!")
             .iter()
             .map(|ptr| unsafe { String::from(CStr::from_ptr(*ptr).to_string_lossy()) })

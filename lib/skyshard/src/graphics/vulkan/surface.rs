@@ -5,6 +5,7 @@ use ash::extensions::khr;
 use ash::vk;
 use ash::vk::Handle;
 use log::info;
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle};
 
 use crate::graphics::vulkan::{VulkanError, VulkanObject};
 use crate::graphics::vulkan::device::PhysicalDeviceRef;
@@ -35,7 +36,13 @@ impl Surface {
 
             loader = khr::Surface::new(_instance.loader(), _instance.handle());
             handle = unsafe {
-                ash_window::create_surface(_instance.loader(), _instance.handle(), window, None)
+                ash_window::create_surface(
+                    _instance.loader(),
+                    _instance.handle(),
+                    window.raw_display_handle(),
+                    window.raw_window_handle(),
+                    None
+                )
             }.unwrap();
         }
 

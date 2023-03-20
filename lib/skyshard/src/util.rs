@@ -2,8 +2,8 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::num::ParseIntError;
 
-use regex::Regex;
 use thiserror::Error;
+
 
 #[derive(Error, Debug)]
 #[error("Failed to parse string '{value}' into a version!")]
@@ -45,20 +45,12 @@ impl TryFrom<&str> for Version {
 }
 
 fn parse_version_string(value: &str) -> Result<Version, InvalidVersionStringError> {
-    let re = Regex::new(r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)$").unwrap();
-    match re.captures(value) {
-        Some(caps) => {
-            let major = caps.name("major").map(|m| m.as_str()).unwrap_or("0").parse::<u32>()?;
-            let minor = caps.name("minor").map(|m| m.as_str()).unwrap_or("0").parse::<u32>()?;
-            let patch = caps.name("patch").map(|m| m.as_str()).unwrap_or("0").parse::<u32>()?;
-            Ok(Version {
-                major,
-                minor,
-                patch
-            })
-        },
-        None => Err(InvalidVersionStringError { value: String::from(value)})
-    }
+    let split: Vec<&str> = value.split('.').collect();
+    Ok(Version {
+        major: split.get(0).unwrap_or(&"0").parse::<u32>()?,
+        minor: split.get(1).unwrap_or(&"0").parse::<u32>()?,
+        patch: split.get(2).unwrap_or(&"0").parse::<u32>()?,
+    })
 }
 
 pub fn format_bool(value: bool) -> String {

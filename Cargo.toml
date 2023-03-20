@@ -25,11 +25,11 @@ config = "0.13.3"
 itertools = "0.10.5"
 log = "0.4.17"
 log4rs = "1.2.0"
-nalgebra = "0.31.4"
+nalgebra = "0.32.2"
 png = "0.17.7"
 rand = "0.8.5"
-thiserror = "1.0.38"
-winit = "0.27.5"
+thiserror = "1.0.40"
+winit = "0.28.3"
 
 skyshard = { path = "lib/skyshard" }
 skyshard_shaders = { path = "lib/skyshard/skyshard_shaders" }
