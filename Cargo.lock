@@ -1502,6 +1502,7 @@ dependencies = [
 name = "rust-vulkan-playground"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "blend-rs",
  "config",
  "hamcrest2",

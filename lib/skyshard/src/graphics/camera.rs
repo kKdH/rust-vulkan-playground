@@ -87,7 +87,7 @@ impl Camera {
 
     pub fn update(&mut self) {
 
-        self.view = view_xzy(&self.translation, &self.rotation);
+        // self.view = view_yxz(&self.translation, &self.rotation);
 
         self.forward.x = self.rotation.y.sin();
         self.forward.z = self.rotation.y.cos();
@@ -194,7 +194,7 @@ pub fn view_target(position: &Vector3<f32>, target: &Vector3<f32>, up: &Vector3<
     view_direction(position, &(target - position), up)
 }
 
-pub fn view_xzy(position: &Vector3<f32>, rotation: &Vector3<f32>) -> Matrix4<f32> {
+pub fn view_yxz(position: &Vector3<f32>, rotation: &Vector3<f32>) -> Matrix4<f32> {
 
     let c1: f32 = rotation.y.cos();
     let s1: f32 = rotation.y.sin();

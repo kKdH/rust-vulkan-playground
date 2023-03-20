@@ -12,7 +12,7 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use nalgebra::{Matrix4, Vector4};
+use nalgebra::Matrix4;
 use nalgebra::Vector3;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
@@ -22,13 +22,19 @@ use winit::window::{CursorGrabMode, WindowBuilder};
 
 use blend_rs::blend::{NameLike, PointerLike, StringLike};
 use blend_rs::blend::traverse::Named;
-use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Link, Material, Mesh, MLoop, MLoopUV, MVert, Object};
+use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, pick_object, Vertex};
 use skyshard::entity::World;
-use skyshard::graphics::{Camera, Extent, view_direction};
+use skyshard::graphics::{Camera, Extent, view_direction, view_yxz};
 use skyshard::graphics::Projection::PerspectiveProjection;
 
+use crate::input::KeyboardMovementController;
+use crate::movable::Movable;
+
 mod shaders;
+mod input;
+mod movable;
+
 
 fn main() {
 
@@ -242,6 +248,11 @@ fn main() {
         );
         camera.update();
 
+        let mut movable = Movable::new();
+        movable.translate(&Vector3::new(0.0, 0.0, -5.0));
+
+        let mut keyboard_movement_controller = KeyboardMovementController::new(0.25, 1.0);
+
         let mut is_cursor_grabbed = false;
         let mut last_cursor_x = 0i32;
         let mut last_cursor_y = 0i32;
@@ -266,153 +277,94 @@ fn main() {
         let mut rotation_speed = 0.01f32;
 
         events_loop.run(move |event, _, control_flow| {
+
             match event {
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => {
-                        println!("Request close");
-                        close_requested = true
-                    }
-                    WindowEvent::CursorMoved { position, .. } => {
-
-                        if is_cursor_grabbed {
-
-                            let delta_x = (window.inner_size().width as f64 * 0.5 - position.x) as f32;
-                            let delta_y = (window.inner_size().height as f64 * 0.5 - position.y) as f32;
-
-                            yaw += 0.01 * delta_x;
-                            pitch += -0.01 * delta_y;
-
-                            camera.yaw(-0.0005 * delta_x);
-                            camera.pitch(0.0005 * delta_y);
-                            camera.update();
-
-                            window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
-                        }
-
-                        if let Some(object_id) = grabbed_object_id {
-
-                            let object_index = (object_id - 1) as usize;
-                            let delta_x = position.x as f32 - last_cursor_x as f32;
-                            let delta_y = position.y as f32 - last_cursor_y as f32;
-
-                            translations[object_index].x = translations[object_index].x + 0.01 * delta_x;
-                            translations[object_index].y = translations[object_index].y + 0.01 * delta_y;
-                        }
-
-                        last_cursor_x = position.x as i32;
-                        last_cursor_y = position.y as i32;
-                    }
-                    WindowEvent::KeyboardInput { input, ..} => {
-                        if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
-                            println!("KeyboardInput: ESCAPE");
+                Event::WindowEvent { event, .. } => {
+                    keyboard_movement_controller.handle(&event);
+                    match event {
+                        WindowEvent::CloseRequested => {
+                            println!("Request close");
                             close_requested = true
                         }
-                        else {
-                            match input {
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Left),
-                                    ..
-                                } => {
-                                    camera.look_left();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Right),
-                                    ..
-                                } => {
-                                    camera.look_right();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Up),
-                                    ..
-                                } => {
-                                    camera.look_up()
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Down),
-                                    ..
-                                } => {
-                                    camera.look_down()
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::W),
-                                    ..
-                                } => {
-                                    camera.forward();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::S),
-                                    ..
-                                } => {
-                                    camera.backward();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::A),
-                                    ..
-                                } => {
-                                    camera.strafe_left();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::D),
-                                    ..
-                                } => {
-                                    camera.strafe_right();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::R),
-                                    ..
-                                } => {
-                                    println!("Reset");
-                                    yaw = 0.0;
-                                    pitch = 0.0;
-                                    camera.reset();
-                                }
-                                KeyboardInput {
-                                    state: ElementState::Pressed,
-                                    virtual_keycode: Some(VirtualKeyCode::Space),
-                                    ..
-                                } => {
-                                    is_cursor_grabbed = !is_cursor_grabbed;
+                        WindowEvent::CursorMoved { position, .. } => {
+                            if is_cursor_grabbed {
+                                let delta_x = (window.inner_size().width as f64 * 0.5 - position.x) as f32;
+                                let delta_y = (window.inner_size().height as f64 * 0.5 - position.y) as f32;
 
-                                    window.set_cursor_position(PhysicalPosition::new(
-                                        (window.inner_size().width as f32) * 0.5,
-                                        (window.inner_size().height as f32) * 0.5
-                                    )).unwrap();
+                                yaw += 0.01 * delta_x;
+                                pitch += -0.01 * delta_y;
 
-                                    window.set_cursor_visible(!is_cursor_grabbed);
-                                    if is_cursor_grabbed {
-                                        window.set_cursor_grab(CursorGrabMode::Confined)
-                                            .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
-                                            .unwrap();
-                                    }
-                                    else {
-                                        window.set_cursor_grab(CursorGrabMode::None)
-                                            .unwrap();
-                                    }
-                                }
-                                _ => {}
+                                camera.yaw(-0.0005 * delta_x);
+                                camera.pitch(0.0005 * delta_y);
+                                camera.update();
+
+                                window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
                             }
-                            camera.update()
-                        }
-                    }
-                    WindowEvent::MouseInput {
-                        button: MouseButton::Left,
-                        state: ElementState::Pressed,
-                        ..
-                    } => {
-                        let object_id: Option<u32> = pick_object(&mut engine, last_cursor_x, last_cursor_y);
-                        println!("Picked: {object_id:?} at {last_cursor_x}/{last_cursor_y}");
-                        grabbed_object_id = object_id;
 
-                        // let ray: Vector4<f32> = {
+                            if let Some(object_id) = grabbed_object_id {
+                                let object_index = (object_id - 1) as usize;
+                                let delta_x = position.x as f32 - last_cursor_x as f32;
+                                let delta_y = position.y as f32 - last_cursor_y as f32;
+
+                                translations[object_index].x = translations[object_index].x + 0.01 * delta_x;
+                                translations[object_index].y = translations[object_index].y + 0.01 * delta_y;
+                            }
+
+                            last_cursor_x = position.x as i32;
+                            last_cursor_y = position.y as i32;
+                        }
+                        WindowEvent::KeyboardInput { input, .. } => {
+                            if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
+                                println!("KeyboardInput: ESCAPE");
+                                close_requested = true
+                            } else {
+                                match input {
+                                    KeyboardInput {
+                                        state: ElementState::Pressed,
+                                        virtual_keycode: Some(VirtualKeyCode::R),
+                                        ..
+                                    } => {
+                                        println!("Reset");
+                                        yaw = 0.0;
+                                        pitch = 0.0;
+                                        camera.reset();
+                                    }
+                                    KeyboardInput {
+                                        state: ElementState::Pressed,
+                                        virtual_keycode: Some(VirtualKeyCode::Space),
+                                        ..
+                                    } => {
+                                        is_cursor_grabbed = !is_cursor_grabbed;
+
+                                        window.set_cursor_position(PhysicalPosition::new(
+                                            (window.inner_size().width as f32) * 0.5,
+                                            (window.inner_size().height as f32) * 0.5
+                                        )).unwrap();
+
+                                        window.set_cursor_visible(!is_cursor_grabbed);
+                                        if is_cursor_grabbed {
+                                            window.set_cursor_grab(CursorGrabMode::Confined)
+                                                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+                                                .unwrap();
+                                        } else {
+                                            window.set_cursor_grab(CursorGrabMode::None)
+                                                .unwrap();
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        WindowEvent::MouseInput {
+                            button: MouseButton::Left,
+                            state: ElementState::Pressed,
+                            ..
+                        } => {
+                            let object_id: Option<u32> = pick_object(&mut engine, last_cursor_x, last_cursor_y);
+                            println!("Picked: {object_id:?} at {last_cursor_x}/{last_cursor_y}");
+                            grabbed_object_id = object_id;
+
+                            // let ray: Vector4<f32> = {
 
                             // let ray_clip_coordinates = Vector4::<f32>::new(
                             //     (2 * last_cursor_x) as f32 / window_width as f32 - 1.0,
@@ -430,24 +382,29 @@ fn main() {
                             // };
                             //
                             // inverse_view.mul(ray_eye).normalize()
-                        // };
+                            // };
 
-                        // println!("Ray: {:?}", ray);
-
+                            // println!("Ray: {:?}", ray);
+                        }
+                        WindowEvent::MouseInput {
+                            button: MouseButton::Left,
+                            state: ElementState::Released,
+                            ..
+                        } => {
+                            grabbed_object_id = None;
+                        }
+                        _ => (),
                     }
-                    WindowEvent::MouseInput {
-                        button: MouseButton::Left,
-                        state: ElementState::Released,
-                        ..
-                    } => {
-                        grabbed_object_id = None;
-                    }
-                    _ => (),
                 }
                 Event::MainEventsCleared => {
                     match (redraw_requested, close_requested) {
                         (false, false) => {}
                         (true, false) => {
+                            keyboard_movement_controller.apply(0.1, &mut movable);
+
+                            camera.view = view_yxz(movable.translation(), movable.rotation());
+                            camera.update();
+
                             skyshard::render(&mut engine, &mut world, &camera);
 
                             let mut cube = &mut world.geometries[0];
