@@ -16,7 +16,7 @@ use nalgebra::{Matrix4, Vector2};
 use nalgebra::Vector3;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
+use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{CursorGrabMode, WindowBuilder};
 
@@ -28,7 +28,7 @@ use skyshard::entity::World;
 use skyshard::graphics::{Camera, Extent};
 use skyshard::graphics::Projection::PerspectiveProjection;
 
-use crate::input::MovementController;
+use crate::input::{KeyAction, MovementController, MovementControllerSettings};
 use crate::movable::Movable;
 
 mod shaders;
@@ -250,13 +250,16 @@ fn main() {
         let mut movable = Movable::new();
         movable.translate(&Vector3::new(0.0, 0.0, -5.0));
 
-        let mut keyboard_movement_controller = MovementController::new(
-            0.25,
-            1.0,
-            Vector2::new(1.0, 1.0)
+        let mut movement_controller = MovementController::new(
+            MovementControllerSettings {
+                rotation_speed: 0.25,
+                translation_speed: 1.0,
+                mouse_acceleration: Vector2::new(1.0, 1.0),
+                reset_rotation: Vector3::new(0.0, 0.0, 0.0),
+                reset_translation: Vector3::new(0.0, 0.0, -5.0),
+            }
         );
 
-        let mut is_cursor_grabbed = false;
         let mut last_cursor_x = 0i32;
         let mut last_cursor_y = 0i32;
         let mut render_time: SystemTime = SystemTime::now();
@@ -280,15 +283,18 @@ fn main() {
 
             match event {
                 Event::WindowEvent { event, .. } => {
-                    keyboard_movement_controller.handle(&event);
+
+                    movement_controller.handle(&event);
+
                     match event {
                         WindowEvent::CloseRequested => {
                             println!("Request close");
                             close_requested = true
                         }
                         WindowEvent::CursorMoved { position, .. } => {
-                            if is_cursor_grabbed {
-                                window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
+                            if movement_controller.is_active(&KeyAction::MouseLook) {
+                                window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5))
+                                    .expect("center cursor postion");
                             }
 
                             if let Some(object_id) = grabbed_object_id {
@@ -307,40 +313,6 @@ fn main() {
                             if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
                                 println!("KeyboardInput: ESCAPE");
                                 close_requested = true
-                            } else {
-                                match input {
-                                    KeyboardInput {
-                                        state: ElementState::Pressed,
-                                        virtual_keycode: Some(VirtualKeyCode::R),
-                                        ..
-                                    } => {
-                                        let reverse_translation = Vector3::new(0.0, 0.0, -5.0) - movable.translation();
-                                        movable.translate(&reverse_translation);
-                                    }
-                                    KeyboardInput {
-                                        state: ElementState::Pressed,
-                                        virtual_keycode: Some(VirtualKeyCode::Space),
-                                        ..
-                                    } => {
-                                        is_cursor_grabbed = !is_cursor_grabbed;
-
-                                        window.set_cursor_position(PhysicalPosition::new(
-                                            (window.inner_size().width as f32) * 0.5,
-                                            (window.inner_size().height as f32) * 0.5
-                                        )).unwrap();
-
-                                        window.set_cursor_visible(!is_cursor_grabbed);
-                                        if is_cursor_grabbed {
-                                            window.set_cursor_grab(CursorGrabMode::Confined)
-                                                .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
-                                                .unwrap();
-                                        } else {
-                                            window.set_cursor_grab(CursorGrabMode::None)
-                                                .unwrap();
-                                        }
-                                    }
-                                    _ => {}
-                                }
                             }
                         }
                         WindowEvent::MouseInput {
@@ -388,9 +360,21 @@ fn main() {
                     match (redraw_requested, close_requested) {
                         (false, false) => {}
                         (true, false) => {
-                            keyboard_movement_controller.apply(0.1, &mut movable);
+
+                            movement_controller.apply(0.1, &mut movable);
 
                             camera.view_yxz(movable.translation(), movable.rotation());
+
+                            if movement_controller.is_active(&KeyAction::MouseLook) {
+                                window.set_cursor_visible(false);
+                                window.set_cursor_grab(CursorGrabMode::Confined)
+                                    .or_else(|_| window.set_cursor_grab(CursorGrabMode::Locked))
+                                    .unwrap();
+                            } else {
+                                window.set_cursor_visible(true);
+                                window.set_cursor_grab(CursorGrabMode::None)
+                                    .unwrap();
+                            }
 
                             skyshard::render(&mut engine, &mut world, &camera);
 

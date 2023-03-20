@@ -1,26 +1,8 @@
-use nalgebra::{Matrix4, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Vector3};
 
-/// Camera
-///
-/// Projection:
-/// World Coordinate system
-///
-/// +y
-/// |  +z
-/// | /
-/// |/___+x
-///
-/// NDC system
-///
-///  -z
-/// /
-/// |¯¯¯+x
-/// |
-/// +y
-///
 pub struct Camera {
-    pub projection: Matrix4<f32>,
-    pub view: Matrix4<f32>,
+    projection: Matrix4<f32>,
+    view: Matrix4<f32>,
     translation: Vector3<f32>,
     rotation: Vector3<f32>,
     forward: Vector3<f32>,
@@ -44,7 +26,6 @@ impl Camera {
             matrix: Matrix4::<f32>::identity(),
         }
     }
-
 
     pub fn view_direction(&mut self, translation: &Vector3<f32>, direction: &Vector3<f32>, up: &Vector3<f32>) {
         let w: Vector3<f32> = direction.normalize();

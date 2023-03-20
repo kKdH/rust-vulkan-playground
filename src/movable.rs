@@ -22,14 +22,16 @@ impl Movable {
 
     pub fn rotate(&mut self, value: &Vector3<f32>) {
         self.rotation += value;
-        self.forward.x = self.rotation.y.sin();
-        self.forward.z = self.rotation.y.cos();
-        self.right.x = self.forward.z;
-        self.right.z = -self.forward.x;
+        self.update();
     }
 
     pub fn rotation(&self) -> &Vector3<f32> {
         &self.rotation
+    }
+
+    pub fn set_rotation(&mut self, value: &Vector3<f32>) {
+        self.rotation.copy_from(value);
+        self.update();
     }
 
     pub fn translate(&mut self, value: &Vector3<f32>) {
@@ -38,6 +40,10 @@ impl Movable {
 
     pub fn translation(&self) -> &Vector3<f32> {
         &self.translation
+    }
+
+    pub fn set_translation(&mut self, value: &Vector3<f32>) {
+        self.translation.copy_from(value);
     }
 
     pub fn forward(&self) -> &Vector3<f32> {
@@ -50,5 +56,12 @@ impl Movable {
 
     pub fn up(&self) -> &Vector3<f32> {
         &self.up
+    }
+
+    fn update(&mut self) {
+        self.forward.x = self.rotation.y.sin();
+        self.forward.z = self.rotation.y.cos();
+        self.right.x = self.forward.z;
+        self.right.z = -self.forward.x;
     }
 }
