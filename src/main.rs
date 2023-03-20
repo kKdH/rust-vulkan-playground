@@ -12,7 +12,7 @@ use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use nalgebra::Matrix4;
+use nalgebra::{Matrix4, Vector2};
 use nalgebra::Vector3;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
@@ -25,10 +25,10 @@ use blend_rs::blend::traverse::Named;
 use blend_rs::blender3_3::{bNode, bNodeTree, DrawDataList, Image, Material, Mesh, MLoop, MLoopUV, MVert, Object};
 use skyshard::{InstanceData, pick_object, Vertex};
 use skyshard::entity::World;
-use skyshard::graphics::{Camera, Extent, view_direction, view_yxz};
+use skyshard::graphics::{Camera, Extent};
 use skyshard::graphics::Projection::PerspectiveProjection;
 
-use crate::input::KeyboardMovementController;
+use crate::input::MovementController;
 use crate::movable::Movable;
 
 mod shaders;
@@ -241,24 +241,24 @@ fn main() {
             }
         );
 
-        camera.view = view_direction(
+        camera.view_direction(
             &Vector3::new(0.0, 0.0, -5.0),
             &Vector3::new(0.0, 0.0, 1.0),
             &Vector3::new(0.0, -1.0, 0.0)
         );
-        camera.update();
 
         let mut movable = Movable::new();
         movable.translate(&Vector3::new(0.0, 0.0, -5.0));
 
-        let mut keyboard_movement_controller = KeyboardMovementController::new(0.25, 1.0);
+        let mut keyboard_movement_controller = MovementController::new(
+            0.25,
+            1.0,
+            Vector2::new(1.0, 1.0)
+        );
 
         let mut is_cursor_grabbed = false;
         let mut last_cursor_x = 0i32;
         let mut last_cursor_y = 0i32;
-        let mut roll = 0.0;
-        let mut pitch = 0.0;
-        let mut yaw = 0.0;
         let mut render_time: SystemTime = SystemTime::now();
         let mut frames_per_second_time: SystemTime = SystemTime::now();
         let mut frame_count: u32 = 0;
@@ -288,16 +288,6 @@ fn main() {
                         }
                         WindowEvent::CursorMoved { position, .. } => {
                             if is_cursor_grabbed {
-                                let delta_x = (window.inner_size().width as f64 * 0.5 - position.x) as f32;
-                                let delta_y = (window.inner_size().height as f64 * 0.5 - position.y) as f32;
-
-                                yaw += 0.01 * delta_x;
-                                pitch += -0.01 * delta_y;
-
-                                camera.yaw(-0.0005 * delta_x);
-                                camera.pitch(0.0005 * delta_y);
-                                camera.update();
-
                                 window.set_cursor_position(PhysicalPosition::new((window.inner_size().width as f32) * 0.5, (window.inner_size().height as f32) * 0.5));
                             }
 
@@ -324,10 +314,8 @@ fn main() {
                                         virtual_keycode: Some(VirtualKeyCode::R),
                                         ..
                                     } => {
-                                        println!("Reset");
-                                        yaw = 0.0;
-                                        pitch = 0.0;
-                                        camera.reset();
+                                        let reverse_translation = Vector3::new(0.0, 0.0, -5.0) - movable.translation();
+                                        movable.translate(&reverse_translation);
                                     }
                                     KeyboardInput {
                                         state: ElementState::Pressed,
@@ -402,8 +390,7 @@ fn main() {
                         (true, false) => {
                             keyboard_movement_controller.apply(0.1, &mut movable);
 
-                            camera.view = view_yxz(movable.translation(), movable.rotation());
-                            camera.update();
+                            camera.view_yxz(movable.translation(), movable.rotation());
 
                             skyshard::render(&mut engine, &mut world, &camera);
 
