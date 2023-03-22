@@ -1,13 +1,15 @@
 use bitflags::bitflags;
 use nalgebra::{Vector2, Vector3};
-use winit::event::{ElementState, KeyboardInput, ModifiersState, VirtualKeyCode, WindowEvent};
-use crate::movable::Movable;
+use winit::event::{ElementState, KeyboardInput, VirtualKeyCode, WindowEvent};
 
+use crate::clock::Tick;
+use crate::movable::Movable;
 
 pub struct MovementControllerSettings {
     pub rotation_speed: f32,
     pub translation_speed: f32,
     pub mouse_acceleration: Vector2<f32>,
+    pub fast_movement_multiplier: f32,
     pub reset_rotation: Vector3<f32>,
     pub reset_translation: Vector3<f32>,
 }
@@ -23,7 +25,9 @@ pub struct MovementController {
 
 impl MovementController {
 
-    const MOUSE_ACCELERATION_FACTOR: f32 = 0.01;
+    const MOUSE_ACCELERATION_FACTOR: f32 = 0.075;
+    const ROTATION_SPEED_FACTOR: f32 = 2.0;
+    const TRANSLATION_SPEED_FACTOR: f32 = 2.0;
 
     pub fn new(settings: MovementControllerSettings) -> Self {
 
@@ -127,7 +131,7 @@ impl MovementController {
         };
     }
 
-    pub fn apply(&mut self, dt: f32, movable: &mut Movable) {
+    pub fn apply(&mut self, tick: &Tick, movable: &mut Movable) {
 
         if self.key_state_flags != KeyStateFlags::NONE {
 
@@ -140,9 +144,15 @@ impl MovementController {
                 self.translation.fill(0.0);
 
                 let (rotation_speed, translation_speed) = if self.is_active(&KeyAction::FastMovement) {
-                    (self.settings.rotation_speed * 4.0, self.settings.translation_speed * 4.0)
+                    (
+                        self.settings.rotation_speed * Self::ROTATION_SPEED_FACTOR * self.settings.fast_movement_multiplier,
+                        self.settings.translation_speed * Self::TRANSLATION_SPEED_FACTOR * self.settings.fast_movement_multiplier
+                    )
                 } else {
-                    (self.settings.rotation_speed, self.settings.translation_speed)
+                    (
+                        self.settings.rotation_speed * Self::ROTATION_SPEED_FACTOR,
+                        self.settings.translation_speed * Self::TRANSLATION_SPEED_FACTOR
+                    )
                 };
 
                 if self.is_active(&KeyAction::LookLeft) { self.rotation.y -= rotation_speed }
@@ -157,7 +167,7 @@ impl MovementController {
                 }
 
                 if self.rotation.dot(&self.rotation) > f32::EPSILON {
-                    self.rotation.scale_mut(dt);
+                    self.rotation.scale_mut(tick.delta);
                     movable.rotate(&self.rotation);
                 }
 
@@ -168,7 +178,7 @@ impl MovementController {
 
                 if self.translation.dot(&self.translation) > f32::EPSILON {
                     self.translation.normalize_mut();
-                    self.translation.scale_mut(translation_speed * dt);
+                    self.translation.scale_mut(translation_speed * tick.delta);
                     movable.translate(&self.translation);
                 }
             }

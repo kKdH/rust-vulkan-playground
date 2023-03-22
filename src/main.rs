@@ -16,7 +16,7 @@ use nalgebra::{Matrix4, Vector2};
 use nalgebra::Vector3;
 use rand::Rng;
 use winit::dpi::PhysicalPosition;
-use winit::event::{ElementState, Event, MouseButton, VirtualKeyCode, WindowEvent};
+use winit::event::{ElementState, Event, KeyboardInput, MouseButton, VirtualKeyCode, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::{CursorGrabMode, WindowBuilder};
 
@@ -27,13 +27,15 @@ use skyshard::{InstanceData, pick_object, Vertex};
 use skyshard::entity::World;
 use skyshard::graphics::{Camera, Extent};
 use skyshard::graphics::Projection::PerspectiveProjection;
+use crate::clock::Clock;
 
 use crate::input::{KeyAction, MovementController, MovementControllerSettings};
 use crate::movable::Movable;
 
-mod shaders;
+mod clock;
 mod input;
 mod movable;
+mod shaders;
 
 
 fn main() {
@@ -79,7 +81,9 @@ fn main() {
             shaders::vs::shader(),
             shaders::fs::shader(),
         ).unwrap();
+
         let asset_manager = engine.asset_manager();
+        let mut clock = Clock::new(0.01);
         let mut world = World::new();
 
         let cube = {
@@ -255,6 +259,7 @@ fn main() {
                 rotation_speed: 0.25,
                 translation_speed: 1.0,
                 mouse_acceleration: Vector2::new(1.0, 1.0),
+                fast_movement_multiplier: 4.0,
                 reset_rotation: Vector3::new(0.0, 0.0, 0.0),
                 reset_translation: Vector3::new(0.0, 0.0, -5.0),
             }
@@ -262,7 +267,6 @@ fn main() {
 
         let mut last_cursor_x = 0i32;
         let mut last_cursor_y = 0i32;
-        let mut render_time: SystemTime = SystemTime::now();
         let mut frames_per_second_time: SystemTime = SystemTime::now();
         let mut frame_count: u32 = 0;
         let mut frames_per_second: u32 = 0;
@@ -271,13 +275,10 @@ fn main() {
 
         info!("Starting event loop");
 
-        skyshard::render(&mut engine, &mut world, &camera);
-
         let mut grabbed_object_id: Option<u32> = None;
         let mut translations: [Vector3<f32>; 3] = [Vector3::new(0.0, 0.0, 0.0); 3];
-        let mut rotation = 0.0f32;
-        let mut move_speed = 1f32;
-        let mut rotation_speed = 0.01f32;
+
+        let mut sleep_time_millis: u64 = 10;
 
         events_loop.run(move |event, _, control_flow| {
 
@@ -313,6 +314,32 @@ fn main() {
                             if let Some(VirtualKeyCode::Escape) = input.virtual_keycode {
                                 println!("KeyboardInput: ESCAPE");
                                 close_requested = true
+                            }
+                            else {
+                                match input {
+                                    KeyboardInput {
+                                        state: ElementState::Pressed,
+                                        virtual_keycode: Some(VirtualKeyCode::Key1),
+                                        ..
+                                    } => {
+                                        sleep_time_millis = 0;
+                                    }
+                                    KeyboardInput {
+                                        state: ElementState::Pressed,
+                                        virtual_keycode: Some(VirtualKeyCode::Key2),
+                                        ..
+                                    } => {
+                                        sleep_time_millis = 10;
+                                    }
+                                    KeyboardInput {
+                                        state: ElementState::Pressed,
+                                        virtual_keycode: Some(VirtualKeyCode::Key3),
+                                        ..
+                                    } => {
+                                        sleep_time_millis = 80;
+                                    }
+                                    _ => {}
+                                }
                             }
                         }
                         WindowEvent::MouseInput {
@@ -361,9 +388,7 @@ fn main() {
                         (false, false) => {}
                         (true, false) => {
 
-                            movement_controller.apply(0.1, &mut movable);
-
-                            camera.view_yxz(movable.translation(), movable.rotation());
+                            clock.produce();
 
                             if movement_controller.is_active(&KeyAction::MouseLook) {
                                 window.set_cursor_visible(false);
@@ -375,8 +400,6 @@ fn main() {
                                 window.set_cursor_grab(CursorGrabMode::None)
                                     .unwrap();
                             }
-
-                            skyshard::render(&mut engine, &mut world, &camera);
 
                             let mut cube = &mut world.geometries[0];
 
@@ -421,6 +444,15 @@ fn main() {
 
                             skyshard::update_geometry(&mut engine, &mut cube, &transformations);
 
+                            while let Some(tick) = clock.consume() {
+                                // update all state with Tick(t, dt)
+                                movement_controller.apply(&tick, &mut movable);
+                                camera.view_yxz(movable.translation(), movable.rotation());
+                            };
+
+                            skyshard::render(&mut engine, &mut world, &camera);
+                            std::thread::sleep(Duration::from_millis(sleep_time_millis));
+
                             frame_count += 1;
                             match frames_per_second_time.elapsed() {
                                 Ok(elapsed) => {
@@ -432,14 +464,8 @@ fn main() {
                                 }
                                 Err(_) => {}
                             };
-                            match render_time.elapsed() {
-                                Ok(elapsed) => {
-                                    window.set_title(format!("{} {} ms, {} fps", window_title_prefix, elapsed.as_millis(), frames_per_second).as_str());
-                                }
-                                Err(_) => {}
-                            };
-                            render_time = SystemTime::now();
-                            std::thread::sleep(Duration::from_millis(20))
+
+                            window.set_title(format!("{} {} ms, {} fps", window_title_prefix, clock.frame_time().as_millis(), frames_per_second).as_str())
                         }
                         (_, true) => {
                             println!("Closing");
@@ -447,14 +473,10 @@ fn main() {
                         }
                     }
                 }
-                Event::RedrawRequested(window_id) => {}
                 _ => (),
             }
         });
     }
-
-    println!("Window closed");
-    // std::thread::sleep(Duration::from_millis(500))
 }
 
 fn load_image(filepath: &'static str) -> (Extent, Vec<u8>) {
