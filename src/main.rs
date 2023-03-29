@@ -36,6 +36,7 @@ mod clock;
 mod input;
 mod movable;
 mod shaders;
+mod noise;
 
 
 fn main() {
