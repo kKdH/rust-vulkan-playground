@@ -2,7 +2,6 @@ use std::f32::consts::PI;
 
 use nalgebra::Vector2;
 use rand::{Rng, SeedableRng};
-use rand::distributions::Standard;
 use rand::rngs::StdRng;
 use sha2::{Digest, Sha256};
 
@@ -30,7 +29,7 @@ impl Interpolation {
 
     #[inline(always)]
     fn cosine(low: f32, high: f32, t: f32) -> f32 {
-        debug_assert!(t >= 0f32 && t <= 1f32);
+        debug_assert!(t >= 0f32 && t <= 1f32, "Expected 0 ≤ t ≤ 1 but was: {t}");
         Self::linear(low, high, (1f32 - (t * PI).cos() * 0.5f32))
     }
 }
@@ -49,7 +48,7 @@ impl Noise {
         let mut rng = StdRng::from_seed(seed);
 
         Self {
-            random_table: rng.sample_iter(Standard).take(size * size).collect(),
+            random_table: rng.sample_iter(rand::distributions::Open01).take(size * size).collect(),
             random_table_mask: (size - 1) as i32,
             interpolate: interpolation.function(),
         }
@@ -60,8 +59,8 @@ impl Noise {
         let xi: i32 = position.x.floor() as i32;
         let yi: i32 = position.y.floor() as i32;
 
-        let tx = position.x - xi as f32;
-        let ty = position.y - yi as f32;
+        let tx = Self::smooth(position.x - xi as f32);
+        let ty = Self::smooth(position.y - yi as f32);
 
         let rx0 = xi & self.random_table_mask;
         let rx1 = (rx0 + 1) & self.random_table_mask;
@@ -73,13 +72,10 @@ impl Noise {
         let c10 = self.random_table[(ry1 * self.random_table_mask + rx0) as usize];
         let c11 = self.random_table[(ry1 * self.random_table_mask + rx1) as usize];
 
-        let sx = Self::smooth(tx);
-        let sy = Self::smooth(ty);
+        let nx0 = (self.interpolate)(c00, c10, tx);
+        let nx1 = (self.interpolate)(c01, c11, tx);
 
-        let nx0 = (self.interpolate)(c00, c10, sx);
-        let nx1 = (self.interpolate)(c01, c11, sx);
-
-        (self.interpolate)(nx0, nx1, sy)
+        (self.interpolate)(nx0, nx1, ty)
     }
 
     #[inline(always)]
@@ -109,43 +105,46 @@ mod test {
     #[test]
     fn test_noise() {
 
-        let noise = Noise::new("Mina", 256, Interpolation::Linear);
-
+        let noise = Noise::new("Elmar", 256, Interpolation::Cosine);
 
         let image_width: usize = 128;
         let image_height: usize = 128;
         let mut noise_map = vec![0f32; image_width * image_height];
-        let frequency = 1.0f32;
-        let amplitude = 1.0f32;
+        let mut frequency = 1.00f32;
+        let mut amplitude = 1.0f32;
+        let lacunarity = 1.5;
+        let gain = 0.05;
+        let layers = 5;
 
         for j in 0..image_height {
             for i in 0..image_width {
-                noise_map[j * image_width + i] = noise.evaluate(Vector2::new(i as f32, j as f32) * frequency) * amplitude;
+                frequency = 1.0;
+                amplitude = 1.0;
+                for l in 0..layers {
+                    noise_map[j * image_width + i] += noise.evaluate(frequency * Vector2::new(i as f32, j as f32)) * amplitude;
+                    frequency *= lacunarity;
+                    amplitude *= gain;
+                }
             }
         }
 
         let path = Path::new(r"tmp/image.png");
         let file = File::create(path).unwrap();
         let ref mut writer = BufWriter::new(file);
-        let mut encoder = ::png::Encoder::new(writer, image_width as u32, image_height as u32);
-        encoder.set_color(ColorType::Rgb);
+        let mut encoder = ::png::Encoder::new(writer, 1 * image_width as u32, 1 * image_height as u32);
+        encoder.set_color(ColorType::Grayscale);
         let mut png_writer = encoder.write_header().unwrap();
 
-        let data = noise_map
+        let data: Vec<u8> = noise_map
             .iter()
             .map(|value| (value * 255f32) as u8)
-            .fold(Vec::<u8>::new(), | mut result, value| {
-                result.push(value);
-                result.push(value);
-                result.push(value);
-                result
-        });
+            .collect();
 
         png_writer.write_image_data(data.as_slice()).unwrap();
     }
 
     #[test]
-    fn test_noise_for_negativ_position() {
+    fn test_noise_for_negative_position() {
 
         let noise = Noise::new("Hello World", 64, Interpolation::Linear);
 
