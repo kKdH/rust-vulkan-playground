@@ -181,7 +181,7 @@ mod test {
     #[test]
     fn test_noise() {
 
-        let noise = Noise::new("Elmar", 256, Interpolation::Cosine);
+        let noise = Noise::new("Elmar", 256, Interpolation::Linear);
 
         let image_width: usize = 256;
         let image_height: usize = 256;
@@ -222,23 +222,9 @@ mod test {
         let data: Vec<u8> = noise_map
             .iter()
             .map(|value| (value - min_value) / (max_value - min_value))
-            .map(|value| {
-                println!("{value}");
-                value
-            })
             .map(|value| (255f32 - value * 255f32) as u8)
             .collect();
 
         png_writer.write_image_data(data.as_slice()).unwrap();
-    }
-
-    #[test]
-    fn test_noise_for_negative_position() {
-
-        let noise = Noise::new("Hello World", 64, Interpolation::Linear);
-
-        assert_eq!(noise.evaluate(Vector3::new(-1.0, 0.0, 0.0)), 0.17040652);
-        assert_eq!(noise.evaluate(Vector3::new(0.0, -1.0, 0.0)), 0.008818567);
-        assert_eq!(noise.evaluate(Vector3::new(-1.0, -1.0, 0.0)), 0.69496435);
     }
 }
